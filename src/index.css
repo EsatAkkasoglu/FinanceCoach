@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: 224 14% 6%;
+    --surface: 224 14% 9%;
+    --surface-2: 224 14% 12%;
+    --border: 224 14% 18%;
+    --text: 210 20% 96%;
+    --text-muted: 215 14% 64%;
+  }
+
+  html, body, #root { height: 100%; }
+  body {
+    @apply font-sans antialiased text-[hsl(var(--text))] bg-[hsl(var(--bg))];
+  }
+
+  ::selection { background: rgba(31, 181, 122, 0.4); }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5;
+  }
+  .card-muted {
+    @apply rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4;
+  }
+  .num { @apply font-mono tabular-nums; }
+}

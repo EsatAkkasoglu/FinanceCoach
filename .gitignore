@@ -1,0 +1,50 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.uv/
+*.egg-info/
+.pytest_cache/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Env / Secrets
+.env
+.env.local
+backend/.env
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+backend/fincoach.db
+backend/chroma_db/
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Build outputs
+*.tsbuildinfo
+.eslintcache

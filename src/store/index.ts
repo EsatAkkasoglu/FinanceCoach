@@ -1,0 +1,251 @@
+/**
+ * Zustand stores — split by domain to keep updates focused.
+ *
+ * - useUserStore       profile, risk score, goals
+ * - usePortfolioStore  holdings + last refresh time
+ * - useChatStore       chat history + streaming state
+ * - useAgentVizStore   live agent activity events for the agent graph viz
+ * - useSettingsStore   theme, demo mode, roast mode
+ */
+
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import type { Conversation } from "@/lib/api";
+
+// ----- Settings -----
+type Theme = "dark" | "light";
+
+export type GeminiModelId =
+  | "gemini-2.5-pro"
+  | "gemini-2.5-flash"
+  | "gemini-2.5-flash-lite"
+  | "gemini-2.0-flash"
+  | "gemini-2.0-flash-lite";
+
+export type DisplayCurrency = "TRY" | "USD" | "EUR";
+
+interface SettingsState {
+  theme: Theme;
+  demoMode: boolean;
+  roastMode: boolean;
+  geminiApiKey: string;
+  newsApiKey: string;
+  model: GeminiModelId;
+  temperature: number;
+  displayCurrency: DisplayCurrency;
+  toggleTheme: () => void;
+  setDemoMode: (v: boolean) => void;
+  setRoastMode: (v: boolean) => void;
+  setGeminiApiKey: (v: string) => void;
+  setNewsApiKey: (v: string) => void;
+  setModel: (v: GeminiModelId) => void;
+  setTemperature: (v: number) => void;
+  setDisplayCurrency: (v: DisplayCurrency) => void;
+}
+
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set) => ({
+      theme: "dark",
+      demoMode: false,
+      roastMode: false,
+      geminiApiKey: "",
+      newsApiKey: "",
+      model: "gemini-2.0-flash",
+      temperature: 0.3,
+      displayCurrency: "TRY",
+      toggleTheme: () => set((s) => ({ theme: s.theme === "dark" ? "light" : "dark" })),
+      setDemoMode: (v) => set({ demoMode: v }),
+      setRoastMode: (v) => set({ roastMode: v }),
+      setGeminiApiKey: (v) => set({ geminiApiKey: v }),
+      setNewsApiKey: (v) => set({ newsApiKey: v }),
+      setModel: (v) => set({ model: v }),
+      setTemperature: (v) => set({ temperature: v }),
+      setDisplayCurrency: (v) => set({ displayCurrency: v }),
+    }),
+    { name: "fincoach-settings" }
+  )
+);
+
+// ----- User -----
+type RiskProfile = "conservative" | "balanced" | "aggressive";
+
+interface UserState {
+  hasOnboarded: boolean;
+  name: string;
+  avatar: string;
+  monthlyIncome: number;
+  riskScore: number;
+  riskProfile: RiskProfile;
+  setProfile: (p: Partial<UserState>) => void;
+  completeOnboarding: () => void;
+  resetOnboarding: () => void;
+}
+
+export const useUserStore = create<UserState>()(
+  persist(
+    (set) => ({
+      hasOnboarded: false,
+      name: "",
+      avatar: "fox",
+      monthlyIncome: 0,
+      riskScore: 50,
+      riskProfile: "balanced",
+      setProfile: (p) => set(p),
+      completeOnboarding: () => set({ hasOnboarded: true }),
+      resetOnboarding: () =>
+        set({ hasOnboarded: false, name: "", monthlyIncome: 0, riskScore: 50 }),
+    }),
+    { name: "fincoach-user" }
+  )
+);
+
+// ----- Chat -----
+export interface Citation {
+  tool: string;
+  args: Record<string, unknown>;
+  agent?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  agent?: string;
+  citations?: Citation[];
+  createdAt: number;
+}
+
+interface ChatState {
+  // messages keyed by conversationId — each conversation has its own list
+  messagesByConv: Record<string, ChatMessage[]>;
+  streaming: boolean;
+  appendMessage: (convId: string, m: ChatMessage) => void;
+  appendToken: (convId: string, id: string, token: string) => void;
+  setMessageAgent: (convId: string, id: string, agent: string) => void;
+  addCitations: (convId: string, id: string, citations: Citation[]) => void;
+  setStreaming: (v: boolean) => void;
+  resetConv: (convId: string) => void;
+}
+
+const HISTORY_CAP = 100;
+
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set) => ({
+      messagesByConv: {},
+      streaming: false,
+      appendMessage: (convId, m) =>
+        set((s) => {
+          const prev = s.messagesByConv[convId] ?? [];
+          return { messagesByConv: { ...s.messagesByConv, [convId]: [...prev, m].slice(-HISTORY_CAP) } };
+        }),
+      appendToken: (convId, id, token) =>
+        set((s) => {
+          const msgs = (s.messagesByConv[convId] ?? []).map((m) =>
+            m.id === id ? { ...m, content: m.content + token } : m
+          );
+          return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
+        }),
+      setMessageAgent: (convId, id, agent) =>
+        set((s) => {
+          const msgs = (s.messagesByConv[convId] ?? []).map((m) =>
+            m.id === id ? { ...m, agent } : m
+          );
+          return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
+        }),
+      addCitations: (convId, id, citations) =>
+        set((s) => {
+          const msgs = (s.messagesByConv[convId] ?? []).map((m) =>
+            m.id === id ? { ...m, citations: [...(m.citations ?? []), ...citations] } : m
+          );
+          return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
+        }),
+      setStreaming: (v) => set({ streaming: v }),
+      resetConv: (convId) =>
+        set((s) => {
+          const next = { ...s.messagesByConv };
+          delete next[convId];
+          return { messagesByConv: next };
+        }),
+    }),
+    {
+      name: "fincoach-chat",
+      partialize: (s) => ({ messagesByConv: s.messagesByConv }),
+    }
+  )
+);
+
+// ----- Agent Visualization -----
+export interface AgentEvent {
+  agent: string;
+  status: "idle" | "running" | "done" | "error";
+  startedAt: number;
+}
+
+interface AgentVizState {
+  events: Record<string, AgentEvent>;
+  setEvent: (e: AgentEvent) => void;
+  clear: () => void;
+}
+
+// ----- Dashboard cache -----
+
+export interface DashboardCache {
+  holdings: import("@/lib/api").Holding[];
+  totals: import("@/lib/api").PortfolioTotals;
+  briefing: import("@/lib/api").BriefingItem[];
+  fetchedAt: number; // Date.now()
+}
+
+interface DashboardState {
+  cache: DashboardCache | null;
+  loading: boolean;
+  setCache: (c: DashboardCache) => void;
+  setLoading: (v: boolean) => void;
+  invalidate: () => void;
+}
+
+export const useDashboardStore = create<DashboardState>((set) => ({
+  cache: null,
+  loading: false,
+  setCache: (c) => set({ cache: c, loading: false }),
+  setLoading: (v) => set({ loading: v }),
+  invalidate: () => set({ cache: null }),
+}));
+
+// ----- Conversations -----
+
+interface ConversationStore {
+  conversations: Conversation[];
+  activeConversationId: string | null;
+  setConversations: (convs: Conversation[]) => void;
+  addConversation: (conv: Conversation) => void;
+  removeConversation: (id: string) => void;
+  updateTitle: (id: string, title: string) => void;
+  setActive: (id: string | null) => void;
+}
+
+export const useConversationStore = create<ConversationStore>((set) => ({
+  conversations: [],
+  activeConversationId: null,
+  setConversations: (convs) => set({ conversations: convs }),
+  addConversation: (conv) =>
+    set((s) => ({ conversations: [conv, ...s.conversations] })),
+  removeConversation: (id) =>
+    set((s) => ({
+      conversations: s.conversations.filter((c) => c.id !== id),
+      activeConversationId: s.activeConversationId === id ? null : s.activeConversationId,
+    })),
+  updateTitle: (id, title) =>
+    set((s) => ({
+      conversations: s.conversations.map((c) => (c.id === id ? { ...c, title } : c)),
+    })),
+  setActive: (id) => set({ activeConversationId: id }),
+}));
+
+export const useAgentVizStore = create<AgentVizState>((set) => ({
+  events: {},
+  setEvent: (e) => set((s) => ({ events: { ...s.events, [e.agent]: e } })),
+  clear: () => set({ events: {} }),
+}));

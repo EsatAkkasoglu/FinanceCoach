@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend-vite",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "port": 5173
+    },
+    {
+      "name": "backend-fastapi",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-Command", "cd backend; uv run uvicorn app.main:app --reload --port 8765 --host 0.0.0.0"],
+      "port": 8765
+    }
+  ]
+}
