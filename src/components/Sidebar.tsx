@@ -34,7 +34,7 @@ export function Sidebar({ view, onChange, healthy, onSelectConversation, activeC
   const { conversations, setConversations, addConversation, removeConversation, updateTitle } =
     useConversationStore();
   const resetConv = useChatStore((s) => s.resetConv);
-  const avatar = useUserStore((s) => s.avatar);
+  const { avatar, name } = useUserStore();
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -105,14 +105,16 @@ export function Sidebar({ view, onChange, healthy, onSelectConversation, activeC
 
   return (
     <aside className="flex w-60 flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
-      {/* Logo */}
+      {/* Logo + user identity */}
       <div className="mb-4 flex items-center gap-2 px-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent shadow-glow text-lg leading-none">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent shadow-glow text-lg leading-none">
           {avatarMeta.emoji}
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="text-sm font-semibold tracking-tight">FinCoach</div>
-          <div className="text-[10px] text-[hsl(var(--text-muted))]">v0.1 · hackathon</div>
+          <div className="truncate text-[10px] text-[hsl(var(--text-muted))]">
+            {name ? name : "v0.1 · hackathon"}
+          </div>
         </div>
       </div>
 

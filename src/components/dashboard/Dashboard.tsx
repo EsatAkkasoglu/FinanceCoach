@@ -2,25 +2,28 @@
  * Dashboard — at-a-glance overview wired to live backend data.
  *
  * Sections:
+ *   - Personalized hero header: greeting + avatar + risk badge
  *   - Net Worth card: sum of holdings (incl. cash) with day P&L
+ *   - Budget snapshot: income vs expense MTD + savings rate
  *   - Daily Brief card: 3 dynamic items from /briefing
  *   - Portfolio Donut: allocation by asset class
  *   - Holdings table: per-position P&L
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   TrendingUp, TrendingDown, Sparkles, AlertCircle, type LucideIcon,
-  Loader2,
+  Loader2, ArrowUpRight, ArrowDownRight, PiggyBank,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
 } from "recharts";
 
-import { listPortfolio, getBriefing, type Holding, type PortfolioTotals, type BriefingItem } from "@/lib/api";
+import { listPortfolio, getBriefing, getBudgetSummary, type Holding, type PortfolioTotals, type BriefingItem, type BudgetSummary } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { useFxRates } from "@/lib/fx";
 import { cn } from "@/lib/cn";
-import { useDashboardStore } from "@/store";
+import { useDashboardStore, useUserStore } from "@/store";
+import { AVATARS } from "@/components/onboarding/data";
 
 const ICONS: Record<BriefingItem["icon"], LucideIcon> = {
   trending_up: TrendingUp,
@@ -40,16 +43,35 @@ const ASSET_COLORS: Record<string, string> = {
 // Cache verisi 5 dakika taze kabul edilir
 const STALE_MS = 5 * 60 * 1000;
 
+function useGreeting(name: string) {
+  return useMemo(() => {
+    const h = new Date().getHours();
+    const salutation = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+    return name ? `${salutation}, ${name}` : salutation;
+  }, [name]);
+}
+
+const RISK_BADGE: Record<string, { label: string; cls: string }> = {
+  conservative: { label: "Conservative", cls: "bg-blue-500/15 text-blue-400" },
+  balanced:     { label: "Balanced",     cls: "bg-accent/15 text-accent" },
+  aggressive:   { label: "Aggressive",   cls: "bg-orange-500/15 text-orange-400" },
+};
+
 export function Dashboard() {
   const { cache, loading, setCache, setLoading } = useDashboardStore();
   const [error, setError] = useState<string | null>(null);
+  const [budget, setBudget] = useState<BudgetSummary | null>(null);
+
+  const { name, avatar, riskProfile } = useUserStore();
+  const avatarMeta = AVATARS.find((a) => a.id === avatar) ?? AVATARS[0];
+  const greeting = useGreeting(name);
+  const badge = RISK_BADGE[riskProfile] ?? RISK_BADGE.balanced;
 
   const holdings = cache?.holdings ?? [];
   const totals = cache?.totals ?? null;
   const briefing = cache?.briefing ?? null;
 
   useEffect(() => {
-    // Cache tazeyse fetch etme (stale-while-revalidate: cache varsa göster, eski ise arka planda güncelle)
     if (cache && Date.now() - cache.fetchedAt < STALE_MS) return;
     if (loading) return;
 
@@ -58,9 +80,14 @@ export function Dashboard() {
       setLoading(true);
       setError(null);
       try {
-        const [p, b] = await Promise.all([listPortfolio(), getBriefing()]);
+        const [p, b, budgetData] = await Promise.all([
+          listPortfolio(),
+          getBriefing(),
+          getBudgetSummary().catch(() => null),
+        ]);
         if (cancelled) return;
         setCache({ holdings: p.holdings, totals: p.totals, briefing: b.items, fetchedAt: Date.now() });
+        setBudget(budgetData);
       } catch (err) {
         if (!cancelled) setError((err as Error).message);
       } finally {
@@ -74,9 +101,20 @@ export function Dashboard() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-[hsl(var(--text-muted))]">Today at a glance</p>
+      {/* Personalized hero header */}
+      <div className="mb-8 flex items-center gap-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/20 text-2xl leading-none shadow-glow shrink-0">
+          {avatarMeta.emoji}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight truncate">{greeting}</h1>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-sm text-[hsl(var(--text-muted))]">Today at a glance</span>
+            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide", badge.cls)}>
+              {badge.label}
+            </span>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -85,9 +123,9 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Sadece hiç veri yokken spinner göster; cache varsa stale olsa bile direkt render et */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <NetWorthCard totals={totals} holdings={holdings} loading={loading && !cache} />
+        <BudgetSnapshotCard budget={budget} loading={loading && !cache} />
         <BriefingCard items={briefing} loading={loading && !cache} />
         <PortfolioCard holdings={holdings} loading={loading && !cache} />
         <HoldingsTable holdings={holdings} loading={loading && !cache} />
@@ -144,6 +182,87 @@ function NetWorthCard({
             No holdings yet — add some from the Portfolio tab
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ---------- Budget Snapshot ----------
+function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null; loading: boolean }) {
+  const fx = useFxRates();
+  const { monthlyIncome } = useUserStore();
+
+  const totalIncome = useMemo(() => {
+    if (!budget) return null;
+    return Object.entries(budget.income_mtd).reduce((sum, [ccy, v]) => {
+      const conv = fx.rates ? (fx.convert(v, ccy) ?? v) : v;
+      return sum + conv;
+    }, 0);
+  }, [budget, fx]);
+
+  const totalExpense = useMemo(() => {
+    if (!budget) return null;
+    return Object.entries(budget.expense_mtd).reduce((sum, [ccy, v]) => {
+      const conv = fx.rates ? (fx.convert(v, ccy) ?? v) : v;
+      return sum + conv;
+    }, 0);
+  }, [budget, fx]);
+
+  const displayCcy = fx.rates ? fx.target : "USD";
+
+  // Savings rate: (income - expense) / income, or fall back to onboarding monthlyIncome
+  const savingsRate = useMemo(() => {
+    if (totalIncome != null && totalIncome > 0 && totalExpense != null) {
+      return ((totalIncome - totalExpense) / totalIncome) * 100;
+    }
+    if (monthlyIncome > 0 && totalExpense != null) {
+      const inc = fx.rates ? (fx.convert(monthlyIncome, "USD") ?? monthlyIncome) : monthlyIncome;
+      return ((inc - totalExpense) / inc) * 100;
+    }
+    return null;
+  }, [totalIncome, totalExpense, monthlyIncome, fx]);
+
+  return (
+    <div className="card lg:col-span-1">
+      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">This month</div>
+      {loading ? (
+        <div className="mt-2 flex h-12 items-center">
+          <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+        </div>
+      ) : budget == null ? (
+        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">No budget data yet — add transactions.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+              <ArrowUpRight className="h-3.5 w-3.5 text-gain" />
+              Income
+            </span>
+            <span className="num font-medium text-gain">
+              {totalIncome != null ? formatCurrency(totalIncome, displayCcy) : "—"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+              <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
+              Expenses
+            </span>
+            <span className="num font-medium text-loss">
+              {totalExpense != null ? formatCurrency(totalExpense, displayCcy) : "—"}
+            </span>
+          </div>
+          {savingsRate != null && (
+            <div className="flex items-center justify-between border-t border-[hsl(var(--border))] pt-2 text-sm">
+              <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+                <PiggyBank className="h-3.5 w-3.5 text-accent" />
+                Savings rate
+              </span>
+              <span className={cn("num font-semibold", savingsRate >= 0 ? "text-gain" : "text-loss")}>
+                {formatPercent(savingsRate)}
+              </span>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

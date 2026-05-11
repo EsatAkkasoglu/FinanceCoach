@@ -4,24 +4,23 @@ import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { useUserStore } from "@/store";
-import { submitOnboarding } from "@/lib/api";
+import { submitOnboarding, createAccount, createSubscription } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
 import { StepWelcome } from "./StepWelcome";
 import { StepGoals, type GoalDraft } from "./StepGoals";
-import { StepIncome } from "./StepIncome";
+import { StepFinances, type FinancesDraft, type AccountDraft } from "./StepFinances";
 import { StepRiskQuiz } from "./StepRiskQuiz";
 import { StepPortfolio, type HoldingDraft } from "./StepPortfolio";
 import { RISK_QUIZ, scoreToLabel, type AvatarId } from "./data";
 
-const STEPS = ["Welcome", "Goals", "Cash flow", "Risk", "Portfolio"] as const;
+const STEPS = ["Welcome", "Goals", "Finances", "Risk", "Portfolio"] as const;
 
 interface FormState {
   name: string;
   avatar: AvatarId;
   goal: GoalDraft;
-  monthlyIncome: number;
-  spendingPace: number;
+  finances: FinancesDraft;
   quizAnswers: Record<string, number>;
   holdings: HoldingDraft[];
 }
@@ -30,8 +29,7 @@ const INITIAL: FormState = {
   name: "",
   avatar: "fox",
   goal: { type: "home", title: "Buy a home", amount: 0, targetDate: "" },
-  monthlyIncome: 0,
-  spendingPace: 3,
+  finances: { monthlyIncome: 0, accounts: [], incomeSources: [] },
   quizAnswers: {},
   holdings: [],
 };
@@ -49,18 +47,12 @@ export function OnboardingWizard() {
 
   const canAdvance = useMemo(() => {
     switch (step) {
-      case 0:
-        return form.name.trim().length > 0;
-      case 1:
-        return form.goal.amount > 0 && form.goal.targetDate.length > 0;
-      case 2:
-        return form.monthlyIncome > 0;
-      case 3:
-        return Object.keys(form.quizAnswers).length === RISK_QUIZ.length;
-      case 4:
-        return true; // optional
-      default:
-        return false;
+      case 0: return form.name.trim().length > 0;
+      case 1: return form.goal.amount > 0 && form.goal.targetDate.length > 0;
+      case 2: return form.finances.monthlyIncome > 0;
+      case 3: return Object.keys(form.quizAnswers).length === RISK_QUIZ.length;
+      case 4: return true;
+      default: return false;
     }
   }, [step, form]);
 
@@ -68,13 +60,16 @@ export function OnboardingWizard() {
     setSubmitting(true);
     try {
       const profile = scoreToLabel(riskScore);
+      const incomeCurrency = form.finances.incomeSources[0]?.currency ?? "TRY";
+
+      // 1. Core onboarding
       await submitOnboarding({
         name: form.name.trim(),
         avatar: form.avatar,
-        monthly_income: form.monthlyIncome,
+        monthly_income: form.finances.monthlyIncome,
         risk_score: riskScore,
         risk_profile: profile,
-        spending_pace: form.spendingPace,
+        spending_pace: 3,
         goal: {
           title: form.goal.title,
           target_amount: form.goal.amount,
@@ -90,15 +85,45 @@ export function OnboardingWizard() {
             asset_class: h.assetClass,
           })),
       });
+
+      // 2. Create accounts in parallel (best-effort — don't block onboarding)
+      if (form.finances.accounts.length > 0) {
+        await Promise.allSettled(
+          form.finances.accounts.map((acc: AccountDraft) =>
+            createAccount({
+              name: acc.name,
+              kind: acc.kind,
+              balance: acc.balance,
+              currency: acc.currency,
+              institution: acc.institution || null,
+            })
+          )
+        );
+      }
+
+      // 3. Create income subscription if monthly income provided
+      if (form.finances.monthlyIncome > 0) {
+        const incomeLabel =
+          form.finances.incomeSources[0]?.label ?? `${form.name.trim()}'s income`;
+        await createSubscription({
+          name: incomeLabel,
+          amount: form.finances.monthlyIncome,
+          currency: incomeCurrency,
+          cycle: "monthly",
+          direction: "income",
+          category: "income",
+        }).catch(() => {}); // best-effort
+      }
+
       setProfile({
         name: form.name.trim(),
         avatar: form.avatar,
-        monthlyIncome: form.monthlyIncome,
+        monthlyIncome: form.finances.monthlyIncome,
         riskScore,
         riskProfile: profile,
       });
       completeOnboarding();
-      toast.success(`Welcome aboard, ${form.name.trim()} — you're all set.`);
+      toast.success(`Welcome aboard, ${form.name.trim()} — you're all set! 🎉`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       toast.error(`Could not save profile: ${msg}`);
@@ -161,10 +186,9 @@ export function OnboardingWizard() {
                 />
               )}
               {step === 2 && (
-                <StepIncome
-                  monthlyIncome={form.monthlyIncome}
-                  spendingPace={form.spendingPace}
-                  onChange={(p) => setForm((s) => ({ ...s, ...p }))}
+                <StepFinances
+                  value={form.finances}
+                  onChange={(p) => setForm((s) => ({ ...s, finances: { ...s.finances, ...p } }))}
                 />
               )}
               {step === 3 && (
@@ -199,6 +223,13 @@ export function OnboardingWizard() {
             <ArrowLeft className="h-4 w-4" />
             Back
           </button>
+
+          {/* Step hint for finances */}
+          {step === 2 && !canAdvance && (
+            <span className="text-xs text-[hsl(var(--text-muted))]">
+              Enter at least a monthly income to continue
+            </span>
+          )}
 
           {!isLast ? (
             <button
