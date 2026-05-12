@@ -51,7 +51,8 @@ export function OnboardingWizard() {
     switch (step) {
       case 0: return form.name.trim().length > 0;
       case 1: return form.goal.amount > 0 && form.goal.targetDate.length > 0;
-      case 2: return form.finances.monthlyIncome > 0;
+      // Finances (step 3) is optional: allow advancing without entering data
+      case 2: return true;
       case 3: return Object.keys(form.quizAnswers).length === RISK_QUIZ.length;
       case 4: return true;
       default: return false;
@@ -233,10 +234,10 @@ export function OnboardingWizard() {
             Back
           </button>
 
-          {/* Step hint for finances */}
-          {step === 2 && !canAdvance && (
+          {/* Step hint for finances (now optional) */}
+          {step === 2 && (
             <span className="text-xs text-[hsl(var(--text-muted))]">
-              Enter at least a monthly income to continue
+              This step is optional — you can skip it and continue without entering finances.
             </span>
           )}
 

@@ -412,7 +412,7 @@ function ToolRow({ activity }: { activity: ToolActivity }) {
             </div>
           )}
           {activity.status === "running" && !activity.result && (
-            <p className="text-[10px] text-[hsl(var(--text-muted))] italic">çalışıyor…</p>
+            <p className="text-[10px] text-[hsl(var(--text-muted))] italic">working…</p>
           )}
         </div>
       )}
@@ -438,10 +438,10 @@ function AgentActivity({
           {agent ? (
             <>
               <span className="font-medium text-accent">{agent}</span>
-              <span> çalışıyor…</span>
+              <span> working…</span>
             </>
           ) : (
-            "düşünüyor…"
+            "thinking…"
           )}
         </span>
       </div>
