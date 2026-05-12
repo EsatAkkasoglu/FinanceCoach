@@ -12,6 +12,7 @@ class AgentState(TypedDict, total=False):
     Fields:
         messages    — running list of LangChain messages (auto-merged by add_messages)
         user_id     — current user (single-user prototype: always 1)
+        risk_profile — user's risk profile (conservative/balanced/aggressive)
         agent       — which agent should run next (set by supervisor router)
         scratchpad  — free-form working memory between nodes
         citations   — tool calls the worker made (surfaced as chips in the UI).
@@ -19,6 +20,7 @@ class AgentState(TypedDict, total=False):
     """
     messages: Annotated[list, add_messages]
     user_id: int
+    risk_profile: str
     agent: str
     scratchpad: dict[str, Any]
     citations: list[dict[str, Any]]

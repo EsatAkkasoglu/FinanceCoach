@@ -26,6 +26,7 @@ from app.agents import (
     market_data, portfolio, budget_coach, news_sentiment,
     risk_profiler, memory, document_parser,
 )
+from app.tools.user_tools import get_user_profile
 
 log = logging.getLogger("fincoach.supervisor")
 
@@ -157,20 +158,34 @@ def _keyword_route(user_text: str) -> str:
 
 
 def _supervisor_node(state: AgentState) -> AgentState:
-    """Pick the next agent. LLM first, keyword fallback if it fails."""
+    """Pick the next agent. LLM first, keyword fallback if it fails.
+    Also fetch risk_profile on first call if not already in state."""
+    # Fetch risk_profile once per conversation thread (if not already cached)
+    if not state.get("risk_profile"):
+        try:
+            user_id = state.get("user_id", 1)
+            profile_data = get_user_profile(user_id)
+            risk_profile = profile_data.get("risk_profile", "balanced")
+            log.debug("supervisor: fetched risk_profile='%s' for user_id=%s", risk_profile, user_id)
+        except Exception as e:
+            log.warning("supervisor: failed to fetch risk_profile: %s, defaulting to 'balanced'", e)
+            risk_profile = "balanced"
+    else:
+        risk_profile = state.get("risk_profile", "balanced")
+
     last_msg = state.get("messages", [{}])[-1] if state.get("messages") else None
     user_text = (getattr(last_msg, "content", "") or "").strip()
     if not user_text:
-        return {"agent": "memory"}
+        return {"agent": "memory", "risk_profile": risk_profile}
 
     decision = _llm_route(user_text)
     if decision is not None:
         log.info("supervisor → %s  (%s)", decision.agent, decision.reason)
-        return {"agent": decision.agent}
+        return {"agent": decision.agent, "risk_profile": risk_profile}
 
     fallback = _keyword_route(user_text)
     log.info("supervisor → %s  (keyword fallback)", fallback)
-    return {"agent": fallback}
+    return {"agent": fallback, "risk_profile": risk_profile}
 
 
 def _route(state: AgentState) -> str:
