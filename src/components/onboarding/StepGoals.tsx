@@ -1,6 +1,11 @@
-import { GOAL_TYPES, type GoalTypeId } from "./data";
-import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { formatCurrency } from "@/lib/format";
+import {
+  GOAL_TYPES,
+  FINANCIAL_CHALLENGES,
+  type GoalTypeId,
+  type FinancialChallengeId,
+} from "./data";
 
 export interface GoalDraft {
   type: GoalTypeId;
@@ -11,11 +16,26 @@ export interface GoalDraft {
 
 interface Props {
   goal: GoalDraft;
-  onChange: (patch: Partial<GoalDraft>) => void;
+  financialChallenges: FinancialChallengeId[];
+  onChange: (patch: {
+    goal?: Partial<GoalDraft>;
+    financialChallenges?: FinancialChallengeId[];
+  }) => void;
 }
 
-export function StepGoals({ goal, onChange }: Props) {
+export function StepGoals({
+  goal,
+  financialChallenges,
+  onChange,
+}: Props) {
   const selected = GOAL_TYPES.find((g) => g.id === goal.type);
+
+  function toggleChallenge(id: FinancialChallengeId) {
+    const next = financialChallenges.includes(id)
+      ? financialChallenges.filter((c) => c !== id)
+      : [...financialChallenges, id];
+    onChange({ financialChallenges: next });
+  }
 
   return (
     <div className="space-y-6">
@@ -31,7 +51,7 @@ export function StepGoals({ goal, onChange }: Props) {
           <button
             key={g.id}
             type="button"
-            onClick={() => onChange({ type: g.id, title: g.label })}
+            onClick={() => onChange({ goal: { type: g.id, title: g.label } })}
             className={cn(
               "flex flex-col items-center gap-1 rounded-lg border p-4 transition",
               goal.type === g.id
@@ -56,7 +76,7 @@ export function StepGoals({ goal, onChange }: Props) {
               min={0}
               step={1000}
               value={goal.amount || ""}
-              onChange={(e) => onChange({ amount: Number(e.target.value) })}
+              onChange={(e) => onChange({ goal: { amount: Number(e.target.value) } })}
               placeholder="300000"
               className="num mt-2 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-base outline-none focus:border-accent"
             />
@@ -72,12 +92,41 @@ export function StepGoals({ goal, onChange }: Props) {
             <input
               type="date"
               value={goal.targetDate}
-              onChange={(e) => onChange({ targetDate: e.target.value })}
+              onChange={(e) => onChange({ goal: { targetDate: e.target.value } })}
               className="mt-2 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-base outline-none focus:border-accent"
             />
           </label>
         </div>
       )}
+
+      {/* Financial challenges section */}
+      <div className="space-y-3">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Any of these feel familiar?</p>
+          <p className="mt-0.5 text-sm text-[hsl(var(--text-muted))]">Select all that apply — no judgment here.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {FINANCIAL_CHALLENGES.map((ch) => {
+            const active = financialChallenges.includes(ch.id as FinancialChallengeId);
+            return (
+              <button
+                key={ch.id}
+                type="button"
+                onClick={() => toggleChallenge(ch.id as FinancialChallengeId)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition",
+                  active
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:border-accent/50"
+                )}
+              >
+                <span>{ch.emoji}</span>
+                {ch.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

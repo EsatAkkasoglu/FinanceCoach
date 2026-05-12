@@ -12,7 +12,7 @@ import { StepGoals, type GoalDraft } from "./StepGoals";
 import { StepFinances, type FinancesDraft, type AccountDraft } from "./StepFinances";
 import { StepRiskQuiz } from "./StepRiskQuiz";
 import { StepPortfolio, type HoldingDraft } from "./StepPortfolio";
-import { RISK_QUIZ, scoreToLabel, type AvatarId } from "./data";
+import { RISK_QUIZ, scoreToLabel, type AvatarId, type FinancialChallengeId } from "./data";
 
 const STEPS = ["Welcome", "Goals", "Finances", "Risk", "Portfolio"] as const;
 
@@ -20,6 +20,7 @@ interface FormState {
   name: string;
   avatar: AvatarId;
   goal: GoalDraft;
+  financialChallenges: FinancialChallengeId[];
   finances: FinancesDraft;
   quizAnswers: Record<string, number>;
   holdings: HoldingDraft[];
@@ -29,6 +30,7 @@ const INITIAL: FormState = {
   name: "",
   avatar: "fox",
   goal: { type: "home", title: "Buy a home", amount: 0, targetDate: "" },
+  financialChallenges: [],
   finances: { monthlyIncome: 0, accounts: [], incomeSources: [] },
   quizAnswers: {},
   holdings: [],
@@ -182,7 +184,14 @@ export function OnboardingWizard() {
               {step === 1 && (
                 <StepGoals
                   goal={form.goal}
-                  onChange={(p) => setForm((s) => ({ ...s, goal: { ...s.goal, ...p } }))}
+                  financialChallenges={form.financialChallenges}
+                  onChange={(patch) =>
+                    setForm((s) => ({
+                      ...s,
+                      ...(patch.goal && { goal: { ...s.goal, ...patch.goal } }),
+                      ...(patch.financialChallenges !== undefined && { financialChallenges: patch.financialChallenges }),
+                    }))
+                  }
                 />
               )}
               {step === 2 && (

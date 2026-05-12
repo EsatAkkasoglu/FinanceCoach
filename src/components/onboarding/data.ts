@@ -34,6 +34,17 @@ export const GOAL_TYPES = [
 
 export type GoalTypeId = (typeof GOAL_TYPES)[number]["id"];
 
+export const FINANCIAL_CHALLENGES = [
+  { id: "too_much_debt",         label: "Too much debt",              emoji: "💳" },
+  { id: "inconsistent_income",   label: "Inconsistent income",        emoji: "〰️" },
+  { id: "dont_know_where_start", label: "Don't know where to start",  emoji: "🧭" },
+  { id: "overspending",          label: "Overspending",               emoji: "🛍️" },
+  { id: "want_to_invest",        label: "Want to invest, unsure how", emoji: "📊" },
+  { id: "no_emergency_fund",     label: "No emergency fund",          emoji: "🛟" },
+] as const;
+
+export type FinancialChallengeId = (typeof FINANCIAL_CHALLENGES)[number]["id"];
+
 export interface QuizOption {
   label: string;
   points: number;
