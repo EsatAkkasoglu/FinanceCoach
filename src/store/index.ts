@@ -105,6 +105,15 @@ export interface Citation {
   tool: string;
   args: Record<string, unknown>;
   agent?: string;
+  result?: string;
+}
+
+export interface ToolActivity {
+  runId: string;
+  tool: string;
+  args: Record<string, unknown>;
+  status: "running" | "done";
+  result?: string;
 }
 
 export interface ChatMessage {
@@ -113,6 +122,7 @@ export interface ChatMessage {
   content: string;
   agent?: string;
   citations?: Citation[];
+  steps?: ToolActivity[];
   createdAt: number;
 }
 
@@ -124,6 +134,7 @@ interface ChatState {
   appendToken: (convId: string, id: string, token: string) => void;
   setMessageAgent: (convId: string, id: string, agent: string) => void;
   addCitations: (convId: string, id: string, citations: Citation[]) => void;
+  setMessageSteps: (convId: string, id: string, steps: ToolActivity[]) => void;
   setStreaming: (v: boolean) => void;
   resetConv: (convId: string) => void;
 }
@@ -158,6 +169,13 @@ export const useChatStore = create<ChatState>()(
         set((s) => {
           const msgs = (s.messagesByConv[convId] ?? []).map((m) =>
             m.id === id ? { ...m, citations: [...(m.citations ?? []), ...citations] } : m
+          );
+          return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
+        }),
+      setMessageSteps: (convId, id, steps) =>
+        set((s) => {
+          const msgs = (s.messagesByConv[convId] ?? []).map((m) =>
+            m.id === id ? { ...m, steps } : m
           );
           return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
         }),

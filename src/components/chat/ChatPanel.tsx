@@ -4,19 +4,12 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { streamChat, type Citation as ApiCitation } from "@/lib/api";
-import { useChatStore, useAgentVizStore, useConversationStore } from "@/store";
+import { parseToolResult } from "@/lib/parseToolResult";
+import { useChatStore, useAgentVizStore, useConversationStore, type ToolActivity } from "@/store";
 import { cn } from "@/lib/cn";
 import { AgentGraph } from "./AgentGraph";
 import { AgentBadge } from "./AgentBadge";
 import { CitationChip } from "./CitationChip";
-
-interface ToolActivity {
-  runId: string;
-  tool: string;
-  args: Record<string, unknown>;
-  status: "running" | "done";
-  result?: string;
-}
 
 const SUGGESTIONS = [
   "Summarize my spending this month",
@@ -33,7 +26,7 @@ interface ChatPanelProps {
 export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const {
     messagesByConv, streaming,
-    appendMessage, appendToken, setMessageAgent, addCitations, setStreaming, resetConv,
+    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setStreaming, resetConv,
   } = useChatStore();
   const messages = messagesByConv[convId] ?? [];
   const setAgentEvent = useAgentVizStore((s) => s.setEvent);
@@ -43,10 +36,18 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
+  const toolActivitiesRef = useRef<ToolActivity[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const scrollAnchor = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lastAsstId = useRef<string | null>(null);
+  // Tracks which agents have already been assigned a bubble this turn.
+  // On agent_start for a non-supervisor agent: if the current bubble already
+  // has content, a new bubble is created so each agent response is distinct.
+  const seenAgentsThisTurn = useRef<Set<string>>(new Set());
+  // run_id → {tool, args, result} captured during streaming so we can attach
+  // tool results to citations when the citations event arrives at the end.
+  const toolRunsRef = useRef<Map<string, { tool: string; argsKey: string; result?: string }>>(new Map());
 
   // Auto-scroll on new messages or while tokens stream in.
   useEffect(() => {
@@ -79,6 +80,9 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     clearAgentEvents();
     setActiveAgent(null);
     setToolActivities([]);
+    toolActivitiesRef.current = [];
+    seenAgentsThisTurn.current.clear();
+    toolRunsRef.current.clear();
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -87,12 +91,45 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
       for await (const event of streamChat(text, threadId, convId, controller.signal)) {
         switch (event.type) {
           case "token":
-            appendToken(convId, asstId, (event.payload.text as string) ?? "");
+            appendToken(convId, lastAsstId.current!, (event.payload.text as string) ?? "");
             break;
           case "agent_start": {
             const agentName = event.payload.agent as string;
+            const internal = event.payload.internal === true;
             setAgentEvent({ agent: agentName, status: "running", startedAt: Date.now() });
             setActiveAgent(agentName);
+
+            // Supervisor never produces content — skip bubble logic for it.
+            // Internal workers (intermediate specialists) also stay invisible;
+            // their tool calls show in the activity panel but their output is
+            // folded into the synthesizer's single final bubble.
+            if (agentName !== "supervisor" && !internal) {
+              const currentId = lastAsstId.current!;
+              const currentMsgs = useChatStore.getState().messagesByConv[convId] ?? [];
+              const currentBubble = currentMsgs.find((m) => m.id === currentId);
+              const isUnassignedPlaceholder =
+                currentBubble &&
+                !currentBubble.agent &&
+                currentBubble.content.length === 0;
+
+              if (isUnassignedPlaceholder) {
+                // First agent of this turn — adopt the initial placeholder bubble.
+                setMessageAgent(convId, currentId, agentName);
+              } else {
+                // Any subsequent agent always gets its own fresh bubble,
+                // even if the prior agent ended up producing no content.
+                const newId = `a-${Date.now()}-${agentName}`;
+                lastAsstId.current = newId;
+                appendMessage(convId, {
+                  id: newId,
+                  role: "assistant",
+                  content: "",
+                  agent: agentName,
+                  createdAt: Date.now(),
+                });
+              }
+              seenAgentsThisTurn.current.add(agentName);
+            }
             break;
           }
           case "agent_done": {
@@ -102,31 +139,34 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           }
           case "tool_call": {
             const runId = event.payload.run_id as string ?? String(Date.now());
-            setToolActivities((prev) => [
-              ...prev,
-              {
-                runId,
-                tool: event.payload.tool as string,
-                args: (event.payload.args ?? {}) as Record<string, unknown>,
-                status: "running",
-              },
-            ]);
+            const tool = event.payload.tool as string;
+            const args = (event.payload.args ?? {}) as Record<string, unknown>;
+            toolRunsRef.current.set(runId, { tool, argsKey: stableKey(args) });
+            setToolActivities((prev) => {
+              const next = [...prev, { runId, tool, args, status: "running" as const }];
+              toolActivitiesRef.current = next;
+              return next;
+            });
             break;
           }
           case "tool_result": {
             const runId = event.payload.run_id as string;
-            setToolActivities((prev) =>
-              prev.map((a) =>
-                a.runId === runId
-                  ? { ...a, status: "done", result: event.payload.result as string }
-                  : a
-              )
-            );
+            const result = event.payload.result as string;
+            const existing = toolRunsRef.current.get(runId);
+            if (existing) {
+              toolRunsRef.current.set(runId, { ...existing, result });
+            }
+            setToolActivities((prev) => {
+              const next = prev.map((a) =>
+                a.runId === runId ? { ...a, status: "done" as const, result } : a
+              );
+              toolActivitiesRef.current = next;
+              return next;
+            });
             break;
           }
           case "agent_message":
-            setMessageAgent(convId, asstId, event.payload.agent as string);
-            // Auto-update sidebar title from first assistant reply if still untitled
+            // Badge is already set on agent_start. Just auto-title the conversation.
             if (activeConv && !activeConv.title) {
               updateTitle(convId, text.slice(0, 60));
             }
@@ -134,15 +174,41 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           case "citations": {
             const items = (event.payload.items as ApiCitation[]) ?? [];
             const agent = event.payload.agent as string | undefined;
+            // Look up the captured tool_result for each citation by matching
+            // (tool name, canonical args). Multiple invocations with the same
+            // args are popped FIFO so each citation gets a distinct result.
+            const runs = Array.from(toolRunsRef.current.values());
             addCitations(
               convId,
-              asstId,
-              items.map((c) => ({ ...c, agent }))
+              lastAsstId.current!,
+              items.map((c) => {
+                const key = stableKey(c.args ?? {});
+                const idx = runs.findIndex(
+                  (r) => r.tool === c.tool && r.argsKey === key && r.result !== undefined
+                );
+                let result: string | undefined;
+                if (idx >= 0) {
+                  result = runs[idx].result;
+                  runs.splice(idx, 1);
+                }
+                return { ...c, agent, result };
+              })
+            );
+            break;
+          }
+          case "agent_error": {
+            const agent = String(event.payload.agent ?? "agent");
+            const errType = String(event.payload.type ?? "Error");
+            const msg = String(event.payload.message ?? "unknown");
+            appendToken(
+              convId,
+              lastAsstId.current!,
+              `⚠️ **${agent}** failed (\`${errType}\`): ${msg}`,
             );
             break;
           }
           case "error":
-            appendToken(convId, asstId, `\n\n_Error: ${String(event.payload.message ?? "unknown")}_`);
+            appendToken(convId, lastAsstId.current!, `\n\n_Error: ${String(event.payload.message ?? "unknown")}_`);
             break;
           case "done":
             return;
@@ -158,10 +224,14 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
       abortRef.current = null;
       setStreaming(false);
       setActiveAgent(null);
+      // Persist completed steps into the message before clearing transient state.
+      if (toolActivitiesRef.current.length > 0 && lastAsstId.current) {
+        setMessageSteps(convId, lastAsstId.current, toolActivitiesRef.current);
+      }
       setTimeout(() => {
         clearAgentEvents();
         setToolActivities([]);
-      }, 3000);
+      }, 800);
     }
   }
 
@@ -235,6 +305,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             const isAssistant = m.role === "assistant";
             const isStreamingThis = streaming && lastAsstId.current === m.id && m.content.length > 0;
             const showCopy = isAssistant && !isThinking && m.content.length > 0;
+            const hasSteps = Boolean(isAssistant && m.steps && m.steps.length > 0);
             return (
               <div
                 key={m.id}
@@ -245,9 +316,13 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                     : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"
                 )}
               >
-                {isAssistant && m.agent && (
+                {isAssistant && (
                   <div className="mb-2">
-                    <AgentBadge name={m.agent} />
+                    {hasSteps ? (
+                      <StepsPanel steps={m.steps ?? []} agent={m.agent ?? null} compact />
+                    ) : (
+                      m.agent && <AgentBadge name={m.agent} />
+                    )}
                   </div>
                 )}
                 {showCopy && <CopyButton text={m.content} />}
@@ -326,94 +401,227 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   );
 }
 
-// ─── AgentActivity (replaces ThinkingDots) ────────────────────────────────────
+// Canonical args key — sort object keys so {a:1,b:2} and {b:2,a:1} hash the same.
+function stableKey(obj: unknown): string {
+  if (obj === null || typeof obj !== "object") return JSON.stringify(obj);
+  if (Array.isArray(obj)) return `[${obj.map(stableKey).join(",")}]`;
+  const entries = Object.entries(obj as Record<string, unknown>).sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableKey(v)}`).join(",")}}`;
+}
 
-const TOOL_LABELS: Record<string, string> = {
-  get_quote: "Quote",
-  resolve_symbol: "Resolve",
-  analyze_ticker_8dim: "8-dim Analysis",
-  get_dividend_metrics: "Dividends",
-  scan_hot_trends: "Hot Scanner",
-  scan_rumors: "Rumor Scanner",
-  search_fund: "Fund Search",
-  get_fund_quote: "Fund Quote",
-  get_fund_history: "Fund History",
-  list_top_funds: "Top Funds",
-  list_holdings: "Holdings",
-  list_transactions: "Transactions",
-  search_news: "News Search",
-  get_user_profile: "Profile",
-  update_risk_score: "Update Risk",
-  query_memory: "Memory",
+// ─── AgentActivity ────────────────────────────────────────────────────────────
+
+const TOOL_META: Record<string, { label: string; icon: string }> = {
+  get_quote:           { label: "Quote",         icon: "📈" },
+  resolve_symbol:      { label: "Resolve",        icon: "🔎" },
+  analyze_ticker_8dim: { label: "8-dim Analysis", icon: "🔍" },
+  get_dividend_metrics:{ label: "Dividends",      icon: "💰" },
+  scan_hot_trends:     { label: "Hot Scanner",    icon: "🔥" },
+  scan_rumors:         { label: "Rumor Scanner",  icon: "👂" },
+  search_fund:         { label: "Fund Search",    icon: "🏦" },
+  get_fund_quote:      { label: "Fund Quote",     icon: "🏦" },
+  get_fund_history:    { label: "Fund History",   icon: "📊" },
+  list_top_funds:      { label: "Top Funds",      icon: "🏆" },
+  list_holdings:       { label: "Holdings",       icon: "📋" },
+  list_transactions:   { label: "Transactions",   icon: "📋" },
+  search_news:         { label: "News",           icon: "📰" },
+  get_user_profile:    { label: "Profile",        icon: "👤" },
+  update_risk_score:   { label: "Update Risk",    icon: "⚖️" },
+  query_memory:        { label: "Memory",         icon: "🧠" },
 };
 
-function formatArgs(args: Record<string, unknown>): string {
-  const entries = Object.entries(args).filter(([, v]) => v !== undefined && v !== null && v !== "");
-  if (entries.length === 0) return "";
-  return entries.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("  ·  ");
+// Render parsed result as a clean table — scalar fields + first-level arrays.
+function ResultView({ data }: { data: unknown }) {
+  if (data === null || data === undefined) return null;
+
+  if (typeof data === "string") {
+    return (
+      <p className="text-[11px] leading-relaxed text-[hsl(var(--text-muted))]">
+        {data.length > 300 ? data.slice(0, 300) + "…" : data}
+      </p>
+    );
+  }
+
+  if (typeof data !== "object" || Array.isArray(data)) {
+    return (
+      <p className="font-mono text-[11px] text-[hsl(var(--text-muted))]">
+        {JSON.stringify(data).slice(0, 300)}
+      </p>
+    );
+  }
+
+  const obj = data as Record<string, unknown>;
+
+  // Separate scalars, objects (nested), arrays
+  const scalars = Object.entries(obj).filter(
+    ([, v]) => v !== null && v !== undefined && typeof v !== "object"
+  );
+  const arrays = Object.entries(obj).filter(([, v]) => Array.isArray(v));
+
+  const SKIP_KEYS = new Set(["timestamp", "tool_call_id"]);
+
+  const displayScalars = scalars
+    .filter(([k]) => !SKIP_KEYS.has(k))
+    .slice(0, 10);
+
+  return (
+    <div className="space-y-3">
+      {displayScalars.length > 0 && (
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+          {displayScalars.map(([k, v]) => {
+            const raw = String(v);
+            const display = raw.length > 60 ? raw.slice(0, 60) + "…" : raw;
+            const isNumeric = typeof v === "number";
+            return (
+              <div key={k} className="flex flex-col gap-0.5">
+                <span className="text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                  {k.replace(/_/g, " ")}
+                </span>
+                <span
+                  className={cn(
+                    "text-[11px] font-medium leading-tight",
+                    isNumeric ? "tabular-nums text-[hsl(var(--text-primary))]" : "text-[hsl(var(--text-primary))]"
+                  )}
+                >
+                  {display}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {arrays.slice(0, 3).map(([k, v]) => {
+        const items = (v as unknown[]).slice(0, 6);
+        return (
+          <div key={k}>
+            <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+              {k.replace(/_/g, " ")}
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {items.map((item, i) => {
+                let label: string;
+                if (typeof item === "object" && item !== null) {
+                  const o = item as Record<string, unknown>;
+                  // Show symbol + first meaningful value
+                  const sym = o.symbol ?? o.ticker ?? o.name ?? "";
+                  const val = o.price ?? o.mentions ?? o.score ?? "";
+                  label = sym ? `${sym}${val !== "" ? ` · ${val}` : ""}` : JSON.stringify(item).slice(0, 40);
+                } else {
+                  label = String(item);
+                }
+                return (
+                  <span
+                    key={i}
+                    className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] text-[hsl(var(--text-primary))]"
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+              {(v as unknown[]).length > 6 && (
+                <span className="text-[10px] text-[hsl(var(--text-muted))] self-center">
+                  +{(v as unknown[]).length - 6} more
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ArgPills({ args }: { args: Record<string, unknown> }) {
+  const entries = Object.entries(args).filter(
+    ([, v]) => v !== undefined && v !== null && v !== ""
+  );
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {entries.map(([k, v]) => (
+        <span
+          key={k}
+          className="rounded bg-[hsl(var(--surface))] border border-[hsl(var(--border))] px-1.5 py-0.5 text-[10px] text-[hsl(var(--text-muted))]"
+        >
+          <span className="font-medium text-[hsl(var(--text-primary))]">{k}</span>
+          {" "}
+          {String(v).slice(0, 40)}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function ToolRow({ activity }: { activity: ToolActivity }) {
   const [open, setOpen] = useState(false);
-  const label = TOOL_LABELS[activity.tool] ?? activity.tool;
-  const argsStr = formatArgs(activity.args);
+  const meta = TOOL_META[activity.tool] ?? { label: activity.tool, icon: "⚙️" };
+  const parsed = activity.result ? parseToolResult(activity.result) : null;
+
+  // Primary arg value for the header preview (first non-empty value)
+  const primaryArg = Object.values(activity.args).find(
+    (v) => v !== undefined && v !== null && v !== ""
+  );
 
   return (
-    <div className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] overflow-hidden">
+    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-white/5 transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
       >
-        {/* status icon */}
+        {/* status */}
         <span className="shrink-0">
           {activity.status === "running" ? (
-            <Loader2 className="h-3 w-3 animate-spin text-accent" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
           ) : (
-            <span className="inline-block h-3 w-3 rounded-full bg-gain/70 flex items-center justify-center">
-              <span className="block h-1.5 w-1.5 rounded-full bg-gain" />
+            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gain/20 text-gain">
+              <Check className="h-2.5 w-2.5" />
             </span>
           )}
         </span>
 
-        {/* tool name */}
-        <code className="text-[11px] font-mono font-medium text-accent">{label}</code>
+        {/* icon + label */}
+        <span className="text-sm leading-none">{meta.icon}</span>
+        <span className="text-[12px] font-medium text-[hsl(var(--text-primary))]">{meta.label}</span>
 
-        {/* inline args preview */}
-        {argsStr && (
-          <span className="ml-1 truncate text-[10px] text-[hsl(var(--text-muted))]">
-            {argsStr}
+        {/* primary arg chip */}
+        {primaryArg !== undefined && (
+          <span className="rounded bg-[hsl(var(--surface))] border border-[hsl(var(--border))] px-1.5 py-0.5 text-[10px] font-mono text-accent">
+            {String(primaryArg).slice(0, 30)}
           </span>
         )}
 
         <span className="ml-auto shrink-0 text-[hsl(var(--text-muted))]">
-          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </span>
       </button>
 
       {open && (
-        <div className="border-t border-[hsl(var(--border))] px-3 py-2 space-y-1.5">
+        <div className="border-t border-[hsl(var(--border))] px-3 py-3 space-y-3">
           {/* args */}
           {Object.keys(activity.args).length > 0 && (
             <div>
-              <p className="mb-1 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">Input</p>
-              <pre className="font-mono text-[10px] text-[hsl(var(--text-muted))] whitespace-pre-wrap">
-                {JSON.stringify(activity.args, null, 2)}
-              </pre>
+              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                Input
+              </p>
+              <ArgPills args={activity.args} />
             </div>
           )}
+
           {/* result */}
-          {activity.result && (
+          {parsed !== null ? (
             <div>
-              <p className="mb-1 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">Output</p>
-              <pre className="font-mono text-[10px] text-gain/80 whitespace-pre-wrap break-all">
-                {activity.result}
-              </pre>
+              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                Result
+              </p>
+              <ResultView data={parsed} />
             </div>
-          )}
-          {activity.status === "running" && !activity.result && (
-            <p className="text-[10px] text-[hsl(var(--text-muted))] italic">working…</p>
-          )}
+          ) : activity.status === "running" ? (
+            <p className="text-[11px] italic text-[hsl(var(--text-muted))]">Fetching…</p>
+          ) : null}
         </div>
       )}
     </div>
@@ -427,29 +635,92 @@ function AgentActivity({
   agent: string | null;
   activities: ToolActivity[];
 }) {
+  const runningCount = activities.filter((a) => a.status === "running").length;
+  const doneCount = activities.filter((a) => a.status === "done").length;
+
   return (
-    <div className="space-y-2">
-      {/* header: pulsing dots + agent name */}
-      <div className="flex items-center gap-1.5">
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:-0.3s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:-0.15s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent" />
-        <span className="ml-2 text-xs text-[hsl(var(--text-muted))]">
-          {agent ? (
-            <>
-              <span className="font-medium text-accent">{agent}</span>
-              <span> working…</span>
-            </>
-          ) : (
-            "thinking…"
-          )}
+    <div className="space-y-3">
+      {/* header */}
+      <div className="flex items-center gap-2">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+        <span className="text-[12px] font-medium text-[hsl(var(--text-primary))]">
+          {agent ?? "Thinking"}
         </span>
+        {activities.length > 0 && (
+          <span className="ml-auto text-[10px] text-[hsl(var(--text-muted))]">
+            {runningCount > 0
+              ? `${doneCount} / ${activities.length} tools`
+              : `${doneCount} tool${doneCount !== 1 ? "s" : ""} done`}
+          </span>
+        )}
       </div>
 
-      {/* tool call rows */}
+      {/* tool rows */}
       {activities.length > 0 && (
-        <div className="space-y-1 pl-1">
+        <div className="space-y-1.5">
           {activities.map((a) => (
+            <ToolRow key={a.runId} activity={a} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepsPanel({
+  steps,
+  agent,
+  compact = false,
+}: {
+  steps: ToolActivity[];
+  agent?: string | null;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const doneCount = steps.filter((s) => s.status === "done").length;
+  return (
+    <div
+      className={cn(
+        compact
+          ? "rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]"
+          : "mt-3 border-t border-[hsl(var(--border))] pt-3"
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex w-full items-center gap-2 transition-colors",
+          compact
+            ? "px-3 py-2 text-left hover:bg-white/5"
+            : "text-[10px] text-[hsl(var(--text-muted))] hover:text-accent"
+        )}
+      >
+        <span className="flex items-center gap-1">
+          {open ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+          <span className="uppercase tracking-wide font-medium">Agent steps</span>
+        </span>
+        {agent && (
+          <span className="text-[hsl(var(--text-muted))]">
+            <span className="font-medium text-accent">{agent}</span>
+          </span>
+        )}
+        <span
+          className={cn(
+            "rounded-full px-1.5 py-0.5",
+            compact ? "bg-[hsl(var(--surface))]" : "bg-[hsl(var(--surface-2))]"
+          )}
+        >
+          {doneCount}/{steps.length} tools
+        </span>
+      </button>
+      {open && (
+        <div className={cn("space-y-1", compact ? "border-t border-[hsl(var(--border))] p-2" : "mt-2 pl-1") }>
+          {steps.map((a) => (
             <ToolRow key={a.runId} activity={a} />
           ))}
         </div>

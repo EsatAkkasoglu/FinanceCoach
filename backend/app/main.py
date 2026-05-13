@@ -28,7 +28,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.settings import configure_langsmith, settings
 from app.db.models import Conversation, Goal, Holding, User
 from app.db.session import SessionLocal, init_db
-from app.agents.supervisor import AGENT_NODES, build_supervisor
+from app.agents.supervisor import AGENT_NODES, FINISH, SYNTHESIZER_NODE, build_supervisor
 from app.routers.budget import router as budget_router
 from app.routers.fx import router as fx_router
 from app.services.document_processor.router import router as documents_router
@@ -211,36 +211,51 @@ async def chat(payload: dict):
 
     async def event_stream():
         nonlocal final_agent
-        # Track which outer agent node is currently executing so tool events
+        # Track which outer agent is currently executing so tool events
         # (which carry node='tools', not the outer node name) can be attributed.
         current_outer_agent: str | None = None
+        # Each agent runs at most once per turn, but the supervisor runs
+        # multiple times (once between every pair of agents). Track agents
+        # that have already streamed so we don't double-emit.
         done_agents: set[str] = set()
+        supervisor_started = False
+        # Tool citations from every worker are aggregated and attached to
+        # the synthesizer's final message, so the user sees one source list.
+        collected_citations: list[dict] = []
 
         try:
-            yield _evt("agent_start", {"agent": "supervisor"})
-
             async for ev in supervisor.astream_events(initial_state, config=config, version="v2"):
                 kind: str = ev["event"]
                 name: str = ev.get("name", "")
                 node: str = ev.get("metadata", {}).get("langgraph_node", "")
                 data: dict = ev.get("data", {})
 
-                # ── Supervisor chose a worker ──────────────────────────────
-                if kind == "on_chain_end" and name == "supervisor":
-                    output = data.get("output") or {}
-                    chosen = output.get("agent") if isinstance(output, dict) else None
-                    if chosen:
-                        yield _evt("agent_done", {"agent": "supervisor"})
-                        yield _evt("agent_start", {"agent": chosen})
-                        final_agent = chosen
+                # ── Supervisor iteration began ───────────────────────────
+                if kind == "on_chain_start" and name == "supervisor":
+                    yield _evt("agent_start", {"agent": "supervisor"})
+                    supervisor_started = True
 
-                # ── Outer worker node started → track which agent is active ─
-                elif kind == "on_chain_start" and name in AGENT_NODES:
+                # ── Supervisor iteration finished → emit its decision ────
+                elif kind == "on_chain_end" and name == "supervisor" and supervisor_started:
+                    supervisor_started = False
+                    output = data.get("output") or {}
+                    chosen = output.get("next_action") if isinstance(output, dict) else None
+                    yield _evt("agent_done", {"agent": "supervisor"})
+                    if chosen and chosen != FINISH and chosen in AGENT_NODES:
+                        # Workers stay internal — UI shows activity (tools)
+                        # but does NOT open a new bubble for them.
+                        yield _evt("agent_start", {"agent": chosen, "internal": True})
+                        final_agent = chosen
+                    elif chosen == FINISH:
+                        # Synthesizer owns the visible bubble.
+                        yield _evt("agent_start", {"agent": SYNTHESIZER_NODE, "internal": False})
+                        final_agent = SYNTHESIZER_NODE
+
+                # ── Outer worker / synthesizer node started → track active
+                elif kind == "on_chain_start" and (name in AGENT_NODES or name == SYNTHESIZER_NODE):
                     current_outer_agent = name
 
-                # ── Real-time tool call ────────────────────────────────────
-                # Tool events have node='tools' (inner ReAct node), not the
-                # outer agent name — use current_outer_agent for attribution.
+                # ── Real-time tool call ──────────────────────────────────
                 elif kind == "on_tool_start" and node == "tools":
                     tool_input = data.get("input") or {}
                     yield _evt("tool_call", {
@@ -250,7 +265,7 @@ async def chat(payload: dict):
                         "run_id": ev.get("run_id", ""),
                     })
 
-                # ── Tool finished → send result summary ───────────────────
+                # ── Tool finished → result summary ───────────────────────
                 elif kind == "on_tool_end" and node == "tools":
                     raw_output = data.get("output")
                     result_text = _summarize_tool_output(raw_output)
@@ -260,25 +275,79 @@ async def chat(payload: dict):
                         "run_id": ev.get("run_id", ""),
                     })
 
-                # ── Worker node finished → citations + streamed response ───
+                # ── Worker node finished → collect citations, stay silent ─
+                # Workers no longer emit `agent_message`/`token` directly;
+                # the synthesizer will write the final user-facing reply.
+                # Worker failures are logged + folded into the synthesizer
+                # input as "(returned no reply)", which the synthesizer
+                # acknowledges in natural language.
                 elif kind == "on_chain_end" and name in AGENT_NODES and name not in done_agents:
                     done_agents.add(name)
                     current_outer_agent = None
                     output = data.get("output") or {}
 
                     if isinstance(output, dict):
+                        err = output.get("error")
                         citations = output.get("citations") or []
-                        if citations:
-                            yield _evt("citations", {"agent": name, "items": citations})
-
                         msgs = output.get("messages") or []
+                        content = ""
                         if msgs:
                             content = _normalize_content(getattr(msgs[-1], "content", ""))
-                            if content:
-                                final_chunks.append(content)
-                                yield _evt("agent_message", {"agent": name})
-                                for tok in _chunked(content, 24):
-                                    yield _evt("token", {"text": tok})
+
+                        if citations:
+                            collected_citations.extend(
+                                {**c, "agent": name} for c in citations
+                            )
+
+                        if err:
+                            log.warning(
+                                "worker %s errored (folded into synthesizer): %s/%s",
+                                name, err.get("type"), err.get("message"),
+                            )
+                        elif not content:
+                            log.warning(
+                                "worker %s ended with no content (citations=%d) — synthesizer will note the gap",
+                                name, len(citations),
+                            )
+
+                    yield _evt("agent_done", {"agent": name})
+
+                # ── Synthesizer finished → emit the single visible reply ──
+                elif kind == "on_chain_end" and name == SYNTHESIZER_NODE and name not in done_agents:
+                    done_agents.add(name)
+                    current_outer_agent = None
+                    output = data.get("output") or {}
+
+                    if isinstance(output, dict):
+                        err = output.get("error")
+                        msgs = output.get("messages") or []
+                        content = ""
+                        if msgs:
+                            content = _normalize_content(getattr(msgs[-1], "content", ""))
+
+                        if err:
+                            yield _evt("agent_error", {
+                                "agent": name,
+                                "type": str(err.get("type", "AgentError")),
+                                "message": _safe_error_message(Exception(str(err.get("message", "")))),
+                            })
+                        elif content:
+                            final_chunks.append(content)
+                            yield _evt("agent_message", {"agent": name})
+                            if collected_citations:
+                                yield _evt("citations", {
+                                    "agent": name,
+                                    "items": collected_citations,
+                                })
+                            for tok in _chunked(content, 24):
+                                yield _evt("token", {"text": tok})
+                        else:
+                            log.warning("synthesizer ended with no content")
+                            yield _evt("agent_error", {
+                                "agent": name,
+                                "type": "empty_response",
+                                "message": "Synthesizer produced no text. Check server logs.",
+                            })
 
                     yield _evt("agent_done", {"agent": name})
 
@@ -286,7 +355,7 @@ async def chat(payload: dict):
             log.exception("chat stream failed")
             yield _evt("error", {"message": _safe_error_message(exc)})
         finally:
-            full_response = "".join(final_chunks).strip()
+            full_response = "\n\n".join(final_chunks).strip()
             if full_response:
                 from app.tools.memory_tools import upsert_chat_turn
                 upsert_chat_turn(user_message, full_response, final_agent)
@@ -315,9 +384,9 @@ def _summarize_tool_output(output: object) -> str:
     if output is None:
         return "no result"
     text = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False, default=str)
-    # Trim to 120 chars so the frontend badge stays compact
     text = text.strip()
-    return text[:120] + ("…" if len(text) > 120 else "")
+    # Keep enough payload that the UI can pretty-print structured results.
+    return text[:4000] + ("…" if len(text) > 4000 else "")
 
 
 def _chunked(text: str, size: int):

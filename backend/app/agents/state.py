@@ -10,17 +10,20 @@ class AgentState(TypedDict, total=False):
     """State carried through the supervisor graph.
 
     Fields:
-        messages    — running list of LangChain messages (auto-merged by add_messages)
-        user_id     — current user (single-user prototype: always 1)
-        risk_profile — user's risk profile (conservative/balanced/aggressive)
-        agent       — which agent should run next (set by supervisor router)
-        scratchpad  — free-form working memory between nodes
-        citations   — tool calls the worker made (surfaced as chips in the UI).
-                      Each entry: {tool, args, agent?}.
+        messages         — running list of LangChain messages (auto-merged by add_messages)
+        user_id          — current user (single-user prototype: always 1)
+        risk_profile     — user's risk profile (conservative/balanced/aggressive)
+        next_action      — supervisor's last decision (agent name, or 'FINISH')
+        agents_consulted — agents already called this turn, in order
+        scratchpad       — free-form working memory between nodes
+        citations        — tool calls the worker made (surfaced as chips in the UI)
+        error            — structured error from the last worker (None on success)
     """
     messages: Annotated[list, add_messages]
     user_id: int
     risk_profile: str
-    agent: str
+    next_action: str
+    agents_consulted: list[str]
     scratchpad: dict[str, Any]
     citations: list[dict[str, Any]]
+    error: dict[str, Any] | None

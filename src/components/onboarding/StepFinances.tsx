@@ -127,10 +127,6 @@ export function StepFinances({ value, onChange }: Props) {
     setExtraction(null);
   }
 
-  const totalMonthly = value.incomeSources.length > 0
-    ? sumIncome(value.incomeSources)
-    : value.monthlyIncome;
-
   return (
     <div className="space-y-5">
       <div>

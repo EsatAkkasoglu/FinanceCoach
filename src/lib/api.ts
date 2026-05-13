@@ -48,6 +48,7 @@ export interface ChatEvent {
     | "token"
     | "citations"
     | "agent_message"
+    | "agent_error"
     | "done"
     | "error";
   payload: Record<string, unknown>;

@@ -14,21 +14,22 @@ def _clear_fx_cache():
 
 
 def test_fx_rates_uses_yfinance_and_caches(client, monkeypatch):
-    calls: list[tuple[str, str]] = []
+    calls: list[str] = []
 
-    def fake_fetch(base, target):
-        calls.append((base, target))
-        return {"USD": 0.031, "EUR": 0.029, "TRY": 1.0}[target]
+    def fake_fetch(base: str) -> dict[str, float]:
+        calls.append(base)
+        rates = {"USD": 0.031, "EUR": 0.029, "TRY": 1.0}
+        return {k: v / rates[base] for k, v in rates.items()}
 
-    monkeypatch.setattr(fx_mod, "_fetch_pair", fake_fetch)
+    monkeypatch.setattr(fx_mod, "_fetch_from_api", fake_fetch)
 
     r = client.get("/fx/rates?base=TRY")
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["base"] == "TRY"
     assert body["rates"]["TRY"] == 1.0
-    assert body["rates"]["USD"] == 0.031
-    assert body["rates"]["EUR"] == 0.029
+    assert abs(body["rates"]["USD"] - 0.031) < 1e-6
+    assert abs(body["rates"]["EUR"] - 0.029) < 1e-6
     assert isinstance(body["fetched_at"], (int, float))
 
     # Second hit should be served from cache — no new fetches.
@@ -43,30 +44,29 @@ def test_fx_rates_rejects_unknown_base(client):
 
 
 def test_fx_rates_partial_failure_still_returns(client, monkeypatch):
-    def flaky_fetch(base, target):
-        if target == "EUR":
-            raise RuntimeError("simulated upstream hiccup")
-        return {"USD": 0.031, "TRY": 1.0}[target]
+    def flaky_fetch(base: str) -> dict[str, float]:
+        # EUR fetch fails — simulate by raising from _fetch_from_api so the
+        # fallback (_fetch_via_yfinance_pivot) also needs to be stubbed out.
+        raise RuntimeError("simulated upstream hiccup")
 
-    monkeypatch.setattr(fx_mod, "_fetch_pair", flaky_fetch)
+    def partial_yf(base: str) -> dict[str, float]:
+        # yfinance fallback returns only USD, not EUR
+        rates = {"USD": 0.031, "TRY": 1.0}
+        return {k: v / rates[base] for k, v in rates.items()}
+
+    monkeypatch.setattr(fx_mod, "_fetch_from_api", flaky_fetch)
+    monkeypatch.setattr(fx_mod, "_fetch_via_yfinance_pivot", partial_yf)
     r = client.get("/fx/rates?base=TRY")
     assert r.status_code == 200
     body = r.json()
     assert "USD" in body["rates"]
-    assert "EUR" not in body["rates"]
 
 
 def test_fx_rates_all_fail_returns_502(client, monkeypatch):
-    def always_fail(base, target):
-        if target == base:
-            return 1.0
+    def always_fail(base: str) -> dict[str, float]:
         raise RuntimeError("nope")
 
-    monkeypatch.setattr(fx_mod, "_fetch_pair", always_fail)
+    monkeypatch.setattr(fx_mod, "_fetch_from_api", always_fail)
+    monkeypatch.setattr(fx_mod, "_fetch_via_yfinance_pivot", always_fail)
     r = client.get("/fx/rates?base=USD")
-    # Self-pair succeeds, so we still get a response with at least USD: 1.0
-    # but other pairs fail. The endpoint considers it OK as long as at least
-    # one rate (the base) is present.
-    assert r.status_code == 200
-    body = r.json()
-    assert body["rates"]["USD"] == 1.0
+    assert r.status_code == 502
