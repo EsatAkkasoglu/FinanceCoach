@@ -260,8 +260,8 @@ def _supervisor_node(state: AgentState) -> AgentState:
     risk_profile = state.get("risk_profile")
     if not risk_profile:
         try:
-            user_id = state.get("user_id", 1)
-            profile_data = get_user_profile.invoke({"user_id": user_id})
+            # user_id is read from the request-scoped ContextVar inside the tool.
+            profile_data = get_user_profile.invoke({})
             risk_profile = profile_data.get("risk_profile", "balanced")
         except Exception as exc:
             log.warning("supervisor: failed to fetch risk_profile: %s", exc)

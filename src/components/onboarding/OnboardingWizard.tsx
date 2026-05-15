@@ -4,7 +4,8 @@ import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { useUserStore } from "@/store";
-import { submitOnboarding, createAccount, createSubscription } from "@/lib/api";
+import { submitOnboarding, createAccount, createSubscription, fetchMe } from "@/lib/api";
+import { useAuthStore } from "@/store";
 import { cn } from "@/lib/cn";
 
 import { StepWelcome } from "./StepWelcome";
@@ -126,7 +127,10 @@ export function OnboardingWizard() {
         riskProfile: profile,
       });
       completeOnboarding();
-      toast.success(`Welcome aboard, ${form.name.trim()} — you're all set! 🎉`);
+      // Refresh /auth/me so the App route guard sees has_onboarded = true.
+      const me = await fetchMe();
+      if (me) useAuthStore.getState().setUser(me);
+      toast.success(`Welcome aboard, ${form.name.trim()} — you're all set!`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       toast.error(`Could not save profile: ${msg}`);

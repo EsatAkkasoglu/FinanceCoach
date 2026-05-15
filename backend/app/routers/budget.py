@@ -1,22 +1,19 @@
 """Budget routes: accounts, transactions, subscriptions, summary.
 
-All routes are scoped to the single demo user (id=1) for the prototype. When
-the app goes multi-user, the dependency to inject is a `current_user` object
-fetched from a session cookie or token; only the WHERE clauses change.
+Every route is scoped to the bearer-token's user via `Depends(get_current_user_id)`.
 """
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 
+from app.auth import get_current_user_id
 from app.db.models import Account, Goal, Subscription, Transaction
 from app.db.session import SessionLocal
-
-USER_ID = 1  # single-user prototype
 
 router = APIRouter(tags=["budget"])
 
@@ -168,19 +165,19 @@ def _sub_dict(s: Subscription) -> dict:
 
 
 @router.get("/accounts")
-def list_accounts():
+def list_accounts(user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         rows = db.execute(
-            select(Account).where(Account.user_id == USER_ID, Account.archived == 0)
+            select(Account).where(Account.user_id == user_id, Account.archived == 0)
             .order_by(Account.created_at)
         ).scalars().all()
         return [_account_dict(a) for a in rows]
 
 
 @router.post("/accounts")
-def create_account(payload: AccountCreate):
+def create_account(payload: AccountCreate, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
-        a = Account(user_id=USER_ID, **payload.model_dump())
+        a = Account(user_id=user_id, **payload.model_dump())
         db.add(a)
         db.commit()
         db.refresh(a)
@@ -188,10 +185,12 @@ def create_account(payload: AccountCreate):
 
 
 @router.patch("/accounts/{account_id}")
-def update_account(account_id: int, payload: AccountUpdate):
+def update_account(
+    account_id: int, payload: AccountUpdate, user_id: int = Depends(get_current_user_id)
+):
     with SessionLocal() as db:
         a = db.execute(
-            select(Account).where(Account.id == account_id, Account.user_id == USER_ID)
+            select(Account).where(Account.id == account_id, Account.user_id == user_id)
         ).scalar_one_or_none()
         if a is None:
             raise HTTPException(404, "account not found")
@@ -206,10 +205,10 @@ def update_account(account_id: int, payload: AccountUpdate):
 
 
 @router.delete("/accounts/{account_id}")
-def delete_account(account_id: int):
+def delete_account(account_id: int, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         a = db.execute(
-            select(Account).where(Account.id == account_id, Account.user_id == USER_ID)
+            select(Account).where(Account.id == account_id, Account.user_id == user_id)
         ).scalar_one_or_none()
         if a is None:
             raise HTTPException(404, "account not found")
@@ -230,9 +229,10 @@ def list_transactions(
     category: str | None = None,
     account_id: int | None = None,
     limit: int = Query(default=200, ge=1, le=1000),
+    user_id: int = Depends(get_current_user_id),
 ):
     with SessionLocal() as db:
-        stmt = select(Transaction).where(Transaction.user_id == USER_ID)
+        stmt = select(Transaction).where(Transaction.user_id == user_id)
         if from_:
             stmt = stmt.where(Transaction.occurred_on >= from_)
         if to:
@@ -249,9 +249,9 @@ def list_transactions(
 
 
 @router.post("/transactions")
-def create_transaction(payload: TransactionCreate):
+def create_transaction(payload: TransactionCreate, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
-        t = Transaction(user_id=USER_ID, **payload.model_dump())
+        t = Transaction(user_id=user_id, **payload.model_dump())
         _adjust_account_balance(db, t.account_id, t.type, t.amount, t.currency, sign=+1)
         db.add(t)
         db.commit()
@@ -260,13 +260,15 @@ def create_transaction(payload: TransactionCreate):
 
 
 @router.post("/transactions/bulk")
-def create_transactions_bulk(payload: TransactionBulk):
+def create_transactions_bulk(
+    payload: TransactionBulk, user_id: int = Depends(get_current_user_id)
+):
     if not payload.items:
         return {"ok": True, "created": 0}
     with SessionLocal() as db:
         created = 0
         for item in payload.items:
-            t = Transaction(user_id=USER_ID, **item.model_dump())
+            t = Transaction(user_id=user_id, **item.model_dump())
             _adjust_account_balance(db, t.account_id, t.type, t.amount, t.currency, sign=+1)
             db.add(t)
             created += 1
@@ -275,10 +277,12 @@ def create_transactions_bulk(payload: TransactionBulk):
 
 
 @router.patch("/transactions/{tx_id}")
-def update_transaction(tx_id: int, payload: TransactionUpdate):
+def update_transaction(
+    tx_id: int, payload: TransactionUpdate, user_id: int = Depends(get_current_user_id)
+):
     with SessionLocal() as db:
         t = db.execute(
-            select(Transaction).where(Transaction.id == tx_id, Transaction.user_id == USER_ID)
+            select(Transaction).where(Transaction.id == tx_id, Transaction.user_id == user_id)
         ).scalar_one_or_none()
         if t is None:
             raise HTTPException(404, "transaction not found")
@@ -293,10 +297,10 @@ def update_transaction(tx_id: int, payload: TransactionUpdate):
 
 
 @router.delete("/transactions/{tx_id}")
-def delete_transaction(tx_id: int):
+def delete_transaction(tx_id: int, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         t = db.execute(
-            select(Transaction).where(Transaction.id == tx_id, Transaction.user_id == USER_ID)
+            select(Transaction).where(Transaction.id == tx_id, Transaction.user_id == user_id)
         ).scalar_one_or_none()
         if t is None:
             raise HTTPException(404, "transaction not found")
@@ -325,9 +329,11 @@ def _adjust_account_balance(db, account_id, tx_type, amount, currency, *, sign: 
 
 
 @router.get("/subscriptions")
-def list_subscriptions(active: bool | None = None):
+def list_subscriptions(
+    active: bool | None = None, user_id: int = Depends(get_current_user_id)
+):
     with SessionLocal() as db:
-        stmt = select(Subscription).where(Subscription.user_id == USER_ID)
+        stmt = select(Subscription).where(Subscription.user_id == user_id)
         if active is True:
             stmt = stmt.where(Subscription.active == 1)
         elif active is False:
@@ -338,9 +344,9 @@ def list_subscriptions(active: bool | None = None):
 
 
 @router.post("/subscriptions")
-def create_subscription(payload: SubscriptionCreate):
+def create_subscription(payload: SubscriptionCreate, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
-        s = Subscription(user_id=USER_ID, **payload.model_dump())
+        s = Subscription(user_id=user_id, **payload.model_dump())
         db.add(s)
         db.commit()
         db.refresh(s)
@@ -348,10 +354,12 @@ def create_subscription(payload: SubscriptionCreate):
 
 
 @router.patch("/subscriptions/{sub_id}")
-def update_subscription(sub_id: int, payload: SubscriptionUpdate):
+def update_subscription(
+    sub_id: int, payload: SubscriptionUpdate, user_id: int = Depends(get_current_user_id)
+):
     with SessionLocal() as db:
         s = db.execute(
-            select(Subscription).where(Subscription.id == sub_id, Subscription.user_id == USER_ID)
+            select(Subscription).where(Subscription.id == sub_id, Subscription.user_id == user_id)
         ).scalar_one_or_none()
         if s is None:
             raise HTTPException(404, "subscription not found")
@@ -366,10 +374,10 @@ def update_subscription(sub_id: int, payload: SubscriptionUpdate):
 
 
 @router.delete("/subscriptions/{sub_id}")
-def delete_subscription(sub_id: int):
+def delete_subscription(sub_id: int, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         s = db.execute(
-            select(Subscription).where(Subscription.id == sub_id, Subscription.user_id == USER_ID)
+            select(Subscription).where(Subscription.id == sub_id, Subscription.user_id == user_id)
         ).scalar_one_or_none()
         if s is None:
             raise HTTPException(404, "subscription not found")
@@ -393,18 +401,18 @@ def _goal_dict(g: Goal) -> dict:
 
 
 @router.get("/goals")
-def list_goals():
+def list_goals(user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         rows = db.execute(
-            select(Goal).where(Goal.user_id == USER_ID).order_by(Goal.id)
+            select(Goal).where(Goal.user_id == user_id).order_by(Goal.id)
         ).scalars().all()
         return [_goal_dict(g) for g in rows]
 
 
 @router.post("/goals")
-def create_goal(payload: GoalCreate):
+def create_goal(payload: GoalCreate, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
-        g = Goal(user_id=USER_ID, **payload.model_dump())
+        g = Goal(user_id=user_id, **payload.model_dump())
         db.add(g)
         db.commit()
         db.refresh(g)
@@ -412,10 +420,10 @@ def create_goal(payload: GoalCreate):
 
 
 @router.patch("/goals/{goal_id}")
-def update_goal(goal_id: int, payload: GoalUpdate):
+def update_goal(goal_id: int, payload: GoalUpdate, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         g = db.execute(
-            select(Goal).where(Goal.id == goal_id, Goal.user_id == USER_ID)
+            select(Goal).where(Goal.id == goal_id, Goal.user_id == user_id)
         ).scalar_one_or_none()
         if g is None:
             raise HTTPException(404, "goal not found")
@@ -427,10 +435,10 @@ def update_goal(goal_id: int, payload: GoalUpdate):
 
 
 @router.delete("/goals/{goal_id}")
-def delete_goal(goal_id: int):
+def delete_goal(goal_id: int, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         g = db.execute(
-            select(Goal).where(Goal.id == goal_id, Goal.user_id == USER_ID)
+            select(Goal).where(Goal.id == goal_id, Goal.user_id == user_id)
         ).scalar_one_or_none()
         if g is None:
             raise HTTPException(404, "goal not found")
@@ -443,7 +451,9 @@ def delete_goal(goal_id: int):
 
 
 @router.get("/budget/summary")
-def budget_summary(month: str | None = None):
+def budget_summary(
+    month: str | None = None, user_id: int = Depends(get_current_user_id)
+):
     """One-call dashboard payload: balances, MTD flow, MoM deltas, top categories,
     upcoming subscription charges. Currencies are NOT converted — totals are
     grouped by currency so the UI can render side-by-side."""
@@ -457,7 +467,7 @@ def budget_summary(month: str | None = None):
         cash_rows = db.execute(
             select(Account.currency, func.sum(Account.balance))
             .where(
-                Account.user_id == USER_ID,
+                Account.user_id == user_id,
                 Account.archived == 0,
                 Account.kind != "credit_card",
             )
@@ -468,7 +478,7 @@ def budget_summary(month: str | None = None):
         debt_rows = db.execute(
             select(Account.currency, func.sum(Account.balance))
             .where(
-                Account.user_id == USER_ID,
+                Account.user_id == user_id,
                 Account.archived == 0,
                 Account.kind == "credit_card",
             )
@@ -476,16 +486,16 @@ def budget_summary(month: str | None = None):
         ).all()
         debt_by_ccy = {ccy: round(abs(total or 0.0), 2) for ccy, total in debt_rows}
 
-        income_mtd = _sum_by_ccy(db, "income", target, next_month)
-        expense_mtd = _sum_by_ccy(db, "expense", target, next_month)
-        income_prev = _sum_by_ccy(db, "income", last_month_start, target)
-        expense_prev = _sum_by_ccy(db, "expense", last_month_start, target)
+        income_mtd = _sum_by_ccy(db, user_id, "income", target, next_month)
+        expense_mtd = _sum_by_ccy(db, user_id, "expense", target, next_month)
+        income_prev = _sum_by_ccy(db, user_id, "income", last_month_start, target)
+        expense_prev = _sum_by_ccy(db, user_id, "expense", last_month_start, target)
 
         # Top spending categories this month.
         cat_rows = db.execute(
             select(Transaction.category, Transaction.currency, func.sum(Transaction.amount))
             .where(
-                Transaction.user_id == USER_ID,
+                Transaction.user_id == user_id,
                 Transaction.type == "expense",
                 Transaction.occurred_on >= target,
                 Transaction.occurred_on < next_month,
@@ -504,7 +514,7 @@ def budget_summary(month: str | None = None):
         subs = db.execute(
             select(Subscription)
             .where(
-                Subscription.user_id == USER_ID,
+                Subscription.user_id == user_id,
                 Subscription.active == 1,
                 Subscription.next_charge_on != None,  # noqa: E711
                 Subscription.next_charge_on <= horizon,
@@ -516,7 +526,7 @@ def budget_summary(month: str | None = None):
         # Active recurring items normalized to monthly, split by direction.
         active_subs = db.execute(
             select(Subscription)
-            .where(Subscription.user_id == USER_ID, Subscription.active == 1)
+            .where(Subscription.user_id == user_id, Subscription.active == 1)
         ).scalars().all()
         expense_monthly: dict[str, float] = {}
         income_monthly: dict[str, float] = {}
@@ -551,11 +561,11 @@ def _parse_month(value: str | None) -> date | None:
         return None
 
 
-def _sum_by_ccy(db, tx_type: str, start: date, end: date) -> dict[str, float]:
+def _sum_by_ccy(db, user_id: int, tx_type: str, start: date, end: date) -> dict[str, float]:
     rows = db.execute(
         select(Transaction.currency, func.sum(Transaction.amount))
         .where(
-            Transaction.user_id == USER_ID,
+            Transaction.user_id == user_id,
             Transaction.type == tx_type,
             Transaction.occurred_on >= start,
             Transaction.occurred_on < end,

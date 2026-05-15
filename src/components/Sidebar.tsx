@@ -1,40 +1,49 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   MessageSquare, LayoutDashboard, Briefcase, Wallet, Target, FileText, Settings as SettingsIcon,
-  Circle, Plus, Trash2, Pencil, Check, X,
+  Circle, Plus, Trash2, Pencil, Check, X, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   listConversations, createConversation, deleteConversation, updateConversationTitle,
+  logout as apiLogout,
   type Conversation,
 } from "@/lib/api";
-import { useConversationStore, useChatStore, useUserStore } from "@/store";
+import { useAuthStore, useConversationStore, useChatStore, useUserStore } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
 
-type View = "chat" | "dashboard" | "portfolio" | "budget" | "goals" | "documents" | "settings";
-
-const NAV: { key: View; label: string; icon: typeof MessageSquare }[] = [
-  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { key: "portfolio", label: "Portfolio", icon: Briefcase },
-  { key: "budget", label: "Budget", icon: Wallet },
-  { key: "goals", label: "Goals", icon: Target },
-  { key: "documents", label: "Documents", icon: FileText },
-  { key: "settings", label: "Settings", icon: SettingsIcon },
+const NAV: { path: string; label: string; icon: typeof MessageSquare }[] = [
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/portfolio", label: "Portfolio", icon: Briefcase },
+  { path: "/budget", label: "Budget", icon: Wallet },
+  { path: "/goals", label: "Goals", icon: Target },
+  { path: "/documents", label: "Documents", icon: FileText },
+  { path: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 interface Props {
-  view: View;
-  onChange: (v: View) => void;
   healthy: boolean | null;
   onSelectConversation: (conv: Conversation) => void;
   activeConvId: string | null;
 }
 
-export function Sidebar({ view, onChange, healthy, onSelectConversation, activeConvId }: Props) {
+export function Sidebar({ healthy, onSelectConversation, activeConvId }: Props) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = location.pathname;
+  const onChatRoute = currentPath.startsWith("/chat");
   const { conversations, setConversations, addConversation, removeConversation, updateTitle } =
     useConversationStore();
   const resetConv = useChatStore((s) => s.resetConv);
   const { avatar, name } = useUserStore();
+  const authUser = useAuthStore((s) => s.user);
+  const setAuthUser = useAuthStore((s) => s.setUser);
+
+  function handleLogout() {
+    apiLogout();
+    setAuthUser(null);
+  }
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -69,15 +78,14 @@ export function Sidebar({ view, onChange, healthy, onSelectConversation, activeC
       const conv = await createConversation();
       addConversation(conv);
       onSelectConversation(conv);
-      onChange("chat");
     } finally {
       setCreating(false);
     }
   }
 
-  async function handleNavChange(v: View) {
-    if (v !== "chat") await pruneEmptyActive();
-    onChange(v);
+  async function handleNavClick(path: string) {
+    if (!path.startsWith("/chat")) await pruneEmptyActive();
+    navigate(path);
   }
 
   async function handleDelete(e: React.MouseEvent, conv: Conversation) {
@@ -110,12 +118,19 @@ export function Sidebar({ view, onChange, healthy, onSelectConversation, activeC
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent shadow-glow text-lg leading-none">
           {avatarMeta.emoji}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold tracking-tight">FinCoach</div>
           <div className="truncate text-[10px] text-[hsl(var(--text-muted))]">
-            {name ? name : "v0.1 · hackathon"}
+            {name || authUser?.username || "v0.1 · hackathon"}
           </div>
         </div>
+        <button
+          onClick={handleLogout}
+          title="Sign out"
+          className="rounded-md p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {/* New Chat button */}
@@ -138,10 +153,10 @@ export function Sidebar({ view, onChange, healthy, onSelectConversation, activeC
             {conversations.map((conv) => (
               <div
                 key={conv.id}
-                onClick={() => { onSelectConversation(conv); onChange("chat"); }}
+                onClick={() => onSelectConversation(conv)}
                 className={cn(
                   "group flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs transition",
-                  activeConvId === conv.id
+                  onChatRoute && activeConvId === conv.id
                     ? "bg-accent-muted text-accent"
                     : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
                 )}
@@ -199,23 +214,24 @@ export function Sidebar({ view, onChange, healthy, onSelectConversation, activeC
 
       {/* Main nav */}
       <nav className="flex flex-col gap-1">
-        {NAV.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => void handleNavChange(key)}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
-              view === key && activeConvId === null
-                ? "bg-accent-muted text-accent"
-                : view === key
-                ? "bg-accent-muted text-accent"
-                : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
+        {NAV.map(({ path, label, icon: Icon }) => {
+          const active = currentPath === path || currentPath.startsWith(`${path}/`);
+          return (
+            <button
+              key={path}
+              onClick={() => void handleNavClick(path)}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
+                active
+                  ? "bg-accent-muted text-accent"
+                  : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          );
+        })}
       </nav>
 
       {/* Status */}

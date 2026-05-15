@@ -6,6 +6,11 @@ yfinance ticker first via ``resolve_symbol``.
 """
 from __future__ import annotations
 
+import re
+from typing import Any
+
+import requests
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.prebuilt import create_react_agent
 
 from app.agents.llm import get_llm
@@ -169,6 +174,124 @@ _TOOLS = [
     list_top_funds,
 ]
 
+_STABLECOIN_SYMBOLS = {"USDT", "USDC", "DAI", "FDUSD", "USDE", "TUSD", "BUSD"}
+
+
+def _latest_user_text(state: AgentState) -> str:
+    for message in reversed(state.get("messages", []) or []):
+        if isinstance(message, HumanMessage):
+            content = message.content
+            return content if isinstance(content, str) else str(content)
+    return ""
+
+
+def _wants_top_crypto_market_cap(text: str) -> bool:
+    text_l = text.lower()
+    return (
+        ("crypto" in text_l or "kripto" in text_l)
+        and ("market cap" in text_l or "market hac" in text_l or "piyasa değ" in text_l)
+        and ("top" in text_l or "ilk" in text_l or "en yüksek" in text_l)
+    )
+
+
+def _requested_limit(text: str, default: int = 5) -> int:
+    match = re.search(r"\b(?:top|ilk)?\s*(\d{1,2})\b", text.lower())
+    if not match:
+        return default
+    return max(1, min(10, int(match.group(1))))
+
+
+def _fetch_top_crypto_tickers(limit: int) -> list[dict[str, Any]]:
+    url = (
+        "https://api.coingecko.com/api/v3/coins/markets"
+        "?vs_currency=usd&order=market_cap_desc&per_page=30&page=1"
+    )
+    response = requests.get(url, timeout=8)
+    response.raise_for_status()
+
+    rows: list[dict[str, Any]] = []
+    for item in response.json():
+        symbol = str(item.get("symbol") or "").upper()
+        if not symbol or symbol in _STABLECOIN_SYMBOLS:
+            continue
+        rows.append(
+            {
+                "ticker": f"{symbol}-USD",
+                "name": item.get("name") or symbol,
+                "market_cap": item.get("market_cap"),
+                "rank": item.get("market_cap_rank"),
+            }
+        )
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _fmt_money(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if number >= 1_000_000_000:
+        return f"${number / 1_000_000_000:.1f}B"
+    if number >= 1_000_000:
+        return f"${number / 1_000_000:.1f}M"
+    return f"${number:,.2f}"
+
+
+def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
+    user_text = _latest_user_text(state)
+    if not _wants_top_crypto_market_cap(user_text):
+        return None
+
+    limit = _requested_limit(user_text, default=5)
+    try:
+        coins = _fetch_top_crypto_tickers(limit)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "messages": [AIMessage(content=f"Top kripto listesi CoinGecko'dan alınamadı: {exc}")],
+            "citations": [],
+        }
+
+    lines = [
+        f"Piyasa değerine göre ilk {len(coins)} kripto için stablecoinleri hariç tuttum; 8-dim skor stablecoinlerde anlamlı değil.",
+        "",
+        "| Kripto | Fiyat | 24s değişim | Market cap | 8-dim skor | Öneri |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    citations: list[dict[str, Any]] = []
+
+    for coin in coins:
+        ticker = str(coin["ticker"])
+        quote = get_quote.invoke({"ticker": ticker})
+        analysis = analyze_ticker_8dim.invoke({"ticker": ticker, "fast": True})
+
+        price = quote.get("price") if isinstance(quote, dict) else None
+        change = quote.get("change_pct") if isinstance(quote, dict) else None
+        score = analysis.get("final_score") if isinstance(analysis, dict) else None
+        recommendation = analysis.get("recommendation") if isinstance(analysis, dict) else None
+        error = analysis.get("error") if isinstance(analysis, dict) else None
+
+        score_text = f"{float(score):.2f}" if isinstance(score, int | float) else "n/a"
+        recommendation_text = str(recommendation or ("hata" if error else "n/a"))
+        price_text = f"${float(price):,.4f}" if isinstance(price, int | float) else "n/a"
+        change_text = f"{float(change):+.2f}%" if isinstance(change, int | float) else "n/a"
+
+        lines.append(
+            f"| {coin['name']} ({ticker}) | {price_text} | {change_text} | "
+            f"{_fmt_money(coin.get('market_cap'))} | {score_text} | {recommendation_text} |"
+        )
+        citations.extend(
+            [
+                {"tool": "get_quote", "args": {"ticker": ticker}, "result": str(quote)},
+                {"tool": "analyze_ticker_8dim", "args": {"ticker": ticker, "fast": True}, "result": str(analysis)},
+            ]
+        )
+
+    lines.append("")
+    lines.append("Market cap sıralaması CoinGecko'dan, fiyat ve 8-dim analiz sonuçları canlı tool çağrılarından geldi.")
+    return {"messages": [AIMessage(content="\n".join(lines))], "citations": citations}
+
 
 def _build_agent(risk_profile: str = "balanced"):
     """Lazy build so missing GEMINI_API_KEY doesn't break import."""
@@ -177,6 +300,10 @@ def _build_agent(risk_profile: str = "balanced"):
 
 
 async def run(state: AgentState) -> AgentState:
+    direct = _handle_top_crypto_request(state)
+    if direct is not None:
+        return direct
+
     risk_profile = state.get("risk_profile", "balanced")
     agent = _build_agent(risk_profile)
     result = await agent.ainvoke({"messages": state.get("messages", [])})

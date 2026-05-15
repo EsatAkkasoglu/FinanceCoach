@@ -13,6 +13,7 @@ from typing import Any
 import chromadb
 from langchain_core.tools import tool
 
+from app.auth import get_current_user_id_or_none
 from app.settings import settings
 
 log = logging.getLogger("fincoach.tools.memory")
@@ -23,9 +24,11 @@ def _client() -> chromadb.PersistentClient:
     return chromadb.PersistentClient(path=settings.chroma_path)
 
 
-@lru_cache(maxsize=1)
 def _collection():
-    return _client().get_or_create_collection(name="fincoach_memory")
+    """Per-user collection so memories never leak across accounts."""
+    user_id = get_current_user_id_or_none()
+    suffix = f"u{user_id}" if user_id is not None else "anon"
+    return _client().get_or_create_collection(name=f"fincoach_memory_{suffix}")
 
 
 @tool

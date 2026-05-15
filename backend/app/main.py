@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from datetime import date as date_cls, datetime
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage, AIMessage
 from pydantic import BaseModel, Field
@@ -26,6 +26,8 @@ from sqlalchemy import select
 from sse_starlette.sse import EventSourceResponse
 
 from app.settings import configure_langsmith, settings
+from app.auth import current_user_id_var, get_current_user_id
+from app.auth.routes import router as auth_router
 from app.db.models import Conversation, Goal, Holding, User
 from app.db.session import SessionLocal, init_db
 from app.agents.supervisor import AGENT_NODES, FINISH, SYNTHESIZER_NODE, build_supervisor
@@ -81,6 +83,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(budget_router)
 app.include_router(fx_router)
@@ -99,7 +102,7 @@ async def health():
 # ── Conversation management ──────────────────────────────────────────────────
 
 @app.post("/conversations")
-async def create_conversation(payload: dict):
+async def create_conversation(payload: dict, user_id: int = Depends(get_current_user_id)):
     """Create a new conversation thread and return its metadata."""
     conv_id = str(uuid.uuid4())
     thread_id = str(uuid.uuid4())
@@ -108,7 +111,7 @@ async def create_conversation(payload: dict):
     with SessionLocal() as db:
         conv = Conversation(
             id=conv_id,
-            user_id=1,
+            user_id=user_id,
             thread_id=thread_id,
             title=title,
             created_at=now,
@@ -120,12 +123,12 @@ async def create_conversation(payload: dict):
 
 
 @app.get("/conversations")
-async def list_conversations():
+async def list_conversations(user_id: int = Depends(get_current_user_id)):
     """Return all non-archived conversations for the user, newest first."""
     with SessionLocal() as db:
         rows = db.execute(
             select(Conversation)
-            .where(Conversation.user_id == 1, Conversation.archived == 0)
+            .where(Conversation.user_id == user_id, Conversation.archived == 0)
             .order_by(Conversation.updated_at.desc())
         ).scalars().all()
         return [
@@ -141,10 +144,14 @@ async def list_conversations():
 
 
 @app.patch("/conversations/{conv_id}")
-async def update_conversation(conv_id: str, payload: dict):
+async def update_conversation(
+    conv_id: str, payload: dict, user_id: int = Depends(get_current_user_id)
+):
     """Update conversation title."""
     with SessionLocal() as db:
-        conv = db.execute(select(Conversation).where(Conversation.id == conv_id)).scalar_one_or_none()
+        conv = db.execute(
+            select(Conversation).where(Conversation.id == conv_id, Conversation.user_id == user_id)
+        ).scalar_one_or_none()
         if conv is None:
             raise HTTPException(status_code=404, detail="conversation not found")
         if "title" in payload:
@@ -154,10 +161,12 @@ async def update_conversation(conv_id: str, payload: dict):
 
 
 @app.delete("/conversations/{conv_id}")
-async def delete_conversation(conv_id: str):
+async def delete_conversation(conv_id: str, user_id: int = Depends(get_current_user_id)):
     """Archive (soft-delete) a conversation."""
     with SessionLocal() as db:
-        conv = db.execute(select(Conversation).where(Conversation.id == conv_id)).scalar_one_or_none()
+        conv = db.execute(
+            select(Conversation).where(Conversation.id == conv_id, Conversation.user_id == user_id)
+        ).scalar_one_or_none()
         if conv is None:
             raise HTTPException(status_code=404, detail="conversation not found")
         conv.archived = 1
@@ -168,7 +177,7 @@ async def delete_conversation(conv_id: str):
 # ── Chat ─────────────────────────────────────────────────────────────────────
 
 @app.post("/chat")
-async def chat(payload: dict):
+async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
     """Stream multi-agent response as SSE events.
 
     Requires `thread_id` in payload — each conversation has its own thread_id.
@@ -189,9 +198,25 @@ async def chat(payload: dict):
     if not thread_id:
         return {"error": "thread_id required"}
 
+    # Enforce that the conversation/thread belongs to this user before we let
+    # them write into the checkpointer keyed off thread_id.
+    if conv_id:
+        with SessionLocal() as db:
+            owns = db.execute(
+                select(Conversation.thread_id).where(
+                    Conversation.id == conv_id, Conversation.user_id == user_id
+                )
+            ).scalar_one_or_none()
+            if owns is None or owns != thread_id:
+                raise HTTPException(403, "conversation not found")
+
+    # Make user_id visible to deeply-nested LangGraph tools via ContextVar.
+    current_user_id_var.set(user_id)
+
     supervisor = app.state.supervisor
-    initial_state = {"messages": [HumanMessage(content=user_message)], "user_id": 1}
-    config = {"configurable": {"thread_id": thread_id}}
+    initial_state = {"messages": [HumanMessage(content=user_message)], "user_id": user_id}
+    # Namespace thread_id by user so checkpoint keys can never collide across users.
+    config = {"configurable": {"thread_id": f"u{user_id}:{thread_id}"}}
 
     def _evt(event: str, data: dict) -> dict:
         return {"event": event, "data": json.dumps(data)}
@@ -211,6 +236,9 @@ async def chat(payload: dict):
 
     async def event_stream():
         nonlocal final_agent
+        # Re-bind in case the generator runs in a fresh asyncio task that
+        # didn't inherit the request handler's ContextVar value.
+        current_user_id_var.set(user_id)
         # Track which outer agent is currently executing so tool events
         # (which carry node='tools', not the outer node name) can be attributed.
         current_outer_agent: str | None = None
@@ -380,10 +408,23 @@ def _touch_conversation(conv_id: str, first_message: str) -> None:
 
 
 def _summarize_tool_output(output: object) -> str:
-    """Return a short human-readable summary of a tool's return value."""
+    """Return a short human-readable summary of a tool's return value.
+
+    LangChain wraps tool returns in ToolMessage objects whose ``str()`` is
+    ``content='...' name='...' tool_call_id='...'`` — useless for the UI.
+    Unwrap to the inner ``.content`` (which is what the tool actually
+    returned, already a JSON string for dict/list returns) before serializing.
+    """
     if output is None:
         return "no result"
-    text = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False, default=str)
+    # Unwrap ToolMessage / AIMessage-like objects to their content payload.
+    inner = getattr(output, "content", None)
+    if inner is not None:
+        output = inner
+    if isinstance(output, str):
+        text = output
+    else:
+        text = json.dumps(output, ensure_ascii=False, default=str)
     text = text.strip()
     # Keep enough payload that the UI can pretty-print structured results.
     return text[:4000] + ("…" if len(text) > 4000 else "")
@@ -455,17 +496,12 @@ def _parse_date(value: str) -> date_cls | None:
 
 
 @app.post("/onboarding")
-async def onboarding(payload: OnboardingIn):
-    """Persist the onboarding wizard output into the User / Goal / Holding tables.
-
-    The default user (id=1) seeded by ``init_db`` is updated in place rather
-    than creating a duplicate; the prototype is single-user.
-    """
+async def onboarding(payload: OnboardingIn, user_id: int = Depends(get_current_user_id)):
+    """Persist the onboarding wizard output into the current user's profile."""
     with SessionLocal() as db:
-        user = db.execute(select(User).where(User.id == 1)).scalar_one_or_none()
+        user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
         if user is None:
-            user = User(id=1, name=payload.name)
-            db.add(user)
+            raise HTTPException(404, "user not found")
 
         user.name = payload.name
         user.avatar = payload.avatar
@@ -524,7 +560,7 @@ def _quote_or_none(ticker: str) -> dict | None:
 
 
 @app.get("/portfolio")
-async def list_portfolio():
+async def list_portfolio(user_id: int = Depends(get_current_user_id)):
     """Return the user's holdings enriched with current price + P&L.
 
     Fetches all quotes in parallel via asyncio.gather + thread pool so N holdings
@@ -534,7 +570,7 @@ async def list_portfolio():
     from concurrent.futures import ThreadPoolExecutor
 
     with SessionLocal() as db:
-        rows = db.execute(select(Holding).where(Holding.user_id == 1)).scalars().all()
+        rows = db.execute(select(Holding).where(Holding.user_id == user_id)).scalars().all()
 
     non_cash = [h for h in rows if h.asset_class != "cash"]
 
@@ -610,11 +646,11 @@ class HoldingUpdate(BaseModel):
 
 
 @app.post("/portfolio/holdings")
-async def add_holding(payload: HoldingCreate):
+async def add_holding(payload: HoldingCreate, user_id: int = Depends(get_current_user_id)):
     """Add a holding to the user's portfolio."""
     with SessionLocal() as db:
         h = Holding(
-            user_id=1,
+            user_id=user_id,
             ticker=payload.ticker.upper().strip(),
             asset_class=payload.asset_class,
             quantity=payload.quantity,
@@ -627,11 +663,13 @@ async def add_holding(payload: HoldingCreate):
 
 
 @app.patch("/portfolio/holdings/{holding_id}")
-async def update_holding(holding_id: int, payload: HoldingUpdate):
+async def update_holding(
+    holding_id: int, payload: HoldingUpdate, user_id: int = Depends(get_current_user_id)
+):
     """Patch a single holding. Only fields present in the body are touched."""
     with SessionLocal() as db:
         h = db.execute(
-            select(Holding).where(Holding.id == holding_id, Holding.user_id == 1)
+            select(Holding).where(Holding.id == holding_id, Holding.user_id == user_id)
         ).scalar_one_or_none()
         if h is None:
             raise HTTPException(status_code=404, detail="holding not found")
@@ -656,11 +694,11 @@ async def update_holding(holding_id: int, payload: HoldingUpdate):
 
 
 @app.delete("/portfolio/holdings/{holding_id}")
-async def delete_holding(holding_id: int):
+async def delete_holding(holding_id: int, user_id: int = Depends(get_current_user_id)):
     """Remove a holding."""
     with SessionLocal() as db:
         h = db.execute(
-            select(Holding).where(Holding.id == holding_id, Holding.user_id == 1)
+            select(Holding).where(Holding.id == holding_id, Holding.user_id == user_id)
         ).scalar_one_or_none()
         if h is None:
             raise HTTPException(status_code=404, detail="holding not found")
@@ -684,6 +722,8 @@ class ProfileUpdate(BaseModel):
 def _serialize_user(user: User) -> dict:
     return {
         "id": user.id,
+        "username": user.username,
+        "has_onboarded": bool(user.name),
         "name": user.name,
         "avatar": user.avatar,
         "monthly_income": user.monthly_income,
@@ -695,18 +735,18 @@ def _serialize_user(user: User) -> dict:
 
 
 @app.get("/profile")
-async def get_profile():
+async def get_profile(user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
-        user = db.execute(select(User).where(User.id == 1)).scalar_one_or_none()
+        user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
         if user is None:
             raise HTTPException(status_code=404, detail="profile not found")
         return _serialize_user(user)
 
 
 @app.patch("/profile")
-async def update_profile(payload: ProfileUpdate):
+async def update_profile(payload: ProfileUpdate, user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
-        user = db.execute(select(User).where(User.id == 1)).scalar_one_or_none()
+        user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
         if user is None:
             raise HTTPException(status_code=404, detail="profile not found")
         if payload.name is not None:
@@ -727,7 +767,7 @@ async def update_profile(payload: ProfileUpdate):
 
 
 @app.get("/briefing")
-async def daily_briefing():
+async def daily_briefing(user_id: int = Depends(get_current_user_id)):
     """Personalized 3-bullet briefing for the dashboard widget.
 
     All yfinance calls run in parallel (S&P 500 + VIX + all holdings at once).
@@ -736,7 +776,7 @@ async def daily_briefing():
     from concurrent.futures import ThreadPoolExecutor
 
     with SessionLocal() as db:
-        holdings = db.execute(select(Holding).where(Holding.user_id == 1)).scalars().all()
+        holdings = db.execute(select(Holding).where(Holding.user_id == user_id)).scalars().all()
 
     non_cash = [h for h in holdings if h.asset_class != "cash"]
     tickers_to_fetch = ["^GSPC", "^VIX"] + [h.ticker for h in non_cash]

@@ -8,6 +8,103 @@
 const PORT = (import.meta.env.TAURI_FINCOACH_PORT as string | undefined) ?? "8765";
 export const API_BASE = `http://localhost:${PORT}`;
 
+// ── Auth token storage ─────────────────────────────────────────────────────
+const TOKEN_KEY = "fincoach-auth-token";
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Subscribers notified on 401 so the app can redirect to /login. */
+type UnauthorizedHandler = () => void;
+const unauthorizedHandlers = new Set<UnauthorizedHandler>();
+export function onUnauthorized(handler: UnauthorizedHandler): () => void {
+  unauthorizedHandlers.add(handler);
+  return () => unauthorizedHandlers.delete(handler);
+}
+
+/** Fetch wrapper that attaches the bearer token and globally handles 401. */
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = getAuthToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const resp = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  if (resp.status === 401) {
+    setAuthToken(null);
+    unauthorizedHandlers.forEach((h) => h());
+  }
+  return resp;
+}
+
+// ── Auth API ───────────────────────────────────────────────────────────────
+export interface AuthUser {
+  id: number;
+  username: string;
+  name: string;
+  avatar: string;
+  has_onboarded: boolean;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
+}
+
+export async function register(username: string, password: string): Promise<AuthResponse> {
+  const r = await apiFetch(`/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!r.ok) {
+    const detail = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(detail.detail || `register ${r.status}`);
+  }
+  const data = (await r.json()) as AuthResponse;
+  setAuthToken(data.token);
+  return data;
+}
+
+export async function login(username: string, password: string): Promise<AuthResponse> {
+  const r = await apiFetch(`/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!r.ok) {
+    const detail = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(detail.detail || `login ${r.status}`);
+  }
+  const data = (await r.json()) as AuthResponse;
+  setAuthToken(data.token);
+  return data;
+}
+
+export async function fetchMe(): Promise<AuthUser | null> {
+  const token = getAuthToken();
+  if (!token) return null;
+  const r = await apiFetch(`/auth/me`);
+  if (!r.ok) return null;
+  return r.json() as Promise<AuthUser>;
+}
+
+export function logout() {
+  setAuthToken(null);
+}
+
 export interface Holding {
   id?: number;
   ticker: string;
@@ -61,13 +158,13 @@ export interface Citation {
 }
 
 export async function ping() {
-  const r = await fetch(`${API_BASE}/health`);
+  const r = await apiFetch(`/health`);
   if (!r.ok) throw new Error(`health ${r.status}`);
   return r.json() as Promise<{ status: string; version: string; demo_mode: boolean; model: string }>;
 }
 
 export async function listPortfolio() {
-  const r = await fetch(`${API_BASE}/portfolio`);
+  const r = await apiFetch(`/portfolio`);
   return r.json() as Promise<{ holdings: Holding[]; totals: PortfolioTotals }>;
 }
 
@@ -81,7 +178,7 @@ export interface HoldingInput {
 }
 
 export async function addHolding(input: HoldingInput) {
-  const r = await fetch(`${API_BASE}/portfolio/holdings`, {
+  const r = await apiFetch(`/portfolio/holdings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -91,7 +188,7 @@ export async function addHolding(input: HoldingInput) {
 }
 
 export async function updateHolding(id: number, patch: Partial<HoldingInput>) {
-  const r = await fetch(`${API_BASE}/portfolio/holdings/${id}`, {
+  const r = await apiFetch(`/portfolio/holdings/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -101,7 +198,7 @@ export async function updateHolding(id: number, patch: Partial<HoldingInput>) {
 }
 
 export async function deleteHolding(id: number) {
-  const r = await fetch(`${API_BASE}/portfolio/holdings/${id}`, { method: "DELETE" });
+  const r = await apiFetch(`/portfolio/holdings/${id}`, { method: "DELETE" });
   if (!r.ok) throw new Error(await r.text());
 }
 
@@ -119,13 +216,13 @@ export interface UserProfile {
 }
 
 export async function getProfile() {
-  const r = await fetch(`${API_BASE}/profile`);
+  const r = await apiFetch(`/profile`);
   if (!r.ok) throw new Error(`profile ${r.status}`);
   return r.json() as Promise<UserProfile>;
 }
 
 export async function updateProfile(patch: Partial<Omit<UserProfile, "id" | "created_at">>) {
-  const r = await fetch(`${API_BASE}/profile`, {
+  const r = await apiFetch(`/profile`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -203,13 +300,13 @@ export interface AccountInput {
 }
 
 export async function listAccounts() {
-  const r = await fetch(`${API_BASE}/accounts`);
+  const r = await apiFetch(`/accounts`);
   if (!r.ok) throw new Error(`accounts ${r.status}`);
   return r.json() as Promise<Account[]>;
 }
 
 export async function createAccount(input: AccountInput) {
-  const r = await fetch(`${API_BASE}/accounts`, {
+  const r = await apiFetch(`/accounts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -219,7 +316,7 @@ export async function createAccount(input: AccountInput) {
 }
 
 export async function updateAccount(id: number, patch: Partial<AccountInput> & { archived?: boolean }) {
-  const r = await fetch(`${API_BASE}/accounts/${id}`, {
+  const r = await apiFetch(`/accounts/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -229,7 +326,7 @@ export async function updateAccount(id: number, patch: Partial<AccountInput> & {
 }
 
 export async function deleteAccount(id: number) {
-  const r = await fetch(`${API_BASE}/accounts/${id}`, { method: "DELETE" });
+  const r = await apiFetch(`/accounts/${id}`, { method: "DELETE" });
   if (!r.ok) throw new Error(await r.text());
 }
 
@@ -279,13 +376,13 @@ export async function listTransactions(filters: TransactionFilters = {}) {
   if (filters.category) params.set("category", filters.category);
   if (filters.account_id != null) params.set("account_id", String(filters.account_id));
   const qs = params.toString();
-  const r = await fetch(`${API_BASE}/transactions${qs ? `?${qs}` : ""}`);
+  const r = await apiFetch(`/transactions${qs ? `?${qs}` : ""}`);
   if (!r.ok) throw new Error(`transactions ${r.status}`);
   return r.json() as Promise<Transaction[]>;
 }
 
 export async function createTransaction(input: TransactionInput) {
-  const r = await fetch(`${API_BASE}/transactions`, {
+  const r = await apiFetch(`/transactions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -295,7 +392,7 @@ export async function createTransaction(input: TransactionInput) {
 }
 
 export async function createTransactionsBulk(items: TransactionInput[]) {
-  const r = await fetch(`${API_BASE}/transactions/bulk`, {
+  const r = await apiFetch(`/transactions/bulk`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ items }),
@@ -305,7 +402,7 @@ export async function createTransactionsBulk(items: TransactionInput[]) {
 }
 
 export async function updateTransaction(id: number, patch: Partial<TransactionInput>) {
-  const r = await fetch(`${API_BASE}/transactions/${id}`, {
+  const r = await apiFetch(`/transactions/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -315,7 +412,7 @@ export async function updateTransaction(id: number, patch: Partial<TransactionIn
 }
 
 export async function deleteTransaction(id: number) {
-  const r = await fetch(`${API_BASE}/transactions/${id}`, { method: "DELETE" });
+  const r = await apiFetch(`/transactions/${id}`, { method: "DELETE" });
   if (!r.ok) throw new Error(await r.text());
 }
 
@@ -352,13 +449,13 @@ export interface SubscriptionInput {
 
 export async function listSubscriptions(active?: boolean) {
   const qs = active === undefined ? "" : `?active=${active}`;
-  const r = await fetch(`${API_BASE}/subscriptions${qs}`);
+  const r = await apiFetch(`/subscriptions${qs}`);
   if (!r.ok) throw new Error(`subs ${r.status}`);
   return r.json() as Promise<Subscription[]>;
 }
 
 export async function createSubscription(input: SubscriptionInput) {
-  const r = await fetch(`${API_BASE}/subscriptions`, {
+  const r = await apiFetch(`/subscriptions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -368,7 +465,7 @@ export async function createSubscription(input: SubscriptionInput) {
 }
 
 export async function updateSubscription(id: number, patch: Partial<SubscriptionInput> & { active?: boolean }) {
-  const r = await fetch(`${API_BASE}/subscriptions/${id}`, {
+  const r = await apiFetch(`/subscriptions/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -378,7 +475,7 @@ export async function updateSubscription(id: number, patch: Partial<Subscription
 }
 
 export async function deleteSubscription(id: number) {
-  const r = await fetch(`${API_BASE}/subscriptions/${id}`, { method: "DELETE" });
+  const r = await apiFetch(`/subscriptions/${id}`, { method: "DELETE" });
   if (!r.ok) throw new Error(await r.text());
 }
 
@@ -394,13 +491,13 @@ export interface Goal {
 }
 
 export async function listGoals() {
-  const r = await fetch(`${API_BASE}/goals`);
+  const r = await apiFetch(`/goals`);
   if (!r.ok) throw new Error(`goals ${r.status}`);
   return r.json() as Promise<Goal[]>;
 }
 
 export async function createGoal(input: Omit<Goal, "id">) {
-  const r = await fetch(`${API_BASE}/goals`, {
+  const r = await apiFetch(`/goals`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -410,7 +507,7 @@ export async function createGoal(input: Omit<Goal, "id">) {
 }
 
 export async function updateGoal(id: number, patch: Partial<Omit<Goal, "id">>) {
-  const r = await fetch(`${API_BASE}/goals/${id}`, {
+  const r = await apiFetch(`/goals/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -420,7 +517,7 @@ export async function updateGoal(id: number, patch: Partial<Omit<Goal, "id">>) {
 }
 
 export async function deleteGoal(id: number) {
-  const r = await fetch(`${API_BASE}/goals/${id}`, { method: "DELETE" });
+  const r = await apiFetch(`/goals/${id}`, { method: "DELETE" });
   if (!r.ok) throw new Error(await r.text());
 }
 
@@ -444,7 +541,7 @@ export interface BudgetSummary {
 
 export async function getBudgetSummary(month?: string) {
   const qs = month ? `?month=${month}` : "";
-  const r = await fetch(`${API_BASE}/budget/summary${qs}`);
+  const r = await apiFetch(`/budget/summary${qs}`);
   if (!r.ok) throw new Error(`summary ${r.status}`);
   return r.json() as Promise<BudgetSummary>;
 }
@@ -454,7 +551,7 @@ export async function getBudgetSummary(month?: string) {
 export async function parseDocument(file: File, signal?: AbortSignal) {
   const fd = new FormData();
   fd.append("file", file);
-  const r = await fetch(`${API_BASE}/documents/parse`, {
+  const r = await apiFetch(`/documents/parse`, {
     method: "POST",
     body: fd,
     signal,
@@ -464,7 +561,7 @@ export async function parseDocument(file: File, signal?: AbortSignal) {
 }
 
 export async function getBriefing() {
-  const r = await fetch(`${API_BASE}/briefing`);
+  const r = await apiFetch(`/briefing`);
   return r.json() as Promise<{ items: BriefingItem[]; as_of: string }>;
 }
 
@@ -490,7 +587,7 @@ export interface OnboardingPayload {
 }
 
 export async function submitOnboarding(payload: OnboardingPayload) {
-  const r = await fetch(`${API_BASE}/onboarding`, {
+  const r = await apiFetch(`/onboarding`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -513,13 +610,13 @@ export interface Conversation {
 }
 
 export async function listConversations(): Promise<Conversation[]> {
-  const r = await fetch(`${API_BASE}/conversations`);
+  const r = await apiFetch(`/conversations`);
   if (!r.ok) throw new Error(`list conversations ${r.status}`);
   return r.json();
 }
 
 export async function createConversation(title?: string): Promise<Conversation> {
-  const r = await fetch(`${API_BASE}/conversations`, {
+  const r = await apiFetch(`/conversations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title: title ?? null }),
@@ -529,7 +626,7 @@ export async function createConversation(title?: string): Promise<Conversation> 
 }
 
 export async function updateConversationTitle(id: string, title: string): Promise<void> {
-  await fetch(`${API_BASE}/conversations/${id}`, {
+  await apiFetch(`/conversations/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
@@ -537,7 +634,7 @@ export async function updateConversationTitle(id: string, title: string): Promis
 }
 
 export async function deleteConversation(id: string): Promise<void> {
-  await fetch(`${API_BASE}/conversations/${id}`, { method: "DELETE" });
+  await apiFetch(`/conversations/${id}`, { method: "DELETE" });
 }
 
 // ── Chat streaming ──────────────────────────────────────────────────────────
@@ -554,7 +651,7 @@ export async function* streamChat(
   convId: string,
   signal?: AbortSignal
 ): AsyncGenerator<ChatEvent> {
-  const resp = await fetch(`${API_BASE}/chat`, {
+  const resp = await apiFetch(`/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify({ message, thread_id: threadId, conv_id: convId }),
@@ -610,7 +707,7 @@ export interface FxRates {
 }
 
 export async function getFxRates(base: string): Promise<FxRates> {
-  const r = await fetch(`${API_BASE}/fx/rates?base=${encodeURIComponent(base)}`);
+  const r = await apiFetch(`/fx/rates?base=${encodeURIComponent(base)}`);
   if (!r.ok) throw new Error(`fx ${r.status}`);
   return r.json();
 }

@@ -39,6 +39,9 @@ dependencies = [
     "langgraph-checkpoint-sqlite>=3.0.3",
     # Native Gemini SDK for one-shot document parsing (multimodal + structured output)
     "google-genai>=0.8.0",
+    # Auth
+    "bcrypt>=4.2.0",
+    "pyjwt>=2.9.0",
 ]
 
 [project.optional-dependencies]

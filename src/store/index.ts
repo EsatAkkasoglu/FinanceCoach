@@ -10,7 +10,22 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Conversation } from "@/lib/api";
+import type { AuthUser, Conversation } from "@/lib/api";
+
+// ----- Auth -----
+interface AuthState {
+  user: AuthUser | null;
+  ready: boolean; // becomes true after the initial /auth/me check completes
+  setUser: (user: AuthUser | null) => void;
+  setReady: (ready: boolean) => void;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  ready: false,
+  setUser: (user) => set({ user }),
+  setReady: (ready) => set({ ready }),
+}));
 
 // ----- Settings -----
 type Theme = "dark" | "light";

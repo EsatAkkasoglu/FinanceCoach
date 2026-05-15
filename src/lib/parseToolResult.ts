@@ -1,44 +1,57 @@
 /**
- * Parse a raw tool result string from the SSE stream into a usable value.
+ * Parse a raw tool result string into a usable value.
  *
- * The backend can send results in two formats:
- *   1. A JSON-encoded string wrapping a LangChain ToolMessage repr:
- *      `"content='{...}' name='tool' tool_call_id='...'"`
- *   2. A plain LangChain ToolMessage repr (no outer quotes):
- *      `content='{...}' name='tool' tool_call_id='...'`
- *   3. Direct JSON: `{...}` or `[...]`
+ * Handles these formats (in order):
+ *   1. Direct JSON object/array:  `{"ticker": "F", ...}`
+ *   2. JSON-encoded string (may be truncated):  `"content='...' name='...'"`
+ *   3. LangChain ToolMessage repr:  `content='...' name='...' tool_call_id='...'`
  *
  * Returns the parsed value (object/array/string) or null if input is empty.
  */
 export function parseToolResult(raw: string): unknown {
   if (!raw) return null;
+  const s = raw.trim();
 
-  // Step 1: If the whole thing is JSON, unwrap it.
-  // If JSON.parse returns a non-string (object/array/number/bool), we're done.
-  // If it returns a string, the backend JSON-encoded the result — keep unwrapping.
-  let decoded = raw;
-  try {
-    const result = JSON.parse(raw);
-    if (typeof result !== "string") return result;
-    decoded = result; // unwrapped one level of JSON encoding
-  } catch {
-    // not valid JSON at top level, treat as raw string
+  // 1. Starts with { or [ → direct JSON object/array
+  if (s[0] === "{" || s[0] === "[") {
+    try { return JSON.parse(s); } catch { /* fall through */ }
   }
 
-  // Step 2: Strip LangChain ToolMessage repr: content='...' name='...' tool_call_id='...'
-  const m =
-    decoded.match(/^content='([\s\S]*?)'\s+name=/s) ??
-    decoded.match(/^content="([\s\S]*?)"\s+name=/s) ??
-    decoded.match(/^content='([\s\S]*)'/s);
-
-  if (m) {
-    const inner = m[1];
+  // 2. Starts with " → JSON-encoded string (possibly truncated)
+  if (s[0] === '"') {
+    let inner: string;
     try {
-      return JSON.parse(inner);
+      const v = JSON.parse(s);           // complete JSON string
+      if (typeof v !== "string") return v;
+      inner = v;
     } catch {
-      return inner;
+      inner = s.slice(1);                // truncated — strip leading " and continue
     }
+    return parseToolResult(inner);       // recurse with the unwrapped content
   }
 
-  return decoded;
+  // 3. LangChain ToolMessage repr: content='...' name='...'
+  if (s.startsWith("content=")) {
+    const m =
+      s.match(/^content='([\s\S]*?)'\s+name=/s) ??
+      s.match(/^content="([\s\S]*?)"\s+name=/s) ??
+      s.match(/^content='([\s\S]*)'/s);
+    if (m) return parseJsonContent(m[1]);
+  }
+
+  return s;
+}
+
+/** Try to parse a string as JSON, with a fallback that unescapes Python-style `\"`. */
+function parseJsonContent(s: string): unknown {
+  // Direct JSON
+  try { return JSON.parse(s); } catch { /* fall through */ }
+
+  // Python repr emits `{\"key\": \"val\"}` — unescape and retry
+  if (s.includes('\\"')) {
+    const unescaped = s.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    try { return JSON.parse(unescaped); } catch { /* fall through */ }
+  }
+
+  return s;
 }

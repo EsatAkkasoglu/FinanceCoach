@@ -11,7 +11,7 @@ class AgentState(TypedDict, total=False):
 
     Fields:
         messages         — running list of LangChain messages (auto-merged by add_messages)
-        user_id          — current user (single-user prototype: always 1)
+        user_id          — current user (set per-request from the bearer token)
         risk_profile     — user's risk profile (conservative/balanced/aggressive)
         next_action      — supervisor's last decision (agent name, or 'FINISH')
         agents_consulted — agents already called this turn, in order

@@ -66,6 +66,13 @@ function formatValue(v: unknown, depth = 0): string {
 function ResultView({ result, tool }: { result: string; tool: string }) {
   const parsed = parseToolResult(result);
 
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    if (Array.isArray(obj.top_trending)) {
+      return <HotTrendsResult scanTime={obj.scan_time} trends={obj.top_trending} />;
+    }
+  }
+
   // News-style: array of articles → render headline list.
   if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "object") {
     return (
@@ -74,6 +81,7 @@ function ResultView({ result, tool }: { result: string; tool: string }) {
           const title = (item.title || item.headline || item.name || item.symbol || item.ticker) as
             | string
             | undefined;
+          const url = (item.url || item.link) as string | undefined;
           const meta: string[] = [];
           if (item.source) meta.push(String(item.source));
           if (item.published_at) meta.push(String(item.published_at).slice(0, 10));
@@ -81,7 +89,17 @@ function ResultView({ result, tool }: { result: string; tool: string }) {
           const summary = (item.summary || item.description) as string | undefined;
           return (
             <li key={i} className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2">
-              {title && <p className="font-medium text-[11px] text-[hsl(var(--text))]">{title}</p>}
+              {title && (url
+                ? <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-[11px] text-[hsl(var(--text))] hover:text-accent hover:underline underline-offset-2"
+                  >
+                    {title}
+                  </a>
+                : <p className="font-medium text-[11px] text-[hsl(var(--text))]">{title}</p>
+              )}
               {meta.length > 0 && (
                 <p className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">
                   {meta.join(" · ")}
@@ -138,6 +156,60 @@ function ResultView({ result, tool }: { result: string; tool: string }) {
       {result}
     </p>
   );
+}
+
+function HotTrendsResult({ scanTime, trends }: { scanTime: unknown; trends: unknown[] }) {
+  const items = trends.filter(isRecord).slice(0, 8);
+
+  return (
+    <div className="space-y-2">
+      {typeof scanTime === "string" && (
+        <p className="text-[10px] text-[hsl(var(--text-muted))]">
+          Scan time: <span className="text-[hsl(var(--text))]">{scanTime}</span>
+        </p>
+      )}
+      <div className="space-y-1.5">
+        {items.map((item, i) => {
+          const symbol = String(item.symbol ?? item.ticker ?? `#${i + 1}`);
+          const mentions = item.mentions;
+          const sources = Array.isArray(item.sources) ? item.sources.map(String) : [];
+          const signals = Array.isArray(item.signals) ? item.signals.map(String) : [];
+
+          return (
+            <div key={`${symbol}-${i}`} className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-mono text-[11px] font-semibold text-accent">{symbol}</span>
+                {mentions !== undefined && (
+                  <span className="text-[10px] text-[hsl(var(--text-muted))]">
+                    {String(mentions)} mentions
+                  </span>
+                )}
+              </div>
+              {signals.length > 0 && (
+                <p className="mt-1 text-[10px] text-[hsl(var(--text))]">
+                  {signals.slice(0, 3).join(" · ")}
+                </p>
+              )}
+              {sources.length > 0 && (
+                <p className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                  {sources.slice(0, 3).join(" · ")}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {trends.length > items.length && (
+        <p className="text-[10px] text-[hsl(var(--text-muted))]">
+          +{trends.length - items.length} more
+        </p>
+      )}
+    </div>
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function CitationChip({ citation }: { citation: Citation }) {

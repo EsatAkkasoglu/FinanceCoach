@@ -26,6 +26,7 @@ from datetime import datetime
 from typing import Literal
 
 import pandas as pd
+import requests
 import yfinance as yf
 
 
@@ -61,6 +62,29 @@ CRYPTO_CATEGORIES = {
     "NEAR-USD": "Smart Contract L1",
 }
 
+COINGECKO_IDS = {
+    "BTC-USD": "bitcoin",
+    "ETH-USD": "ethereum",
+    "BNB-USD": "binancecoin",
+    "SOL-USD": "solana",
+    "XRP-USD": "ripple",
+    "ADA-USD": "cardano",
+    "DOGE-USD": "dogecoin",
+    "AVAX-USD": "avalanche-2",
+    "DOT-USD": "polkadot",
+    "MATIC-USD": "matic-network",
+    "LINK-USD": "chainlink",
+    "ATOM-USD": "cosmos",
+    "UNI-USD": "uniswap",
+    "LTC-USD": "litecoin",
+    "BCH-USD": "bitcoin-cash",
+    "XLM-USD": "stellar",
+    "ALGO-USD": "algorand",
+    "VET-USD": "vechain",
+    "FIL-USD": "filecoin",
+    "NEAR-USD": "near",
+}
+
 
 def detect_asset_type(ticker: str) -> Literal["stock", "crypto"]:
     """Detect asset type from ticker format."""
@@ -70,6 +94,63 @@ def detect_asset_type(ticker: str) -> Literal["stock", "crypto"]:
         if base.isalpha():
             return "crypto"
     return "stock"
+
+
+def fetch_crypto_info(ticker: str) -> dict:
+    """Fetch crypto quote/fundamental fields without Yahoo's stock-only modules."""
+    ticker = ticker.upper()
+    symbol = ticker.split("-")[0].lower()
+
+    try:
+        coin_id = COINGECKO_IDS.get(ticker)
+        if coin_id:
+            url = (
+                "https://api.coingecko.com/api/v3/coins/markets"
+                f"?vs_currency=usd&ids={coin_id}&order=market_cap_desc&per_page=1&page=1"
+            )
+            response = requests.get(url, timeout=6)
+            response.raise_for_status()
+            data = response.json()
+            if data:
+                return crypto_market_item_to_info(data[0], ticker)
+
+        for page in (1, 2):
+            url = (
+                "https://api.coingecko.com/api/v3/coins/markets"
+                f"?vs_currency=usd&order=market_cap_desc&per_page=250&page={page}"
+            )
+            response = requests.get(url, timeout=6)
+            response.raise_for_status()
+
+            for item in response.json():
+                if (item.get("symbol") or "").lower() != symbol:
+                    continue
+
+                return crypto_market_item_to_info(item, ticker)
+    except Exception:
+        pass
+
+    return {}
+
+
+def crypto_market_item_to_info(item: dict, ticker: str) -> dict:
+    name = item.get("name") or ticker
+    price = item.get("current_price")
+    market_cap = item.get("market_cap")
+    volume = item.get("total_volume")
+    circulating_supply = item.get("circulating_supply")
+
+    return {
+        "shortName": name,
+        "longName": name,
+        "regularMarketPrice": price,
+        "currentPrice": price,
+        "currency": "USD",
+        "marketCap": market_cap,
+        "volume": volume,
+        "volume24Hr": volume,
+        "circulatingSupply": circulating_supply,
+    }
 
 
 @dataclass
@@ -230,32 +311,37 @@ class Signal:
 def fetch_stock_data(ticker: str, verbose: bool = False) -> StockData | None:
     """Fetch stock data from Yahoo Finance with retry logic."""
     max_retries = 3
+    asset_type = detect_asset_type(ticker)
     for attempt in range(max_retries):
         try:
             if verbose:
                 print(f"Fetching data for {ticker}... (attempt {attempt + 1}/{max_retries})", file=sys.stderr)
 
             stock = yf.Ticker(ticker)
-            info = stock.info
+            info = fetch_crypto_info(ticker) if asset_type == "crypto" else stock.info
 
             # Validate ticker
             if not info or "regularMarketPrice" not in info:
                 return None
 
-            # Fetch earnings history
-            try:
-                earnings_history = stock.earnings_dates
-            except Exception:
+            if asset_type == "crypto":
                 earnings_history = None
-
-            # Fetch analyst info
-            try:
-                analyst_info = {
-                    "recommendations": stock.recommendations,
-                    "analyst_price_targets": stock.analyst_price_targets,
-                }
-            except Exception:
                 analyst_info = None
+            else:
+                # Fetch earnings history
+                try:
+                    earnings_history = stock.earnings_dates
+                except Exception:
+                    earnings_history = None
+
+                # Fetch analyst info
+                try:
+                    analyst_info = {
+                        "recommendations": stock.recommendations,
+                        "analyst_price_targets": stock.analyst_price_targets,
+                    }
+                except Exception:
+                    analyst_info = None
 
             # Fetch price history (1 year for historical patterns)
             try:
@@ -269,7 +355,7 @@ def fetch_stock_data(ticker: str, verbose: bool = False) -> StockData | None:
                 earnings_history=earnings_history,
                 analyst_info=analyst_info,
                 price_history=price_history,
-                asset_type=detect_asset_type(ticker),
+                asset_type=asset_type,
             )
 
         except Exception as e:

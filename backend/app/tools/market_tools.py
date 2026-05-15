@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 
 import yfinance as yf
+import requests
 from langchain_core.tools import tool
 
 from app.legacy import (
@@ -55,6 +56,33 @@ def _quote_via_history(t: "yf.Ticker") -> dict[str, Any] | None:
     return {"price": price, "previous_close": prev, "currency": "USD", "via": "history"}
 
 
+def _quote_via_coingecko(ticker: str) -> dict[str, Any] | None:
+    """Fallback path for crypto tickers (BTC-USD, ETH-USD). Query CoinGecko
+    markets endpoint (first 250 coins) and match on symbol. Returns similar
+    shape to other quote helpers.
+    """
+    try:
+        sym = ticker.split("-")[0].lower()
+        # Try first two pages (500 coins) to cover most symbols.
+        for page in (1, 2):
+            url = (
+                "https://api.coingecko.com/api/v3/coins/markets"
+                "?vs_currency=usd&order=market_cap_desc&per_page=250&page=" + str(page)
+            )
+            r = requests.get(url, timeout=6)
+            r.raise_for_status()
+            data = r.json()
+            for item in data:
+                if (item.get("symbol") or "").lower() == sym:
+                    price = float(item.get("current_price") or 0)
+                    # previous close isn't provided reliably; approximate
+                    prev = price / (1 + (float(item.get("price_change_percentage_24h") or 0) / 100.0)) if item.get("price_change_percentage_24h") is not None else price
+                    return {"price": price, "previous_close": prev, "currency": "USD", "via": "coingecko"}
+    except Exception:
+        return None
+    return None
+
+
 @tool
 def get_quote(ticker: str) -> dict[str, Any]:
     """Get the latest price and 1-day change for ANY yfinance-compatible
@@ -81,7 +109,13 @@ def get_quote(ticker: str) -> dict[str, Any]:
         t = yf.Ticker(ticker)
         result = _quote_via_fast_info(t) or _quote_via_history(t)
         if result is None:
-            return {"ticker": ticker.upper(), "error": "no quote data available"}
+            # If this looks like a crypto ticker (e.g. BTC-USD), try CoinGecko
+            if isinstance(ticker, str) and ticker.upper().endswith("-USD"):
+                cg = _quote_via_coingecko(ticker)
+                if cg:
+                    result = cg
+            if result is None:
+                return {"ticker": ticker.upper(), "error": "no quote data available"}
         price = result["price"]
         prev = result["previous_close"]
         change_pct = ((price - prev) / prev * 100.0) if prev else 0.0

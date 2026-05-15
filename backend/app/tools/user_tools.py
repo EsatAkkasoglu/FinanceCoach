@@ -1,6 +1,8 @@
-"""User profile tools — read/write the single-user profile.
+"""User profile tools — read/write the current user's profile.
 
-Used by the Risk Profiler agent (and indirectly by Budget Coach for roast_mode)."""
+`user_id` is resolved from the request-scoped ContextVar set by `/chat`,
+so the LLM never has to pass it.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -8,15 +10,19 @@ from typing import Any
 from langchain_core.tools import tool
 from sqlalchemy import select
 
+from app.auth import get_current_user_id_or_none
 from app.db.models import User
 from app.db.session import SessionLocal
 from app.agents.risk_profiler import score_to_profile
 
 
 @tool
-def get_user_profile(user_id: int = 1) -> dict[str, Any]:
-    """Get the user's profile: name, monthly income, risk score and label,
+def get_user_profile() -> dict[str, Any]:
+    """Get the current user's profile: name, monthly income, risk score and label,
     roast_mode flag."""
+    user_id = get_current_user_id_or_none()
+    if user_id is None:
+        return {"error": "no authenticated user in context"}
     with SessionLocal() as db:
         u = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
         if u is None:
@@ -32,9 +38,12 @@ def get_user_profile(user_id: int = 1) -> dict[str, Any]:
 
 
 @tool
-def update_risk_score(score: int, user_id: int = 1) -> dict[str, Any]:
-    """Update the user's risk score (0-125). Recomputes the profile label
+def update_risk_score(score: int) -> dict[str, Any]:
+    """Update the current user's risk score (0-125). Recomputes the profile label
     (conservative / balanced / aggressive) automatically."""
+    user_id = get_current_user_id_or_none()
+    if user_id is None:
+        return {"error": "no authenticated user in context"}
     score = max(0, min(125, int(score)))
     profile = score_to_profile(score)
     with SessionLocal() as db:

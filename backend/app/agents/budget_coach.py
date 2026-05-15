@@ -137,7 +137,9 @@ def _build(prompt: str):
     return create_react_agent(get_llm(), tools=_TOOLS, prompt=prompt)
 
 
-def _is_roast(user_id: int = 1) -> bool:
+def _is_roast(user_id: int | None) -> bool:
+    if user_id is None:
+        return False
     with SessionLocal() as db:
         u = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
         return bool(u and u.roast_mode)
@@ -145,7 +147,7 @@ def _is_roast(user_id: int = 1) -> bool:
 
 async def run(state: AgentState) -> AgentState:
     risk_profile = state.get("risk_profile", "balanced")
-    use_roast = _is_roast()
+    use_roast = _is_roast(state.get("user_id"))
     
     if use_roast:
         prompt = _build_prompt(SYSTEM_PROMPT_ROAST_BASE, risk_profile, use_roast=True)

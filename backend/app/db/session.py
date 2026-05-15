@@ -1,11 +1,11 @@
 """SQLAlchemy engine + session factory."""
 from __future__ import annotations
 
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from app.settings import settings
-from app.db.models import Base, User
+from app.db.models import Base
 
 engine = create_engine(
     settings.db_url,
@@ -17,15 +17,9 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def init_db() -> None:
-    """Create tables on first launch and seed a default user so agents have
-    a profile to read against on a fresh install."""
+    """Create tables on first launch. No seed user — accounts are created via /auth/register."""
     Base.metadata.create_all(engine)
     _migrate_inplace()
-    with SessionLocal() as db:
-        existing = db.execute(select(User).limit(1)).scalar_one_or_none()
-        if existing is None:
-            db.add(User(name="Demo User", risk_score=70, risk_profile="balanced"))
-            db.commit()
 
 
 # Lightweight in-place schema migrations for SQLite dev DB. We only ever ADD

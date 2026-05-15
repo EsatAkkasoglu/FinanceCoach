@@ -444,15 +444,104 @@ function ResultView({ data }: { data: unknown }) {
     );
   }
 
-  if (typeof data !== "object" || Array.isArray(data)) {
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      return (
+        <p className="text-[11px] italic text-[hsl(var(--text-muted))]">No results</p>
+      );
+    }
+    // Array of objects → render as headline-style list (news, search hits, etc.)
+    if (typeof data[0] === "object" && data[0] !== null) {
+      const items = (data as Record<string, unknown>[]).slice(0, 6);
+      return (
+        <ul className="space-y-1.5">
+          {items.map((item, i) => {
+            const title = (item.title || item.headline || item.name || item.symbol || item.ticker) as
+              | string
+              | undefined;
+            const url = (item.url || item.link) as string | undefined;
+            const meta: string[] = [];
+            if (item.source) meta.push(String(item.source));
+            if (item.published_at) meta.push(String(item.published_at).slice(0, 16));
+            if (item.sentiment) meta.push(String(item.sentiment));
+            const summary = (item.summary || item.description) as string | undefined;
+            return (
+              <li
+                key={i}
+                className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2"
+              >
+                {title && (url
+                  ? <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-medium leading-snug text-[hsl(var(--text-primary))] hover:text-accent hover:underline underline-offset-2"
+                    >
+                      {title}
+                    </a>
+                  : <p className="text-[11px] font-medium leading-snug text-[hsl(var(--text-primary))]">
+                      {title}
+                    </p>
+                )}
+                {meta.length > 0 && (
+                  <p className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                    {meta.join(" · ")}
+                  </p>
+                )}
+                {summary && (
+                  <p className="mt-1 text-[10px] leading-snug text-[hsl(var(--text-muted))] line-clamp-2">
+                    {summary}
+                  </p>
+                )}
+                {!title && !summary && (
+                  <p className="text-[10px] text-[hsl(var(--text-muted))]">
+                    {JSON.stringify(item).slice(0, 120)}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+          {data.length > items.length && (
+            <li className="text-[10px] text-[hsl(var(--text-muted))]">
+              +{data.length - items.length} more
+            </li>
+          )}
+        </ul>
+      );
+    }
+    // Array of scalars → pill list
+    return (
+      <div className="flex flex-wrap gap-1">
+        {(data as unknown[]).slice(0, 12).map((v, i) => (
+          <span
+            key={i}
+            className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] text-[hsl(var(--text-primary))]"
+          >
+            {String(v)}
+          </span>
+        ))}
+        {data.length > 12 && (
+          <span className="text-[10px] text-[hsl(var(--text-muted))] self-center">
+            +{data.length - 12} more
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (typeof data !== "object") {
     return (
       <p className="font-mono text-[11px] text-[hsl(var(--text-muted))]">
-        {JSON.stringify(data).slice(0, 300)}
+        {String(data).slice(0, 300)}
       </p>
     );
   }
 
   const obj = data as Record<string, unknown>;
+
+  if (Array.isArray(obj.top_trending)) {
+    return <HotTrendsView scanTime={obj.scan_time} trends={obj.top_trending} />;
+  }
 
   // Separate scalars, objects (nested), arrays
   const scalars = Object.entries(obj).filter(
@@ -532,6 +621,78 @@ function ResultView({ data }: { data: unknown }) {
       })}
     </div>
   );
+}
+
+function HotTrendsView({ scanTime, trends }: { scanTime: unknown; trends: unknown[] }) {
+  const items = trends.filter(isRecord).slice(0, 8);
+
+  return (
+    <div className="space-y-2">
+      {typeof scanTime === "string" && (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+            Scan time
+          </span>
+          <span className="text-[11px] font-medium text-[hsl(var(--text-primary))]">
+            {scanTime}
+          </span>
+        </div>
+      )}
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {items.map((item, i) => {
+          const symbol = String(item.symbol ?? item.ticker ?? `#${i + 1}`);
+          const mentions = item.mentions;
+          const sources = Array.isArray(item.sources) ? item.sources.map(String) : [];
+          const signals = Array.isArray(item.signals) ? item.signals.map(String) : [];
+          const signalText = signals.join(" ");
+          const signalClass = signalText.toLowerCase().includes("bullish")
+            ? "border-gain/30 bg-gain/10 text-gain"
+            : signalText.toLowerCase().includes("bearish") || signalText.toLowerCase().includes("dump")
+              ? "border-loss/30 bg-loss/10 text-loss"
+              : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]";
+
+          return (
+            <div
+              key={`${symbol}-${i}`}
+              className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[12px] font-semibold text-accent">{symbol}</span>
+                {mentions !== undefined && (
+                  <span className="rounded bg-[hsl(var(--surface-2))] px-1.5 py-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                    {String(mentions)} mentions
+                  </span>
+                )}
+              </div>
+              {signals.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {signals.slice(0, 3).map((signal) => (
+                    <span key={signal} className={cn("rounded px-1.5 py-0.5 text-[10px]", signalClass)}>
+                      {signal}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {sources.length > 0 && (
+                <p className="mt-1 text-[10px] leading-snug text-[hsl(var(--text-muted))]">
+                  {sources.slice(0, 3).join(" · ")}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {trends.length > items.length && (
+        <p className="text-[10px] text-[hsl(var(--text-muted))]">
+          +{trends.length - items.length} more
+        </p>
+      )}
+    </div>
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function ArgPills({ args }: { args: Record<string, unknown> }) {

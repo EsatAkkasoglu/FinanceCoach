@@ -66,7 +66,9 @@ class User(Base):
     __tablename__ = "user"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(120), nullable=False)
+    username = Column(String(64), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(120), nullable=False, default="")
     avatar = Column(String(64), default="default")
     monthly_income = Column(Float, default=0.0)
     risk_score = Column(Integer, default=50)              # 0-125

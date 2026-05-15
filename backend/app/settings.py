@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Behavior flags
     demo_mode: bool = Field(default=False, alias="FINCOACH_DEMO_MODE")
 
+    # Auth
+    jwt_secret: str = Field(default="dev-secret-change-me-in-production", alias="FINCOACH_JWT_SECRET")
+    jwt_algorithm: str = "HS256"
+    jwt_ttl_seconds: int = Field(default=60 * 60 * 24 * 30, alias="FINCOACH_JWT_TTL_SECONDS")  # 30 days
+
     # LLM
     gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
     gemini_temperature: float = Field(default=0.3, alias="GEMINI_TEMPERATURE")
