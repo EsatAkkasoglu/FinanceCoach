@@ -19,6 +19,7 @@ from app.legacy import (
     scan_hot_trends as _legacy_hot,
     scan_rumors as _legacy_rumors,
 )
+from app.tools._cache import cache_get, cache_set
 
 log = logging.getLogger("fincoach.tools.market")
 
@@ -105,6 +106,10 @@ def get_quote(ticker: str) -> dict[str, Any]:
     Returns:
         {ticker, price, change_pct, currency, as_of, source, via}
     """
+    cache_key = f"get_quote:{(ticker or '').strip().upper()}"
+    cached = cache_get(cache_key)
+    if isinstance(cached, dict):
+        return cached
     try:
         t = yf.Ticker(ticker)
         result = _quote_via_fast_info(t) or _quote_via_history(t)
@@ -119,7 +124,7 @@ def get_quote(ticker: str) -> dict[str, Any]:
         price = result["price"]
         prev = result["previous_close"]
         change_pct = ((price - prev) / prev * 100.0) if prev else 0.0
-        return {
+        quote_result = {
             "ticker": ticker.upper(),
             "price": round(price, 4),
             "change_pct": round(change_pct, 2),
@@ -128,6 +133,8 @@ def get_quote(ticker: str) -> dict[str, Any]:
             "source": "yfinance",
             "via": result["via"],
         }
+        cache_set(cache_key, quote_result)
+        return quote_result
     except Exception as exc:
         log.warning("get_quote failed for %s: %s", ticker, exc)
         return {"ticker": ticker.upper(), "error": str(exc)}

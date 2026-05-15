@@ -138,6 +138,7 @@ export interface ChatMessage {
   agent?: string;
   citations?: Citation[];
   steps?: ToolActivity[];
+  suggestions?: string[];
   createdAt: number;
 }
 
@@ -150,6 +151,7 @@ interface ChatState {
   setMessageAgent: (convId: string, id: string, agent: string) => void;
   addCitations: (convId: string, id: string, citations: Citation[]) => void;
   setMessageSteps: (convId: string, id: string, steps: ToolActivity[]) => void;
+  setMessageSuggestions: (convId: string, id: string, suggestions: string[]) => void;
   setStreaming: (v: boolean) => void;
   resetConv: (convId: string) => void;
 }
@@ -191,6 +193,13 @@ export const useChatStore = create<ChatState>()(
         set((s) => {
           const msgs = (s.messagesByConv[convId] ?? []).map((m) =>
             m.id === id ? { ...m, steps } : m
+          );
+          return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
+        }),
+      setMessageSuggestions: (convId, id, suggestions) =>
+        set((s) => {
+          const msgs = (s.messagesByConv[convId] ?? []).map((m) =>
+            m.id === id ? { ...m, suggestions } : m
           );
           return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
         }),

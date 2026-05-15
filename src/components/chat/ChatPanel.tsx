@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { streamChat, type Citation as ApiCitation } from "@/lib/api";
+import { streamChat, sendFeedback, type Citation as ApiCitation } from "@/lib/api";
 import { parseToolResult } from "@/lib/parseToolResult";
 import { useChatStore, useAgentVizStore, useConversationStore, type ToolActivity } from "@/store";
 import { cn } from "@/lib/cn";
@@ -26,7 +26,7 @@ interface ChatPanelProps {
 export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const {
     messagesByConv, streaming,
-    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setStreaming, resetConv,
+    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setMessageSuggestions, setStreaming, resetConv,
   } = useChatStore();
   const messages = messagesByConv[convId] ?? [];
   const setAgentEvent = useAgentVizStore((s) => s.setEvent);
@@ -196,6 +196,13 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             );
             break;
           }
+          case "suggestions": {
+            const items = (event.payload.items as string[]) ?? [];
+            if (Array.isArray(items) && items.length > 0 && lastAsstId.current) {
+              setMessageSuggestions(convId, lastAsstId.current, items.slice(0, 4));
+            }
+            break;
+          }
           case "agent_error": {
             const agent = String(event.payload.agent ?? "agent");
             const errType = String(event.payload.type ?? "Error");
@@ -348,6 +355,42 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                     ))}
                   </div>
                 )}
+                {isAssistant && !isThinking && m.content.length > 0 && (
+                  <MessageActions
+                    messageId={m.id}
+                    threadId={threadId}
+                    agent={m.agent}
+                    excerpt={m.content}
+                    streaming={streaming}
+                    onRegenerate={() => {
+                      const idx = messages.findIndex((x) => x.id === m.id);
+                      if (idx <= 0) return;
+                      const prior = messages[idx - 1];
+                      if (!prior || prior.role !== "user") return;
+                      void send(prior.content);
+                    }}
+                  />
+                )}
+                {isAssistant && m.suggestions && m.suggestions.length > 0 && (
+                  <div className="mt-3 flex flex-col gap-1.5 border-t border-[hsl(var(--border))] pt-3">
+                    <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                      Try next
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {m.suggestions.map((s, i) => (
+                        <button
+                          key={`${m.id}-sug-${i}`}
+                          type="button"
+                          disabled={streaming}
+                          onClick={() => send(s)}
+                          className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-[11px] text-[hsl(var(--text-primary))] hover:border-accent hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -426,6 +469,10 @@ const TOOL_META: Record<string, { label: string; icon: string }> = {
   list_top_funds:      { label: "Top Funds",      icon: "🏆" },
   list_holdings:       { label: "Holdings",       icon: "📋" },
   list_transactions:   { label: "Transactions",   icon: "📋" },
+  add_holding:           { label: "Add Holding",    icon: "➕" },
+  add_holding_by_value:  { label: "Buy by Value",   icon: "💸" },
+  set_cash_balance:      { label: "Set Cash",       icon: "💵" },
+  remove_holding:        { label: "Close Position", icon: "🗑️" },
   search_news:         { label: "News",           icon: "📰" },
   get_user_profile:    { label: "Profile",        icon: "👤" },
   update_risk_score:   { label: "Update Risk",    icon: "⚖️" },
@@ -433,8 +480,20 @@ const TOOL_META: Record<string, { label: string; icon: string }> = {
 };
 
 // Render parsed result as a clean table — scalar fields + first-level arrays.
-function ResultView({ data }: { data: unknown }) {
+function ResultView({ data, tool }: { data: unknown; tool?: string }) {
   if (data === null || data === undefined) return null;
+
+  // ── Specialized inline visualizations for well-known tools ──────────────
+  if (tool === "get_quote" && isRecord(data) && typeof data.price === "number") {
+    return <QuoteCard quote={data} />;
+  }
+  if (
+    (tool === "analyze_ticker_8dim" || tool === "analyze_ticker") &&
+    isRecord(data) &&
+    isRecord(data.dimensions)
+  ) {
+    return <EightDimView result={data} />;
+  }
 
   if (typeof data === "string") {
     return (
@@ -623,6 +682,123 @@ function ResultView({ data }: { data: unknown }) {
   );
 }
 
+// Compact price tile for get_quote: big price, colored change %, ticker chip.
+function QuoteCard({ quote }: { quote: Record<string, unknown> }) {
+  const price = Number(quote.price ?? 0);
+  const changePct = Number(quote.change_pct ?? 0);
+  const ticker = String(quote.ticker ?? "");
+  const currency = String(quote.currency ?? "USD");
+  const up = changePct >= 0;
+  // Visual scale: clamp to ±10% for the bar fill so big moves don't blow out the layout.
+  const barPct = Math.min(Math.abs(changePct) / 10, 1) * 100;
+
+  return (
+    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+            {ticker || "Quote"}
+          </p>
+          <p className="mt-0.5 text-lg font-semibold tabular-nums text-[hsl(var(--text-primary))]">
+            {price.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+            <span className="ml-1 text-[10px] font-normal text-[hsl(var(--text-muted))]">
+              {currency}
+            </span>
+          </p>
+        </div>
+        <div
+          className={cn(
+            "rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
+            up ? "bg-gain/10 text-gain" : "bg-loss/10 text-loss"
+          )}
+        >
+          {up ? "▲" : "▼"} {changePct.toFixed(2)}%
+        </div>
+      </div>
+      <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+        <div
+          className={cn("h-full", up ? "bg-gain" : "bg-loss")}
+          style={{ width: `${barPct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Horizontal-bar overview for analyze_ticker_8dim: each dimension's score.
+function EightDimView({ result }: { result: Record<string, unknown> }) {
+  const dimensions = result.dimensions as Record<string, unknown> | undefined;
+  if (!dimensions) return null;
+  const score = typeof result.score === "number" ? result.score : null;
+  const recommendation = typeof result.recommendation === "string" ? result.recommendation : null;
+  const entries = Object.entries(dimensions).slice(0, 8);
+
+  function dimScore(v: unknown): number | null {
+    if (typeof v === "number") return v;
+    if (isRecord(v) && typeof v.score === "number") return v.score;
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      {(score !== null || recommendation) && (
+        <div className="flex items-center gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2">
+          {score !== null && (
+            <div>
+              <p className="text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                Score
+              </p>
+              <p className="text-base font-semibold tabular-nums text-[hsl(var(--text-primary))]">
+                {score.toFixed(1)}
+              </p>
+            </div>
+          )}
+          {recommendation && (
+            <div className="ml-auto">
+              <span
+                className={cn(
+                  "rounded-md px-2 py-1 text-[11px] font-semibold uppercase",
+                  recommendation === "BUY" && "bg-gain/15 text-gain",
+                  recommendation === "SELL" && "bg-loss/15 text-loss",
+                  recommendation === "HOLD" && "bg-[hsl(var(--surface-2))] text-[hsl(var(--text-primary))]"
+                )}
+              >
+                {recommendation}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="space-y-1.5">
+        {entries.map(([name, v]) => {
+          const s = dimScore(v);
+          const pct = s === null ? 0 : Math.max(0, Math.min(100, s));
+          return (
+            <div key={name} className="grid grid-cols-[110px_1fr_36px] items-center gap-2">
+              <span className="text-[10px] capitalize text-[hsl(var(--text-muted))]">
+                {name.replace(/_/g, " ")}
+              </span>
+              <div className="h-1.5 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+                <div
+                  className={cn(
+                    "h-full",
+                    pct >= 66 ? "bg-gain" : pct >= 33 ? "bg-accent" : "bg-loss"
+                  )}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="text-right text-[10px] tabular-nums text-[hsl(var(--text-muted))]">
+                {s === null ? "—" : s.toFixed(0)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
 function HotTrendsView({ scanTime, trends }: { scanTime: unknown; trends: unknown[] }) {
   const items = trends.filter(isRecord).slice(0, 8);
 
@@ -778,7 +954,7 @@ function ToolRow({ activity }: { activity: ToolActivity }) {
               <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
                 Result
               </p>
-              <ResultView data={parsed} />
+              <ResultView data={parsed} tool={activity.tool} />
             </div>
           ) : activity.status === "running" ? (
             <p className="text-[11px] italic text-[hsl(var(--text-muted))]">Fetching…</p>
@@ -889,6 +1065,85 @@ function StepsPanel({
     </div>
   );
 }
+
+function MessageActions({
+  messageId,
+  threadId,
+  agent,
+  excerpt,
+  streaming,
+  onRegenerate,
+}: {
+  messageId: string;
+  threadId: string;
+  agent?: string;
+  excerpt: string;
+  streaming: boolean;
+  onRegenerate: () => void;
+}) {
+  const [rating, setRating] = useState<"up" | "down" | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function rate(value: "up" | "down") {
+    if (busy || streaming) return;
+    const next = rating === value ? null : value;
+    // Optimistic UI: flip immediately, revert on failure.
+    setRating(next);
+    if (next === null) return; // we don't currently support clearing on the server
+    setBusy(true);
+    try {
+      await sendFeedback({
+        thread_id: threadId,
+        message_id: messageId,
+        rating: value,
+        agent,
+        excerpt: excerpt.slice(0, 400),
+      });
+      toast.success(value === "up" ? "Thanks — glad it helped" : "Thanks — we'll learn from this");
+    } catch (err) {
+      setRating(rating);
+      toast.error(`Couldn't save feedback: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const btn =
+    "flex h-7 w-7 items-center justify-center rounded-md text-[hsl(var(--text-muted))] transition-colors hover:bg-[hsl(var(--surface-2))] disabled:opacity-30 disabled:cursor-not-allowed";
+
+  return (
+    <div className="mt-3 flex items-center gap-1 border-t border-[hsl(var(--border))] pt-2 opacity-60 transition-opacity group-hover:opacity-100">
+      <button
+        type="button"
+        title="Helpful"
+        onClick={() => rate("up")}
+        disabled={busy || streaming}
+        className={cn(btn, rating === "up" && "text-gain bg-[hsl(var(--surface-2))]")}
+      >
+        <ThumbsUp className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        title="Not helpful"
+        onClick={() => rate("down")}
+        disabled={busy || streaming}
+        className={cn(btn, rating === "down" && "text-loss bg-[hsl(var(--surface-2))]")}
+      >
+        <ThumbsDown className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        title="Regenerate response"
+        onClick={onRegenerate}
+        disabled={streaming}
+        className={btn}
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);

@@ -8,7 +8,7 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import extract_tool_calls
+from app.agents._helpers import build_findings, extract_tool_calls
 from app.tools.memory_tools import query_memory
 
 SYSTEM_PROMPT = """You are the Memory agent for FinCoach.
@@ -36,7 +36,10 @@ async def run(state: AgentState) -> AgentState:
     if _agent is None:
         _agent = _build_agent()
     result = await _agent.ainvoke({"messages": state.get("messages", [])})
+    msgs = result["messages"]
     return {
-        "messages": result["messages"][-1:],
-        "citations": extract_tool_calls(result["messages"]),
+        "messages": msgs[-1:],
+        "citations": extract_tool_calls(msgs),
+        "findings": {"memory": build_findings("memory", msgs)},
+        "agents_consulted": ["memory"],
     }

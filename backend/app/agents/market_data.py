@@ -15,7 +15,7 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import extract_tool_calls
+from app.agents._helpers import build_findings, extract_tool_calls
 from app.tools.market_tools import (
     get_quote,
     analyze_ticker_8dim,
@@ -31,32 +31,34 @@ from app.tools.fund_tools import (
     list_top_funds,
 )
 
-SYSTEM_PROMPT_BASE = """You are the Market Data specialist for FinCoach.
+SYSTEM_PROMPT_BASE = """You are the Equity & Fund Research Analyst on the FinCoach Investment Committee.
 
 ABSOLUTE RULE — TOOLS ONLY:
   • NEVER state a price, change %, volume, dividend, or technical value from
-    memory or training data. Those values change daily and your knowledge is
-    stale by definition.
+    memory or training data. Those values are stale.
   • Every numeric answer MUST come from a tool call (get_quote, get_fund_quote,
     analyze_ticker_8dim, get_dividend_metrics, etc.) in THIS turn.
   • If a tool fails or returns no data, say so plainly — do NOT fall back to
     a remembered number.
 
-STRICT SCOPE — you ONLY answer about:
-  • Live prices, historical performance, technical analysis
-  • 8-dimension stock analysis, dividend metrics
-  • Asset trends (hot scanner) and price-grounded buy/sell reasoning
-  • Fund performance (US ETFs and Turkish TEFAS funds)
+YOUR ROLE — you are the AUTHORITY on market data, prices, technicals, and
+fund/asset performance. You ALWAYS deliver a structured market snapshot when
+called. The Advisor uses your numbers to assemble plans.
 
-YOU DO NOT cover any of these — another specialist will:
-  • Whether the user OWNS an asset → portfolio specialist
-  • Latest news headlines or rumors → news_sentiment specialist
-  • The user's spending or budget → budget_coach specialist
-  • The user's risk profile → risk_profiler specialist
+ALWAYS DELIVER (do not refuse):
+  • Live prices & % changes for any ticker/fund mentioned (or implied —
+    e.g. "fund and stock recommendation" → quote SPY/QQQ/VTI + 1-2 risk-aligned
+    ETFs as representative candidates so the Advisor has reference data).
+  • Technical / 8-dim score when relevant.
+  • Dividend metrics for income-oriented questions.
+  • If no specific ticker is named but the question is about investing,
+    fetch quotes for a small SHORTLIST of broad-market reference instruments
+    aligned with the user's risk profile (see RISK PROFILE block below).
 
-If the user's question has parts outside your scope, ANSWER ONLY THE MARKET-DATA PART.
-Do not check ownership, summarize news, or comment on personal finances — the
-supervisor will route those parts to the right specialist.
+CRITICAL — STAY IN YOUR LANE:
+  • DO NOT comment on whether the user OWNS an asset (Portfolio Manager's job).
+  • DO NOT summarize news headlines (News Desk's job).
+  • DO NOT analyze the user's budget or risk score.
 
 You can fetch live prices for ANY of these asset classes — never refuse a
 query because of asset class alone:
@@ -99,7 +101,12 @@ DISAMBIGUATION:
   empty, tell the user it's not supported.
 
 CITATIONS: every numeric claim is tagged with its source (yfinance, TEFAS,
-8-dim analysis, NewsAPI). Two short paragraphs max."""
+8-dim analysis, NewsAPI). Two short paragraphs max.
+
+LANGUAGE: write your report in the SAME language as the user's current
+message. English question → English report. Turkish question → Turkish
+report. The Turkish-fund phrasing above ("altın fonu", "İş Bankası hisse
+fonu") is for INTENT DETECTION only — not a hint about output language."""
 
 RISK_GUIDANCE = {
     "conservative": """
@@ -244,21 +251,37 @@ def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
     if not _wants_top_crypto_market_cap(user_text):
         return None
 
+    # Detect Turkish phrasing in the user's message to mirror their language
+    # in the hardcoded table. Default to English.
+    tr = any(t in user_text.lower() for t in ("kripto", "piyasa değ", "ilk ", "en yüksek"))
+
     limit = _requested_limit(user_text, default=5)
     try:
         coins = _fetch_top_crypto_tickers(limit)
     except Exception as exc:  # noqa: BLE001
+        err_msg = (
+            f"Top kripto listesi CoinGecko'dan alınamadı: {exc}"
+            if tr
+            else f"Couldn't fetch top crypto list from CoinGecko: {exc}"
+        )
         return {
-            "messages": [AIMessage(content=f"Top kripto listesi CoinGecko'dan alınamadı: {exc}")],
+            "messages": [AIMessage(content=err_msg)],
             "citations": [],
         }
 
-    lines = [
-        f"Piyasa değerine göre ilk {len(coins)} kripto için stablecoinleri hariç tuttum; 8-dim skor stablecoinlerde anlamlı değil.",
-        "",
-        "| Kripto | Fiyat | 24s değişim | Market cap | 8-dim skor | Öneri |",
-        "|---|---:|---:|---:|---:|---|",
-    ]
+    if tr:
+        intro = (
+            f"Piyasa değerine göre ilk {len(coins)} kripto için stablecoinleri "
+            "hariç tuttum; 8-dim skor stablecoinlerde anlamlı değil."
+        )
+        header = "| Kripto | Fiyat | 24s değişim | Market cap | 8-dim skor | Öneri |"
+    else:
+        intro = (
+            f"Top {len(coins)} cryptos by market cap, stablecoins excluded "
+            "(8-dim score isn't meaningful for stables)."
+        )
+        header = "| Crypto | Price | 24h change | Market cap | 8-dim score | Reco |"
+    lines = [intro, "", header, "|---|---:|---:|---:|---:|---|"]
     citations: list[dict[str, Any]] = []
 
     for coin in coins:
@@ -273,7 +296,8 @@ def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
         error = analysis.get("error") if isinstance(analysis, dict) else None
 
         score_text = f"{float(score):.2f}" if isinstance(score, int | float) else "n/a"
-        recommendation_text = str(recommendation or ("hata" if error else "n/a"))
+        fallback_reco = ("hata" if tr else "error") if error else "n/a"
+        recommendation_text = str(recommendation or fallback_reco)
         price_text = f"${float(price):,.4f}" if isinstance(price, int | float) else "n/a"
         change_text = f"{float(change):+.2f}%" if isinstance(change, int | float) else "n/a"
 
@@ -289,7 +313,11 @@ def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
         )
 
     lines.append("")
-    lines.append("Market cap sıralaması CoinGecko'dan, fiyat ve 8-dim analiz sonuçları canlı tool çağrılarından geldi.")
+    lines.append(
+        "Market cap sıralaması CoinGecko'dan, fiyat ve 8-dim analiz sonuçları canlı tool çağrılarından geldi."
+        if tr
+        else "Market cap ranking from CoinGecko; price and 8-dim figures from live tool calls."
+    )
     return {"messages": [AIMessage(content="\n".join(lines))], "citations": citations}
 
 
@@ -302,12 +330,22 @@ def _build_agent(risk_profile: str = "balanced"):
 async def run(state: AgentState) -> AgentState:
     direct = _handle_top_crypto_request(state)
     if direct is not None:
-        return direct
+        # Preserve the fast-path response but still surface findings.
+        from langchain_core.messages import AIMessage
+        synthetic_msgs = [AIMessage(content=direct["messages"][0].content)]
+        return {
+            **direct,
+            "findings": {"market_data": build_findings("market_data", synthetic_msgs)},
+            "agents_consulted": ["market_data"],
+        }
 
     risk_profile = state.get("risk_profile", "balanced")
     agent = _build_agent(risk_profile)
     result = await agent.ainvoke({"messages": state.get("messages", [])})
+    msgs = result["messages"]
     return {
-        "messages": result["messages"][-1:],
-        "citations": extract_tool_calls(result["messages"]),
+        "messages": msgs[-1:],
+        "citations": extract_tool_calls(msgs),
+        "findings": {"market_data": build_findings("market_data", msgs)},
+        "agents_consulted": ["market_data"],
     }

@@ -144,6 +144,7 @@ export interface ChatEvent {
     | "tool_result"
     | "token"
     | "citations"
+    | "suggestions"
     | "agent_message"
     | "agent_error"
     | "done"
@@ -696,6 +697,26 @@ function parseSSE(chunk: string): ChatEvent | null {
   } catch {
     return { type: "error", payload: { raw: data } };
   }
+}
+
+// ── Message feedback ───────────────────────────────────────────────────────
+
+export interface FeedbackPayload {
+  thread_id: string;
+  message_id: string;
+  rating: "up" | "down";
+  reason?: string;
+  agent?: string;
+  excerpt?: string;
+}
+
+export async function sendFeedback(payload: FeedbackPayload): Promise<void> {
+  const r = await apiFetch(`/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`feedback ${r.status}`);
 }
 
 // ── FX ──────────────────────────────────────────────────────────────────────

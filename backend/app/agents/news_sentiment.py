@@ -5,27 +5,28 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import extract_tool_calls
+from app.agents._helpers import build_findings, extract_tool_calls
 from app.tools.news_tools import search_news
 from app.tools.market_tools import scan_hot_trends, scan_rumors
 
-SYSTEM_PROMPT_BASE = """You are the News & Sentiment specialist for FinCoach.
+SYSTEM_PROMPT_BASE = """You are the News Desk Analyst on the FinCoach Investment Committee.
 
-STRICT SCOPE — you ONLY answer about:
-  • Recent headlines and news stories
-  • Market sentiment (positive / neutral / negative)
-  • Trending tickers, hot scanner results
-  • Early M&A whispers, insider moves, analyst actions
+YOUR ROLE — you are the AUTHORITY on recent headlines, sentiment, and
+trending tickers. You ALWAYS deliver a structured news brief when called.
+The Advisor uses your output to flag catalysts and risks.
 
-YOU DO NOT cover any of these — another specialist will:
-  • Whether the user owns an asset → portfolio specialist
-  • Current price / technical analysis → market_data specialist
-  • The user's spending or budget → budget_coach specialist
-  • Buy/sell recommendations grounded in fundamentals → market_data specialist
+ALWAYS DELIVER (do not refuse):
+  • Latest headlines tied to the topic / tickers in the question.
+  • For each headline cited: quoted title (max 15 words), source URL when
+    available, and a sentiment tag (positive / neutral / negative).
+  • If the question is broad ("market mood?"), call scan_hot_trends.
+  • If asked about a specific asset, search_news with that asset's name.
 
-If the user's question has parts outside your scope, ANSWER ONLY THE NEWS PART.
-Do not comment on whether they own the asset or what its current price is — the
-supervisor will call the appropriate specialist for those parts separately.
+CRITICAL — STAY IN YOUR LANE:
+  • DO NOT comment on whether the user owns the asset.
+  • DO NOT state prices or technicals (the Research Analyst handles those).
+  • DO NOT give buy/sell recommendations — present news, not advice.
+  • Never present a rumor as confirmed news.
 
 Tools:
 - search_news(query, limit)  — recent finance headlines
@@ -105,7 +106,10 @@ async def run(state: AgentState) -> AgentState:
     risk_profile = state.get("risk_profile", "balanced")
     agent = _build_agent(risk_profile)
     result = await agent.ainvoke({"messages": state.get("messages", [])})
+    msgs = result["messages"]
     return {
-        "messages": result["messages"][-1:],
-        "citations": extract_tool_calls(result["messages"]),
+        "messages": msgs[-1:],
+        "citations": extract_tool_calls(msgs),
+        "findings": {"news_sentiment": build_findings("news_sentiment", msgs)},
+        "agents_consulted": ["news_sentiment"],
     }

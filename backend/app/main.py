@@ -28,9 +28,16 @@ from sse_starlette.sse import EventSourceResponse
 from app.settings import configure_langsmith, settings
 from app.auth import current_user_id_var, get_current_user_id
 from app.auth.routes import router as auth_router
-from app.db.models import Conversation, Goal, Holding, User
+from app.tools._cache import cache_reset
+from app.db.models import Conversation, Goal, Holding, MessageFeedback, User
 from app.db.session import SessionLocal, init_db
-from app.agents.supervisor import AGENT_NODES, FINISH, SYNTHESIZER_NODE, build_supervisor
+from app.agents.supervisor import (
+    ADVISOR_NODE,
+    AGENT_NODES,
+    STRATEGIST_NODE,
+    SYNTHESIZER_NODE,
+    build_supervisor,
+)
 from app.routers.budget import router as budget_router
 from app.routers.fx import router as fx_router
 from app.services.document_processor.router import router as documents_router
@@ -160,6 +167,60 @@ async def update_conversation(
     return {"ok": True}
 
 
+# ── Message feedback (thumbs up / down) ──────────────────────────────────────
+
+class FeedbackIn(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=64)
+    message_id: str = Field(min_length=1, max_length=64)
+    rating: Literal["up", "down"]
+    reason: str | None = None
+    agent: str | None = None
+    excerpt: str | None = None
+
+
+@app.post("/feedback")
+async def post_feedback(payload: FeedbackIn, user_id: int = Depends(get_current_user_id)):
+    """Upsert a thumbs-up / thumbs-down rating on a specific assistant message.
+
+    Re-rating the same ``message_id`` overwrites the prior row (last write
+    wins) rather than stacking. Best-effort: callers should treat 200 OK and
+    silent failure equally — this never gates the chat UI.
+    """
+    excerpt = (payload.excerpt or "").strip()
+    if len(excerpt) > 400:
+        excerpt = excerpt[:400]
+    reason = (payload.reason or "").strip() or None
+
+    with SessionLocal() as db:
+        row = db.execute(
+            select(MessageFeedback).where(
+                MessageFeedback.user_id == user_id,
+                MessageFeedback.thread_id == payload.thread_id,
+                MessageFeedback.message_id == payload.message_id,
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            row = MessageFeedback(
+                user_id=user_id,
+                thread_id=payload.thread_id,
+                message_id=payload.message_id,
+                rating=payload.rating,
+                reason=reason,
+                agent=payload.agent,
+                excerpt=excerpt or None,
+            )
+            db.add(row)
+        else:
+            row.rating = payload.rating
+            row.reason = reason
+            if payload.agent:
+                row.agent = payload.agent
+            if excerpt:
+                row.excerpt = excerpt
+        db.commit()
+    return {"ok": True, "rating": payload.rating}
+
+
 @app.delete("/conversations/{conv_id}")
 async def delete_conversation(conv_id: str, user_id: int = Depends(get_current_user_id)):
     """Archive (soft-delete) a conversation."""
@@ -239,16 +300,20 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
         # Re-bind in case the generator runs in a fresh asyncio task that
         # didn't inherit the request handler's ContextVar value.
         current_user_id_var.set(user_id)
-        # Track which outer agent is currently executing so tool events
-        # (which carry node='tools', not the outer node name) can be attributed.
-        current_outer_agent: str | None = None
-        # Each agent runs at most once per turn, but the supervisor runs
-        # multiple times (once between every pair of agents). Track agents
-        # that have already streamed so we don't double-emit.
-        done_agents: set[str] = set()
-        supervisor_started = False
-        # Tool citations from every worker are aggregated and attached to
-        # the synthesizer's final message, so the user sees one source list.
+        # Fresh per-turn tool cache so parallel specialists share quote lookups
+        # but state never leaks across turns.
+        cache_reset()
+
+        # Top-level node names we surface as activity to the frontend. Every
+        # one runs inside the graph; only the synthesizer ends up in a visible
+        # bubble — everything else is `internal: True` (activity panel only).
+        INTERNAL_NODES = {STRATEGIST_NODE, ADVISOR_NODE, *AGENT_NODES.keys()}
+
+        # Track which top-level node a tool call is happening under so the
+        # UI can attribute each tool chip to its desk. With parallel specialist
+        # execution we approximate by looking at `metadata.langgraph_node`.
+        done_nodes: set[str] = set()
+        started_nodes: set[str] = set()
         collected_citations: list[dict] = []
 
         try:
@@ -258,42 +323,34 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                 node: str = ev.get("metadata", {}).get("langgraph_node", "")
                 data: dict = ev.get("data", {})
 
-                # ── Supervisor iteration began ───────────────────────────
-                if kind == "on_chain_start" and name == "supervisor":
-                    yield _evt("agent_start", {"agent": "supervisor"})
-                    supervisor_started = True
+                # ── Top-level node started ───────────────────────────────
+                if kind == "on_chain_start" and name in INTERNAL_NODES and name not in started_nodes:
+                    started_nodes.add(name)
+                    yield _evt("agent_start", {"agent": name, "internal": True})
 
-                # ── Supervisor iteration finished → emit its decision ────
-                elif kind == "on_chain_end" and name == "supervisor" and supervisor_started:
-                    supervisor_started = False
-                    output = data.get("output") or {}
-                    chosen = output.get("next_action") if isinstance(output, dict) else None
-                    yield _evt("agent_done", {"agent": "supervisor"})
-                    if chosen and chosen != FINISH and chosen in AGENT_NODES:
-                        # Workers stay internal — UI shows activity (tools)
-                        # but does NOT open a new bubble for them.
-                        yield _evt("agent_start", {"agent": chosen, "internal": True})
-                        final_agent = chosen
-                    elif chosen == FINISH:
-                        # Synthesizer owns the visible bubble.
-                        yield _evt("agent_start", {"agent": SYNTHESIZER_NODE, "internal": False})
-                        final_agent = SYNTHESIZER_NODE
+                elif kind == "on_chain_start" and name == SYNTHESIZER_NODE and name not in started_nodes:
+                    started_nodes.add(name)
+                    yield _evt("agent_start", {"agent": SYNTHESIZER_NODE, "internal": False})
+                    final_agent = SYNTHESIZER_NODE
 
-                # ── Outer worker / synthesizer node started → track active
-                elif kind == "on_chain_start" and (name in AGENT_NODES or name == SYNTHESIZER_NODE):
-                    current_outer_agent = name
-
-                # ── Real-time tool call ──────────────────────────────────
+                # ── Real-time tool call inside a specialist's ReAct loop ─
                 elif kind == "on_tool_start" and node == "tools":
                     tool_input = data.get("input") or {}
+                    # `metadata.langgraph_node` is the parent specialist name
+                    # when we're inside its ReAct sub-graph (e.g. "market_data").
+                    parent_meta = ev.get("metadata", {}).get("langgraph_checkpoint_ns", "")
+                    parent_agent = ""
+                    for known in AGENT_NODES:
+                        if known in parent_meta:
+                            parent_agent = known
+                            break
                     yield _evt("tool_call", {
                         "tool": name,
                         "args": _safe_args(tool_input),
-                        "agent": current_outer_agent or "",
+                        "agent": parent_agent,
                         "run_id": ev.get("run_id", ""),
                     })
 
-                # ── Tool finished → result summary ───────────────────────
                 elif kind == "on_tool_end" and node == "tools":
                     raw_output = data.get("output")
                     result_text = _summarize_tool_output(raw_output)
@@ -303,47 +360,32 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                         "run_id": ev.get("run_id", ""),
                     })
 
-                # ── Worker node finished → collect citations, stay silent ─
-                # Workers no longer emit `agent_message`/`token` directly;
-                # the synthesizer will write the final user-facing reply.
-                # Worker failures are logged + folded into the synthesizer
-                # input as "(returned no reply)", which the synthesizer
-                # acknowledges in natural language.
-                elif kind == "on_chain_end" and name in AGENT_NODES and name not in done_agents:
-                    done_agents.add(name)
-                    current_outer_agent = None
+                # ── Specialist finished → collect citations ──────────────
+                elif kind == "on_chain_end" and name in AGENT_NODES and name not in done_nodes:
+                    done_nodes.add(name)
                     output = data.get("output") or {}
-
                     if isinstance(output, dict):
                         err = output.get("error")
                         citations = output.get("citations") or []
-                        msgs = output.get("messages") or []
-                        content = ""
-                        if msgs:
-                            content = _normalize_content(getattr(msgs[-1], "content", ""))
-
                         if citations:
                             collected_citations.extend(
                                 {**c, "agent": name} for c in citations
                             )
-
                         if err:
                             log.warning(
-                                "worker %s errored (folded into synthesizer): %s/%s",
+                                "specialist %s errored (folded into advisor/synthesizer): %s/%s",
                                 name, err.get("type"), err.get("message"),
                             )
-                        elif not content:
-                            log.warning(
-                                "worker %s ended with no content (citations=%d) — synthesizer will note the gap",
-                                name, len(citations),
-                            )
-
                     yield _evt("agent_done", {"agent": name})
 
-                # ── Synthesizer finished → emit the single visible reply ──
-                elif kind == "on_chain_end" and name == SYNTHESIZER_NODE and name not in done_agents:
-                    done_agents.add(name)
-                    current_outer_agent = None
+                # ── Strategist / advisor finished — internal, silent end ─
+                elif kind == "on_chain_end" and name in {STRATEGIST_NODE, ADVISOR_NODE} and name not in done_nodes:
+                    done_nodes.add(name)
+                    yield _evt("agent_done", {"agent": name})
+
+                # ── Synthesizer finished → emit the single visible reply ─
+                elif kind == "on_chain_end" and name == SYNTHESIZER_NODE and name not in done_nodes:
+                    done_nodes.add(name)
                     output = data.get("output") or {}
 
                     if isinstance(output, dict):
@@ -369,6 +411,12 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                                 })
                             for tok in _chunked(content, 24):
                                 yield _evt("token", {"text": tok})
+                            suggestions = output.get("suggestions") or []
+                            if isinstance(suggestions, list) and suggestions:
+                                yield _evt("suggestions", {
+                                    "agent": name,
+                                    "items": [str(s)[:200] for s in suggestions[:4]],
+                                })
                         else:
                             log.warning("synthesizer ended with no content")
                             yield _evt("agent_error", {

@@ -212,3 +212,27 @@ class Document(Base):
     kind = Column(String(32), default="bank_statement")   # bank_statement | receipt | other
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     parsed_count = Column(Integer, default=0)
+
+
+class MessageFeedback(Base):
+    """User rating + optional reason on a specific assistant message.
+
+    Identifies a message by ``(thread_id, message_id)`` where ``message_id``
+    is the per-conversation client-side ID (e.g. ``a-1733058321``). One row
+    per (user, message_id); subsequent posts overwrite the rating + reason.
+    Used to mine the strategist for routing examples and to bias the memory
+    retriever toward positively-rated turns.
+    """
+
+    __tablename__ = "message_feedback"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    thread_id = Column(String(64), nullable=False, index=True)
+    message_id = Column(String(64), nullable=False, index=True)
+    rating = Column(String(8), nullable=False)              # "up" | "down"
+    reason = Column(Text, nullable=True)
+    agent = Column(String(32), nullable=True)
+    excerpt = Column(Text, nullable=True)                   # first 400 chars of the rated reply
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

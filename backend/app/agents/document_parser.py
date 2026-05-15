@@ -10,6 +10,7 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage
 
 from app.agents.state import AgentState
+from app.agents._helpers import build_findings
 
 SYSTEM_PROMPT = """You are the Document Parser agent for FinCoach.
 You read bank statements, receipts, and invoices and extract structured
@@ -26,4 +27,8 @@ async def run(state: AgentState) -> AgentState:
     # parse JSON response, write to Transaction table with document_id reference
     reply = AIMessage(content="[document_parser agent stub] PDF parse not yet wired.",
                       name="document_parser")
-    return {"messages": [reply]}
+    return {
+        "messages": [reply],
+        "findings": {"document_parser": build_findings("document_parser", [reply])},
+        "agents_consulted": ["document_parser"],
+    }

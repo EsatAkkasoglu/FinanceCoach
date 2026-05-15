@@ -1,10 +1,7 @@
-"""Risk Profiler agent — scores onboarding quiz answers and infers risk
-profile from observed behavior over time.
+"""Risk Profiler — reports the user's risk score and label.
 
-Quiz scoring (see plan section 5):
-    0-50    → conservative
-    51-90   → balanced
-    91-125  → aggressive
+Data-provider. Always returns the current risk profile when called.
+The Investment Committee integrates this into allocation decisions.
 """
 from __future__ import annotations
 
@@ -12,7 +9,7 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import extract_tool_calls
+from app.agents._helpers import build_findings, extract_tool_calls
 
 CONSERVATIVE_MAX = 50
 BALANCED_MAX = 90
@@ -26,41 +23,37 @@ def score_to_profile(score: int) -> str:
     return "aggressive"
 
 
-SYSTEM_PROMPT = """You are the Risk Profiler specialist for FinCoach.
+SYSTEM_PROMPT = """You are the Chief Risk Officer on the FinCoach Investment Committee.
 
-STRICT SCOPE — you ONLY answer about:
-  • The user's risk score (0-125) and profile label (conservative/balanced/aggressive)
-  • Updating the risk score from a new quiz result
+YOUR ROLE — you are the AUTHORITY on the user's risk tolerance. You ALWAYS
+report the current score and profile when called, regardless of how the
+question is phrased. The Advisor relies on this to calibrate every recommendation.
 
-YOU DO NOT cover any of these — another specialist will:
-  • The user's holdings or whether their portfolio fits their risk → portfolio specialist
-  • Asset prices or recommendations → market_data specialist
-  • News or sentiment → news_sentiment specialist
-  • Budget or spending → budget_coach specialist
+ALWAYS DELIVER (do not refuse, do not say "out of scope"):
+  1. Call get_user_profile to read the current risk score.
+  2. Report in this format:
+       • Risk score: <N>/125
+       • Profile label: conservative (0-50) | balanced (51-90) | aggressive (91-125)
+       • Suggested equity allocation band: conservative 20-40%, balanced 40-70%, aggressive 70-90%.
+       • One sentence on what this means for recommendations.
+  3. If the user explicitly retook the quiz with a new score, call
+     update_risk_score(score) and confirm the new label.
 
-If the user's question has parts outside your scope, ANSWER ONLY THE RISK-PROFILE PART.
+CRITICAL — STAY IN YOUR LANE:
+  • DO NOT recommend specific stocks/funds.
+  • DO NOT comment on holdings or news.
+  • DO NOT analyze the user's budget.
+  The Advisor combines your output with the other specialists' findings.
 
 Tools:
-- get_user_profile()      — current risk score and label
-- update_risk_score(score) — write a new score (0-125)
-
-When the user asks about their risk:
-1. Call get_user_profile.
-2. Report numeric score, label, and one sentence on what it means for advice.
-
-When the user wants to update their risk (e.g. retook the quiz with score 78):
-1. Call update_risk_score(78).
-2. Confirm the new label.
-
-Profile labels: conservative (0-50), balanced (51-90), aggressive (91-125)."""
+- get_user_profile()       — current risk score and label
+- update_risk_score(score) — write a new score (0-125)"""
 
 
 _agent = None
 
 
 def _build_agent():
-    # Lazy import avoids a circular import: user_tools.py imports score_to_profile
-    # from THIS module.
     from app.tools.user_tools import get_user_profile, update_risk_score
     return create_react_agent(
         get_llm(),
@@ -74,7 +67,15 @@ async def run(state: AgentState) -> AgentState:
     if _agent is None:
         _agent = _build_agent()
     result = await _agent.ainvoke({"messages": state.get("messages", [])})
+    msgs = result["messages"]
+    profile_label = state.get("risk_profile", "balanced")
     return {
-        "messages": result["messages"][-1:],
-        "citations": extract_tool_calls(result["messages"]),
+        "messages": msgs[-1:],
+        "citations": extract_tool_calls(msgs),
+        "findings": {
+            "risk_profiler": build_findings(
+                "risk_profiler", msgs, extra={"profile": profile_label}
+            )
+        },
+        "agents_consulted": ["risk_profiler"],
     }
