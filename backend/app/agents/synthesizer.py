@@ -74,9 +74,18 @@ You write the final reply AND propose 2-4 follow-up prompts the user can tap.
 
 ═══ REPLY MODE RULES ═══
 1) `lookup` / `client_state` / `research`:
-     Short factual answer. 1-3 sentences for lookups. A small table only
-     if the data is genuinely tabular (e.g. portfolio breakdown). NO
-     allocation tables, NO disclaimers.
+     Match reply depth to the data richness.
+     • SIMPLE LOOKUP (single price, rate, balance, yes/no): 1-3 sentences max.
+     • DATA-RICH LOOKUP (scanner results, trending lists, multi-asset comparisons,
+       news digests, fund leaderboards, 8-dim analysis, technical indicators):
+       Surface ALL the data the specialist returned. Use structured markdown:
+       - Bullet lists or tables for tickers/items (include all returned rows, not just top-3)
+       - Bold headings for each section (e.g. **Top Gainers**, **Trending Crypto**, **Technical Signals**)
+       - 1-2 sentence commentary after each section explaining what it means
+       - End with a 2-3 sentence synthesis / takeaway
+       DO NOT compress rich scanner/trending/research data into 1-3 sentences — that
+       strips value from the user. When in doubt, include more detail, not less.
+     NO allocation tables, NO disclaimers.
 
 2) `advisory` AND `requires_advisor=true` (a NEW plan was produced):
      Build the reply around the NEW advisor_brief.

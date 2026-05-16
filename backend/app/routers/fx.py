@@ -2,7 +2,8 @@
 
 Returns rates relative to a base currency. Cached in-process for 15 minutes.
 Source: open.er-api.com (free tier, no key required, updated every 24h).
-Fallback: yfinance cross-rates derived from a USD pivot to avoid stale tickers.
+Fallback: Alpha Vantage cross-rates derived from a USD pivot to avoid stale
+data on transient ExchangeRate-API failures.
 """
 from __future__ import annotations
 
@@ -46,30 +47,21 @@ def _fetch_from_api(base: str) -> dict[str, float]:
     return {ccy: all_rates[ccy] for ccy in SUPPORTED if ccy in all_rates}
 
 
-def _fetch_via_yfinance_pivot(base: str) -> dict[str, float]:
-    """Fallback: use yfinance USD pairs and derive cross-rates via USD pivot."""
-    import yfinance as yf
+def _fetch_via_alphavantage_pivot(base: str) -> dict[str, float]:
+    """Fallback: use Alpha Vantage spot rates and derive cross-rates via USD pivot."""
+    from app.services.alpha_vantage import currency_exchange_rate
 
-    def spot(symbol: str) -> float:
-        t = yf.Ticker(symbol)
-        try:
-            return float(t.fast_info["last_price"])
-        except Exception:
-            hist = t.history(period="1d")
-            if not hist.empty:
-                return float(hist["Close"].iloc[-1])
-            raise RuntimeError(f"yfinance no data for {symbol}")
+    # AV gives a direct from→to rate; ask once per currency we care about.
+    usd_try = currency_exchange_rate("USD", "TRY")["rate"]
+    usd_eur = currency_exchange_rate("USD", "EUR")["rate"]
+    if not usd_try or not usd_eur:
+        raise RuntimeError("AV returned empty FX rate")
 
-    # Fetch USD/TRY and USD/EUR — these are the most liquid USD pairs
-    usd_try = spot("USDTRY=X")   # TRY per 1 USD
-    usd_eur = spot("EURUSD=X")   # USD per 1 EUR  (note: ticker is reversed)
-
-    # Build rates expressed in units-per-1-USD first, then pivot to base
     # usd_rates[X] = X per 1 USD
     usd_rates: dict[str, float] = {
         "USD": 1.0,
         "TRY": usd_try,
-        "EUR": 1.0 / usd_eur,   # EUR per 1 USD
+        "EUR": usd_eur,
     }
 
     base_per_usd = usd_rates[base]
@@ -90,8 +82,8 @@ def _get_rates(base: str) -> tuple[dict[str, float], float]:
     try:
         rates = _fetch_from_api(base)
     except Exception as exc:
-        log.warning("ExchangeRate-API failed for %s: %s — falling back to yfinance", base, exc)
-        rates = _fetch_via_yfinance_pivot(base)
+        log.warning("ExchangeRate-API failed for %s: %s — falling back to Alpha Vantage", base, exc)
+        rates = _fetch_via_alphavantage_pivot(base)
     rates[base] = 1.0  # always exact
     fetched_at = time.time()
     with _cache_lock:

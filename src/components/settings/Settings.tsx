@@ -514,7 +514,6 @@ function ProfilePanel() {
   const dirty =
     draft.name !== profile.name
     || draft.avatar !== profile.avatar
-    || draft.monthly_income !== profile.monthly_income
     || draft.risk_profile !== profile.risk_profile;
 
   async function save() {
@@ -524,7 +523,6 @@ function ProfilePanel() {
       const updated = await updateProfile({
         name: draft.name,
         avatar: draft.avatar,
-        monthly_income: draft.monthly_income,
         risk_profile: draft.risk_profile,
       });
       setProfile(updated);
@@ -590,17 +588,6 @@ function ProfilePanel() {
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-              />
-            </Field>
-            <Field label="Monthly income" hint="What you typically earn each month, in your main currency.">
-              <input
-                inputMode="decimal"
-                value={draft.monthly_income || ""}
-                onChange={(e) =>
-                  setDraft({ ...draft, monthly_income: Number(e.target.value) || 0 })
-                }
-                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                placeholder="0"
               />
             </Field>
           </div>
@@ -696,7 +683,7 @@ export function Settings() {
   const [active, setActive] = useState<CategoryId>("ai");
 
   return (
-    <div className="mx-auto flex h-full max-w-5xl gap-6">
+    <div className="mx-auto flex h-full max-w-5xl gap-6 overflow-hidden">
       {/* Sub-nav */}
       <nav className="w-60 shrink-0 sticky top-0 self-start">
         <h1 className="mb-4 px-2 text-2xl font-bold tracking-tight">Settings</h1>

@@ -51,6 +51,9 @@ _GOOGLE_API_KEY_RE = re.compile(r"AIza[0-9A-Za-z_-]{20,}")
 def _safe_error_message(exc: Exception) -> str:
     """Return a client-safe error without leaking provider API keys."""
     message = _GOOGLE_API_KEY_RE.sub("[REDACTED_GOOGLE_API_KEY]", str(exc))
+    av_key = settings.alphavantage_api_key
+    if av_key and av_key in message:
+        message = message.replace(av_key, "[REDACTED_ALPHAVANTAGE_API_KEY]")
     if "CONSUMER_SUSPENDED" in message or "has been suspended" in message:
         return (
             "Gemini API key is suspended. Create or rotate to a restricted Gemini API key "
@@ -455,6 +458,46 @@ def _touch_conversation(conv_id: str, first_message: str) -> None:
         db.commit()
 
 
+_AV_RATELIMIT_RE = re.compile(
+    r"(AV info[^\"\\}]*|We have detected your API key[^\"\\}]*?premium endpoints\.?"
+    r"|.*?\b25 requests per day\b[^\"\\}]*?premium endpoints\.?"
+    r"|Thank you for using Alpha Vantage[^\"\\}]*?premium plans[^\"\\}]*?)",
+    re.IGNORECASE,
+)
+
+# Keys whose values are diagnostic-only (raw provider error text) and should
+# NEVER reach the UI. They stay in backend logs but are stripped from any
+# tool output that gets serialized into a citation chip.
+_SCRUBBED_KEYS = {"av_error", "cg_error", "cg_trending_error"}
+
+
+def _scrub_for_ui(obj: object) -> object:
+    """Recursively redact provider error strings and drop diagnostic-only keys
+    so they never appear in the citations panel. Logs whatever it strips so
+    the information remains visible to operators in stdout.
+    """
+    if isinstance(obj, dict):
+        cleaned: dict = {}
+        for k, v in obj.items():
+            if k in _SCRUBBED_KEYS:
+                log.info("scrubbed tool-output key for UI: %s=%r", k, v)
+                continue
+            # Keep the existence of an error, but replace the noisy provider
+            # blurb with a short user-safe phrase.
+            if k == "error" and isinstance(v, str) and _AV_RATELIMIT_RE.search(v):
+                log.info("scrubbed AV rate-limit blurb from tool-output 'error': %s", v)
+                cleaned[k] = "data provider rate-limited; using fallback"
+                continue
+            cleaned[k] = _scrub_for_ui(v)
+        return cleaned
+    if isinstance(obj, list):
+        return [_scrub_for_ui(x) for x in obj]
+    if isinstance(obj, str) and _AV_RATELIMIT_RE.search(obj):
+        log.info("scrubbed AV rate-limit blurb from tool-output string")
+        return _AV_RATELIMIT_RE.sub("data provider rate-limited", obj)
+    return obj
+
+
 def _summarize_tool_output(output: object) -> str:
     """Return a short human-readable summary of a tool's return value.
 
@@ -469,10 +512,21 @@ def _summarize_tool_output(output: object) -> str:
     inner = getattr(output, "content", None)
     if inner is not None:
         output = inner
+
+    # Tools often return JSON strings; parse so we can scrub structurally,
+    # then re-serialize. Fall back to plain-string scrub if not JSON.
+    parsed: object | None = None
     if isinstance(output, str):
-        text = output
+        try:
+            parsed = json.loads(output)
+        except (ValueError, TypeError):
+            parsed = None
+        if parsed is None:
+            text = _AV_RATELIMIT_RE.sub("data provider rate-limited", output)
+        else:
+            text = json.dumps(_scrub_for_ui(parsed), ensure_ascii=False, default=str)
     else:
-        text = json.dumps(output, ensure_ascii=False, default=str)
+        text = json.dumps(_scrub_for_ui(output), ensure_ascii=False, default=str)
     text = text.strip()
     # Keep enough payload that the UI can pretty-print structured results.
     return text[:4000] + ("…" if len(text) > 4000 else "")
@@ -612,7 +666,7 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
     """Return the user's holdings enriched with current price + P&L.
 
     Fetches all quotes in parallel via asyncio.gather + thread pool so N holdings
-    cost ~1 round-trip instead of N sequential yfinance calls.
+    cost ~1 round-trip instead of N sequential Alpha Vantage calls.
     """
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
@@ -818,7 +872,7 @@ async def update_profile(payload: ProfileUpdate, user_id: int = Depends(get_curr
 async def daily_briefing(user_id: int = Depends(get_current_user_id)):
     """Personalized 3-bullet briefing for the dashboard widget.
 
-    All yfinance calls run in parallel (S&P 500 + VIX + all holdings at once).
+    All Alpha Vantage calls run in parallel (S&P 500 + VIX + all holdings at once).
     """
     import asyncio
     from concurrent.futures import ThreadPoolExecutor

@@ -1,18 +1,22 @@
-"""Market Data agent — live prices, technicals, 8-dim analysis.
+"""Market Data agent — live prices, technicals, fundamentals, 8-dim analysis.
 
 Covers: US stocks, crypto, ETFs, indices, commodities (via ETF proxies),
-forex, Treasury yields, futures. For named assets the agent resolves the
-yfinance ticker first via ``resolve_symbol``.
+forex, Treasury yields, futures. Backed by Alpha Vantage (TIME_SERIES,
+GLOBAL_QUOTE, OVERVIEW, EARNINGS, DIVIDENDS, SMA, RSI, NEWS_SENTIMENT,
+TOP_GAINERS_LOSERS, TREASURY_YIELD, CURRENCY_EXCHANGE_RATE) with CoinGecko
+as a crypto-trending fallback.
+
+For named assets the agent resolves the ticker first via ``resolve_symbol``.
 """
 from __future__ import annotations
 
 import re
 from typing import Any
 
-import requests
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.prebuilt import create_react_agent
 
+import app.services.coingecko as cg
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
 from app.agents._helpers import build_findings, extract_tool_calls
@@ -22,6 +26,8 @@ from app.tools.market_tools import (
     get_dividend_metrics,
     scan_hot_trends,
     scan_rumors,
+    get_company_overview,
+    get_technical_indicators,
 )
 from app.tools.symbol_resolver import resolve_symbol, list_supported_categories
 from app.tools.fund_tools import (
@@ -63,15 +69,15 @@ CRITICAL — STAY IN YOUR LANE:
 You can fetch live prices for ANY of these asset classes — never refuse a
 query because of asset class alone:
 
-GLOBAL (via yfinance):
-- US stocks & ADRs            (AAPL, NVDA, BABA, …)
-- Crypto                      (-USD suffix: BTC-USD, ETH-USD, SOL-USD)
-- ETFs / index funds          (SPY, QQQ, VTI, BND, VOO, ARKK)
-- Stock indices               (^GSPC = S&P 500, ^IXIC = NASDAQ, ^VIX, ^DJI, XU100.IS for BIST)
-- Commodities (via ETFs)      (GLD = gold, SLV = silver, USO = oil, UNG = nat gas, CPER = copper)
-- Commodity futures           (GC=F gold, CL=F crude, SI=F silver)
-- Forex                       (EURUSD=X, USDTRY=X, GBPUSD=X, DX-Y.NYB for DXY)
-- Treasury yields             (^TNX = 10Y, ^TYX = 30Y)
+GLOBAL (via Alpha Vantage):
+- US stocks & ADRs            (AAPL, NVDA, BABA, …)              → GLOBAL_QUOTE / OVERVIEW
+- Crypto                      (-USD suffix: BTC-USD, ETH-USD)    → DIGITAL_CURRENCY_DAILY
+- ETFs / index funds          (SPY, QQQ, VTI, BND, VOO, ARKK)    → GLOBAL_QUOTE
+- Stock indices               (^GSPC, ^IXIC, ^VIX, ^DJI; BIST=XU100.IS) → TIME_SERIES_DAILY (SPX/COMP/VIX/DJI)
+- Commodities (via ETFs)      (GLD=gold, SLV=silver, USO=oil, UNG=nat gas, CPER=copper)
+- Commodity futures           (GC=F→GLD, CL=F→USO, SI=F→SLV — auto-proxied)
+- Forex                       (EURUSD=X, USDTRY=X, GBPUSD=X)     → CURRENCY_EXCHANGE_RATE
+- Treasury yields             (^TNX=10Y, ^TYX=30Y, ^IRX=3M)      → TREASURY_YIELD endpoint
 
 TURKISH MUTUAL & PENSION FUNDS (via TEFAS):
 - 3-letter fund codes         (AFA, IIH, TI2, NVT, AU1, …)
@@ -87,11 +93,22 @@ WORKFLOW (decision tree):
 3. If the user mentions a global asset BY NAME (gold, S&P 500, USD/TRY),
    call ``resolve_symbol`` first → then ``get_quote(ticker)``.
 4. Plain US ticker / crypto / ETF → ``get_quote(ticker)`` directly.
-5. ``analyze_ticker_8dim`` — only for US stocks / crypto, not indices/forex/futures/funds.
-6. ``get_dividend_metrics`` — stocks and ETFs only.
-7. ``scan_hot_trends`` / ``scan_rumors`` — what's trending / early signals (US-focused).
-8. ``list_top_funds`` — Turkish fund leaderboard by category rank.
-9. ``list_supported_categories`` — meta-question 'what can you look up?'
+5. ``get_company_overview`` — P/E, margins, sector, 52W range, analyst target,
+   analyst rating distribution (strong buy / buy / hold / sell / strong sell)
+   and dividend metadata. ONE call covers fundamentals + sentiment.
+6. ``get_technical_indicators`` — SMA + RSI snapshot (overbought / oversold
+   / above-SMA / below-SMA signals). Use whenever momentum/trend matters.
+7. ``analyze_ticker_8dim`` — only for US stocks / ETFs (NOT crypto / indices
+   / forex / futures / Turkish funds). Each dimension is an AV call, so
+   prefer ``fast=True`` unless the user explicitly asked for deep analysis.
+8. ``get_dividend_metrics`` — US stocks and ETFs only.
+9. ``scan_hot_trends`` — top gainers / losers / most-active US tickers
+   (AV TOP_GAINERS_LOSERS) plus CoinGecko trending crypto.
+10. ``scan_rumors`` — M&A chatter + breaking financial-markets news with
+    AV sentiment scores. (Insider transactions are NOT available — AV doesn't
+    expose that data; say so if asked.)
+11. ``list_top_funds`` — Turkish fund leaderboard by category rank.
+12. ``list_supported_categories`` — meta-question 'what can you look up?'
 
 DISAMBIGUATION:
 - A 3-letter all-caps code in a Turkish-language query → likely a TEFAS fund
@@ -100,8 +117,14 @@ DISAMBIGUATION:
 - If ``resolve_symbol`` returns ``ticker: null`` AND ``search_fund`` returns
   empty, tell the user it's not supported.
 
-CITATIONS: every numeric claim is tagged with its source (yfinance, TEFAS,
-8-dim analysis, NewsAPI). Two short paragraphs max.
+CITATIONS: every numeric claim is tagged with its source (alpha_vantage,
+TEFAS, 8-dim analysis, NewsAPI).
+
+OUTPUT DEPTH:
+- Single asset query (one price, one quote): brief — 2-3 lines.
+- Scanner / trending / comparison / leaderboard: comprehensive — include
+  ALL rows returned by the tool, organized under bold headings with a brief
+  interpretive comment per section. Do not truncate lists.
 
 LANGUAGE: write your report in the SAME language as the user's current
 message. English question → English report. Turkish question → Turkish
@@ -170,6 +193,8 @@ _TOOLS = [
     resolve_symbol,
     list_supported_categories,
     get_quote,
+    get_company_overview,
+    get_technical_indicators,
     analyze_ticker_8dim,
     get_dividend_metrics,
     scan_hot_trends,
@@ -180,9 +205,6 @@ _TOOLS = [
     get_fund_history,
     list_top_funds,
 ]
-
-_STABLECOIN_SYMBOLS = {"USDT", "USDC", "DAI", "FDUSD", "USDE", "TUSD", "BUSD"}
-
 
 def _latest_user_text(state: AgentState) -> str:
     for message in reversed(state.get("messages", []) or []):
@@ -208,71 +230,29 @@ def _requested_limit(text: str, default: int = 5) -> int:
     return max(1, min(10, int(match.group(1))))
 
 
-def _fetch_top_crypto_tickers(limit: int) -> list[dict[str, Any]]:
-    url = (
-        "https://api.coingecko.com/api/v3/coins/markets"
-        "?vs_currency=usd&order=market_cap_desc&per_page=30&page=1"
-    )
-    response = requests.get(url, timeout=8)
-    response.raise_for_status()
-
-    rows: list[dict[str, Any]] = []
-    for item in response.json():
-        symbol = str(item.get("symbol") or "").upper()
-        if not symbol or symbol in _STABLECOIN_SYMBOLS:
-            continue
-        rows.append(
-            {
-                "ticker": f"{symbol}-USD",
-                "name": item.get("name") or symbol,
-                "market_cap": item.get("market_cap"),
-                "rank": item.get("market_cap_rank"),
-            }
-        )
-        if len(rows) >= limit:
-            break
-    return rows
-
-
-def _fmt_money(value: Any) -> str:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return "n/a"
-    if number >= 1_000_000_000:
-        return f"${number / 1_000_000_000:.1f}B"
-    if number >= 1_000_000:
-        return f"${number / 1_000_000:.1f}M"
-    return f"${number:,.2f}"
-
-
 def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
+    """Fast-path for 'top N crypto by market cap' queries using CoinGecko."""
     user_text = _latest_user_text(state)
     if not _wants_top_crypto_market_cap(user_text):
         return None
 
-    # Detect Turkish phrasing in the user's message to mirror their language
-    # in the hardcoded table. Default to English.
     tr = any(t in user_text.lower() for t in ("kripto", "piyasa değ", "ilk ", "en yüksek"))
-
     limit = _requested_limit(user_text, default=5)
+
     try:
-        coins = _fetch_top_crypto_tickers(limit)
-    except Exception as exc:  # noqa: BLE001
+        coins = cg.top_coins(limit=limit, exclude_stablecoins=True)
+    except cg.CoinGeckoError as exc:
         err_msg = (
             f"Top kripto listesi CoinGecko'dan alınamadı: {exc}"
             if tr
             else f"Couldn't fetch top crypto list from CoinGecko: {exc}"
         )
-        return {
-            "messages": [AIMessage(content=err_msg)],
-            "citations": [],
-        }
+        return {"messages": [AIMessage(content=err_msg)], "citations": []}
 
     if tr:
         intro = (
-            f"Piyasa değerine göre ilk {len(coins)} kripto için stablecoinleri "
-            "hariç tuttum; 8-dim skor stablecoinlerde anlamlı değil."
+            f"Piyasa değerine göre ilk {len(coins)} kripto — stablecoinler hariç; "
+            "8-dim skor stablecoinlerde anlamlı değil."
         )
         header = "| Kripto | Fiyat | 24s değişim | Market cap | 8-dim skor | Öneri |"
     else:
@@ -281,16 +261,17 @@ def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
             "(8-dim score isn't meaningful for stables)."
         )
         header = "| Crypto | Price | 24h change | Market cap | 8-dim score | Reco |"
+
     lines = [intro, "", header, "|---|---:|---:|---:|---:|---|"]
     citations: list[dict[str, Any]] = []
 
     for coin in coins:
-        ticker = str(coin["ticker"])
+        ticker = f"{coin['symbol']}-USD"
         quote = get_quote.invoke({"ticker": ticker})
         analysis = analyze_ticker_8dim.invoke({"ticker": ticker, "fast": True})
 
         price = quote.get("price") if isinstance(quote, dict) else None
-        change = quote.get("change_pct") if isinstance(quote, dict) else None
+        change = quote.get("change_pct") if isinstance(quote, dict) else coin.get("change_pct_24h")
         score = analysis.get("final_score") if isinstance(analysis, dict) else None
         recommendation = analysis.get("recommendation") if isinstance(analysis, dict) else None
         error = analysis.get("error") if isinstance(analysis, dict) else None
@@ -300,21 +281,20 @@ def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
         recommendation_text = str(recommendation or fallback_reco)
         price_text = f"${float(price):,.4f}" if isinstance(price, int | float) else "n/a"
         change_text = f"{float(change):+.2f}%" if isinstance(change, int | float) else "n/a"
+        cap_text = cg._fmt_money(coin.get("market_cap"))
 
         lines.append(
             f"| {coin['name']} ({ticker}) | {price_text} | {change_text} | "
-            f"{_fmt_money(coin.get('market_cap'))} | {score_text} | {recommendation_text} |"
+            f"{cap_text} | {score_text} | {recommendation_text} |"
         )
-        citations.extend(
-            [
-                {"tool": "get_quote", "args": {"ticker": ticker}, "result": str(quote)},
-                {"tool": "analyze_ticker_8dim", "args": {"ticker": ticker, "fast": True}, "result": str(analysis)},
-            ]
-        )
+        citations.extend([
+            {"tool": "get_quote", "args": {"ticker": ticker}, "result": str(quote)},
+            {"tool": "analyze_ticker_8dim", "args": {"ticker": ticker, "fast": True}, "result": str(analysis)},
+        ])
 
     lines.append("")
     lines.append(
-        "Market cap sıralaması CoinGecko'dan, fiyat ve 8-dim analiz sonuçları canlı tool çağrılarından geldi."
+        "Market cap sıralaması CoinGecko'dan, fiyat ve 8-dim analiz canlı tool çağrılarından geldi."
         if tr
         else "Market cap ranking from CoinGecko; price and 8-dim figures from live tool calls."
     )

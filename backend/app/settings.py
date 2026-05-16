@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     news_api_key: str = Field(default="", alias="NEWS_API_KEY")
     langsmith_api_key: str = Field(default="", alias="LANGSMITH_API_KEY")
+    alphavantage_api_key: str = Field(default="", alias="ALPHAVANTAGE_API_KEY")
 
     # Server
     port: int = Field(default=8765, alias="FINCOACH_PORT")
