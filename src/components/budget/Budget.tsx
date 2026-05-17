@@ -7,8 +7,10 @@ import {
   Upload, Plus, Wallet, TrendingUp, TrendingDown, RefreshCcw,
   Pencil, Trash2, CreditCard, Banknote, Building2, Loader2,
   Calendar, AlertCircle, ArrowUpRight, ArrowDownRight, Sparkles,
-  Repeat, PiggyBank,
+  Repeat, PiggyBank, Music, Home, Briefcase, Shield, Tv, Dumbbell,
+  Wrench, Landmark, type LucideIcon,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
 import { toast } from "sonner";
 
 import {
@@ -25,7 +27,7 @@ import { AccountFormModal } from "./AccountFormModal";
 import { TransactionFormModal, COMMON_CATEGORIES } from "./TransactionFormModal";
 import { SubscriptionFormModal } from "./SubscriptionFormModal";
 import { BudgetImportModal } from "./BudgetImportModal";
-import { CurrencySwitcher } from "./CurrencySwitcher";
+import { Disclaimer } from "@/components/ui/Disclaimer";
 
 const ACCOUNT_ICON: Record<Account["kind"], typeof Wallet> = {
   cash: Wallet,
@@ -39,6 +41,27 @@ const ACCOUNT_LABEL: Record<Account["kind"], string> = {
   checking: "Checking",
   savings: "Savings",
   credit_card: "Credit card",
+};
+
+const SUBSCRIPTION_ICON: Record<string, LucideIcon> = {
+  briefcase: Briefcase,
+  salary: Briefcase,
+  freelance: Briefcase,
+  home: Home,
+  rent: Home,
+  rental: Home,
+  music: Music,
+  entertainment: Music,
+  streaming: Tv,
+  tv: Tv,
+  shield: Shield,
+  insurance: Shield,
+  subscriptions: CreditCard,
+  subscription: CreditCard,
+  software: Wrench,
+  fitness: Dumbbell,
+  gym: Dumbbell,
+  bank: Landmark,
 };
 
 export function Budget() {
@@ -142,14 +165,11 @@ export function Budget() {
   return (
     <div>
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-1 items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Budget</h1>
-            <p className="text-sm text-[hsl(var(--text-muted))]">
-              Track money in, out, and where it lives.
-            </p>
-          </div>
-          <CurrencySwitcher />
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Budget</h1>
+          <p className="text-sm text-[hsl(var(--text-muted))]">
+            Track money in, out, and where it lives.
+          </p>
         </div>
       </header>
 
@@ -174,6 +194,13 @@ export function Budget() {
             onImport={() => setImportOpen(true)}
             onAddManual={() => setTxModal({ open: true, editing: null })}
           />
+
+          {summary && (
+            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <CategoriesDonut summary={summary} fx={fx} />
+              <UpcomingCharges summary={summary} fx={fx} />
+            </div>
+          )}
 
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <AccountsPanel
@@ -258,6 +285,7 @@ export function Budget() {
         onImported={() => refresh(true)}
         accounts={accounts}
       />
+      <Disclaimer className="mt-8 text-center" />
     </div>
   );
 }
@@ -270,6 +298,9 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
   const incomeByCcy = summary.income_mtd;
   const expenseByCcy = summary.expense_mtd;
   const recurringIncome = summary.recurring.income_monthly_by_currency;
+
+  const incomeMoM = computeMoM(incomeByCcy, summary.income_prev_month, fx);
+  const expenseMoM = computeMoM(expenseByCcy, summary.expense_prev_month, fx);
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -286,6 +317,8 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
         bag={incomeByCcy}
         fx={fx}
         subtitle={Object.keys(incomeByCcy).length === 0 ? "No income logged yet" : undefined}
+        delta={incomeMoM}
+        deltaPositiveIsGood
       />
       <KPICard
         title="Spending this month"
@@ -293,6 +326,8 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
         bag={expenseByCcy}
         fx={fx}
         subtitle={Object.keys(expenseByCcy).length === 0 ? "Nothing spent yet" : undefined}
+        delta={expenseMoM}
+        deltaPositiveIsGood={false}
       />
       <KPICard
         title="Recurring income / mo"
@@ -307,14 +342,33 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
   );
 }
 
+function computeMoM(
+  thisMonth: Record<string, number>,
+  prevMonth: Record<string, number>,
+  fx: UseFxRates,
+): number | null {
+  const cur = fx.rates ? fx.convertBag(thisMonth) : sumValues(thisMonth);
+  const prev = fx.rates ? fx.convertBag(prevMonth) : sumValues(prevMonth);
+  if (cur == null || prev == null || prev === 0) return null;
+  return ((cur - prev) / prev) * 100;
+}
+
+function sumValues(bag: Record<string, number>): number {
+  return Object.values(bag).reduce((a, b) => a + b, 0);
+}
+
 function KPICard({
-  title, icon, bag, fx, subtitle,
+  title, icon, bag, fx, subtitle, delta, deltaPositiveIsGood = true,
 }: {
   title: string;
   icon: React.ReactNode;
   bag: Record<string, number>;
   fx: UseFxRates;
   subtitle?: string;
+  /** Month-over-month percent change, or null if unavailable. */
+  delta?: number | null;
+  /** When true, a positive delta is "good" (green); flip for spending. */
+  deltaPositiveIsGood?: boolean;
 }) {
   const entries = Object.entries(bag);
   const converted = entries.length ? fx.convertBag(bag) : null;
@@ -346,8 +400,170 @@ function KPICard({
           </div>
         )}
       </div>
+      {delta != null && Number.isFinite(delta) && (
+        <p className="mt-1 text-[11px]">
+          <span
+            className={cn(
+              "font-semibold",
+              (deltaPositiveIsGood ? delta >= 0 : delta <= 0) ? "text-gain" : "text-loss",
+            )}
+          >
+            {delta >= 0 ? "+" : ""}{delta.toFixed(1)}%
+          </span>
+          <span className="text-[hsl(var(--text-muted))]"> vs last month</span>
+        </p>
+      )}
       {subtitle && <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">{subtitle}</p>}
     </div>
+  );
+}
+
+// ── Top categories donut ────────────────────────────────────────────────────
+
+const CATEGORY_COLORS = [
+  "#14B8A6", "#8B5CF6", "#F59E0B", "#3B82F6", "#EC4899", "#10B981", "#EF4444",
+];
+
+function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRates }) {
+  const items = useMemo(() => {
+    const list = (summary.top_categories ?? []).map((c) => {
+      const value = fx.rates
+        ? (fx.convert(c.amount, c.currency) ?? c.amount)
+        : c.amount;
+      return { name: c.category, value, currency: c.currency, raw: c.amount };
+    });
+    return list.sort((a, b) => b.value - a.value).slice(0, 5);
+  }, [summary, fx]);
+
+  const total = items.reduce((a, b) => a + b.value, 0);
+
+  if (items.length === 0) {
+    return (
+      <section className="card">
+        <h2 className="text-sm font-semibold">Top spending categories</h2>
+        <p className="mt-3 rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
+          No expenses logged yet this month.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card">
+      <h2 className="text-sm font-semibold">Top spending categories</h2>
+      <p className="text-[11px] text-[hsl(var(--text-muted))]">Where this month's money went</p>
+      <div className="mt-3 flex items-center gap-4">
+        <div className="h-32 w-32 shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={items} dataKey="value" nameKey="name" innerRadius={36} outerRadius={56} paddingAngle={2}>
+                {items.map((_, i) => (
+                  <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} stroke="none" />
+                ))}
+              </Pie>
+              <RechartsTooltip
+                contentStyle={{ background: "hsl(var(--surface))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                formatter={(v: number) => (fx.rates ? formatCurrency(v, fx.target) : v.toFixed(2))}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <ul className="flex-1 space-y-1.5 text-xs">
+          {items.map((it, i) => {
+            const pct = total ? (it.value / total) * 100 : 0;
+            return (
+              <li key={it.name} className="flex items-center gap-2">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
+                />
+                <span className="truncate uppercase text-[10px] text-[hsl(var(--text-muted))] flex-1">{it.name}</span>
+                <span className="num font-semibold">
+                  {fx.rates ? formatCurrency(it.value, fx.target) : `${it.raw.toFixed(0)} ${it.currency}`}
+                </span>
+                <span className="text-[10px] text-[hsl(var(--text-muted))] w-8 text-right">{pct.toFixed(0)}%</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+// ── Upcoming charges (next 30 days) ─────────────────────────────────────────
+
+function UpcomingCharges({ summary, fx }: { summary: BudgetSummary; fx: UseFxRates }) {
+  const upcoming = useMemo(() => {
+    const list = (summary.recurring.upcoming ?? []).slice();
+    list.sort((a, b) => {
+      if (!a.next_charge_on) return 1;
+      if (!b.next_charge_on) return -1;
+      return a.next_charge_on.localeCompare(b.next_charge_on);
+    });
+    return list.slice(0, 6);
+  }, [summary]);
+
+  return (
+    <section className="card lg:col-span-2">
+      <header className="mb-2 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold">Coming up (next 30 days)</h2>
+          <p className="text-[11px] text-[hsl(var(--text-muted))]">
+            Recurring charges and income on the calendar.
+          </p>
+        </div>
+      </header>
+      {upcoming.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
+          Nothing scheduled. Mark a transaction as recurring to track it here.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[hsl(var(--border))]">
+          {upcoming.map((s) => {
+            const days = s.next_charge_on ? daysUntil(s.next_charge_on) : null;
+            const isIncome = s.direction === "income";
+            const label =
+              days == null ? "—"
+              : days < 0 ? `${Math.abs(days)}d ${isIncome ? "late" : "overdue"}`
+              : days === 0 ? "today"
+              : days === 1 ? "tomorrow"
+              : `in ${days}d`;
+            const urgency =
+              days == null ? "later"
+              : days <= 2 ? "imminent"
+              : days <= 7 ? "soon"
+              : "later";
+            return (
+              <li key={s.id} className="flex items-center gap-3 py-2">
+                <SubscriptionAvatar icon={s.icon} name={s.name} category={s.category} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{s.name}</p>
+                  <p className="text-[11px] text-[hsl(var(--text-muted))]">{s.cycle} · {s.category}</p>
+                </div>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px]",
+                    urgency === "imminent" && (isIncome ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"),
+                    urgency === "soon" && (isIncome ? "bg-gain/10 text-gain" : "bg-warning/15 text-warning"),
+                    urgency === "later" && "bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))]",
+                  )}
+                >
+                  {label}
+                </span>
+                <AmountCell
+                  amount={s.amount}
+                  currency={s.currency}
+                  fx={fx}
+                  sign={isIncome ? "pos" : "neg"}
+                  className={cn("text-sm font-semibold w-24 text-right", isIncome ? "text-gain" : "text-loss")}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -568,9 +784,7 @@ function SubscriptionCard({
     )}>
       {/* Top row: icon + name/subtitle only — no amount competing for width */}
       <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--surface))] text-lg leading-none">
-          {sub.icon || sub.name.slice(0, 1).toUpperCase()}
-        </span>
+        <SubscriptionAvatar icon={sub.icon} name={sub.name} category={sub.category} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{sub.name}</p>
           <p className="truncate text-[11px] text-[hsl(var(--text-muted))]">
@@ -620,6 +834,49 @@ function SubscriptionCard({
   );
 }
 
+function SubscriptionAvatar({
+  icon, name, category, size = "md",
+}: {
+  icon: string | null;
+  name: string;
+  category?: string | null;
+  size?: "sm" | "md";
+}) {
+  const key = (icon || category || "").trim().toLowerCase();
+  const Icon = SUBSCRIPTION_ICON[key] ?? SUBSCRIPTION_ICON[(category || "").trim().toLowerCase()];
+  const boxClass = size === "sm" ? "h-8 w-8" : "h-9 w-9";
+  const iconClass = size === "sm" ? "h-4 w-4" : "h-[18px] w-[18px]";
+
+  if (Icon) {
+    return (
+      <span
+        className={cn(
+          "flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
+          boxClass,
+        )}
+      >
+        <Icon className={iconClass} />
+      </span>
+    );
+  }
+
+  const raw = (icon || "").trim();
+  const isNamedKey = /^[a-z0-9_-]{3,}$/i.test(raw);
+  const label = raw && !isNamedKey ? raw : name.slice(0, 1).toUpperCase();
+
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[hsl(var(--surface))] text-center text-sm leading-none",
+        boxClass,
+      )}
+      title={isNamedKey ? raw : undefined}
+    >
+      <span className="max-w-full truncate px-0.5">{label}</span>
+    </span>
+  );
+}
+
 function daysUntil(iso: string): number {
   const target = new Date(iso + "T00:00:00");
   const today = new Date();
@@ -659,13 +916,20 @@ function TransactionsPanel({
     return Array.from(set).sort();
   }, [transactions]);
 
+  const VISIBLE_STEP = 10;
+  const [visibleCount, setVisibleCount] = useState(VISIBLE_STEP);
+  useEffect(() => { setVisibleCount(VISIBLE_STEP); }, [filterType, filterCategory, transactions.length]);
+  const visibleTxs = transactions.slice(0, visibleCount);
+  const hasMore = transactions.length > visibleCount;
+
   return (
     <section className="card mt-6">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">Transactions</h2>
           <p className="text-[11px] text-[hsl(var(--text-muted))]">
-            Showing {transactions.length} of {allCount}
+            Showing {visibleTxs.length} of {transactions.length}
+            {transactions.length !== allCount ? ` (filtered from ${allCount})` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -708,7 +972,7 @@ function TransactionsPanel({
               </tr>
             </thead>
             <tbody>
-              {transactions.map((t) => {
+              {visibleTxs.map((t) => {
                 const isIncome = t.type === "income";
                 const acc = t.account_id != null ? accountsById[t.account_id] : null;
                 return (
@@ -758,6 +1022,37 @@ function TransactionsPanel({
               })}
             </tbody>
           </table>
+          {(hasMore || visibleCount > VISIBLE_STEP) && (
+            <div className="mt-3 flex items-center justify-center gap-2">
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((n) => n + VISIBLE_STEP)}
+                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                >
+                  Show more
+                </button>
+              )}
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount(transactions.length)}
+                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                >
+                  Show all
+                </button>
+              )}
+              {visibleCount > VISIBLE_STEP && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount(VISIBLE_STEP)}
+                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                >
+                  Show less
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>

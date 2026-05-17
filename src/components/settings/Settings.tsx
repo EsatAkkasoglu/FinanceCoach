@@ -6,9 +6,14 @@ import { getProfile, updateProfile, type UserProfile } from "@/lib/api";
 import {
   Cpu, Palette, SlidersHorizontal, UserCircle2, AlertTriangle,
   Moon, Sun, Flame, RotateCcw, Eye, EyeOff, Check, KeyRound,
-  Newspaper, Sparkles, Loader2,
+  Newspaper, Sparkles, Loader2, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { Disclaimer } from "@/components/ui/Disclaimer";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
+import { StepRiskQuiz } from "@/components/onboarding/StepRiskQuiz";
+import { RISK_QUIZ, scoreToLabel } from "@/components/onboarding/data";
 
 // ─── UX copy / data ───────────────────────────────────────────────────────────
 
@@ -476,6 +481,7 @@ function ProfilePanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quizOpen, setQuizOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -595,10 +601,21 @@ function ProfilePanel() {
 
         {/* Risk */}
         <Card>
-          <h3 className="mb-1 text-sm font-semibold">Risk profile</h3>
-          <p className="mb-3 text-xs text-[hsl(var(--text-muted))]">
-            How aggressive should the coach be when suggesting positions?
-          </p>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="mb-1 text-sm font-semibold">Risk profile</h3>
+              <p className="text-xs text-[hsl(var(--text-muted))]">
+                How aggressive should the coach be when suggesting positions?
+              </p>
+            </div>
+            <button
+              onClick={() => setQuizOpen(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-muted/30 px-2.5 py-1.5 text-xs font-medium text-accent transition hover:bg-accent-muted/60"
+              title="Score your risk profile again with the 5-question quiz"
+            >
+              <RefreshCw className="h-3 w-3" /> Retake quiz
+            </button>
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {RISK_PROFILES.map((r) => {
               const active = draft.risk_profile === r.id;
@@ -620,6 +637,17 @@ function ProfilePanel() {
             })}
           </div>
         </Card>
+
+        <RetakeQuizModal
+          open={quizOpen}
+          onClose={() => setQuizOpen(false)}
+          onSaved={(score, profileLabel) => {
+            setDraft({ ...draft, risk_profile: profileLabel });
+            useUserStore.getState().setProfile({ riskScore: score, riskProfile: profileLabel });
+            toast.success(`Risk profile updated to ${profileLabel}`);
+            setQuizOpen(false);
+          }}
+        />
 
         {/* Sticky save bar */}
         {dirty && (
@@ -644,6 +672,66 @@ function ProfilePanel() {
         )}
       </div>
     </>
+  );
+}
+
+function RetakeQuizModal({
+  open, onClose, onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSaved: (score: number, profile: "conservative" | "balanced" | "aggressive") => void;
+}) {
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => { if (open) setAnswers({}); }, [open]);
+
+  const answered = Object.keys(answers).length;
+  const complete = answered === RISK_QUIZ.length;
+  const score = Object.values(answers).reduce((a, b) => a + b, 0);
+  const previewLabel = scoreToLabel(score);
+
+  async function submit() {
+    if (!complete) {
+      toast.error("Answer every question first.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const updated = await updateProfile({
+        risk_score: score,
+        risk_profile: previewLabel,
+      });
+      onSaved(updated.risk_score, updated.risk_profile);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Retake risk quiz"
+      description="Answer all 5 questions; we'll update your profile when you save."
+      size="md"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} type="button">Cancel</Button>
+          <Button onClick={submit} loading={submitting} disabled={!complete}>
+            {complete ? `Save (${previewLabel})` : `Answer ${RISK_QUIZ.length - answered} more`}
+          </Button>
+        </>
+      }
+    >
+      <StepRiskQuiz
+        answers={answers}
+        onChange={(qid, pts) => setAnswers((a) => ({ ...a, [qid]: pts }))}
+      />
+    </Modal>
   );
 }
 
@@ -729,6 +817,7 @@ export function Settings() {
         {active === "behaviour"  && <BehaviourPanel />}
         {active === "profile"    && <ProfilePanel />}
         {active === "danger"     && <DangerPanel />}
+        <Disclaimer className="mt-8" />
       </section>
     </div>
   );

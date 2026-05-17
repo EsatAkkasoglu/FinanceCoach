@@ -11,11 +11,12 @@
  * two rows below. Pan / zoom / drag are disabled — this is a passive
  * visualization, not an interactive flow editor.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background, BackgroundVariant, type Edge, type Node,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import { ChevronDown, ChevronUp, Activity } from "lucide-react";
 
 import { useAgentVizStore } from "@/store";
 import { AgentNode, type AgentNodeData, type AgentStatus } from "./AgentNode";
@@ -43,6 +44,37 @@ const AGENTS: Record<string, AgentMeta> = {
 
 export function AgentGraph() {
   const events = useAgentVizStore((s) => s.events);
+
+  const anyRunning = useMemo(
+    () => Object.values(events).some((e) => e.status === "running"),
+    [events]
+  );
+  const hasEverRun = useMemo(
+    () => Object.values(events).some((e) => e.status === "done" || e.status === "running"),
+    [events]
+  );
+
+  // Last finished non-supervisor agent — what we summarize in the strip.
+  const lastDone = useMemo(() => {
+    const done = Object.values(events).filter(
+      (e) => e.status === "done" && e.agent !== "supervisor" && e.endedAt
+    );
+    if (done.length === 0) return null;
+    done.sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
+    return done[0];
+  }, [events]);
+
+  // userExpanded overrides the auto-collapse after first run. Auto-expand
+  // again whenever a new run kicks off so users never miss live activity.
+  const [userExpanded, setUserExpanded] = useState(false);
+  const prevAnyRunning = useRef(false);
+  useEffect(() => {
+    if (anyRunning && !prevAnyRunning.current) setUserExpanded(true);
+    if (!anyRunning && prevAnyRunning.current) setUserExpanded(false);
+    prevAnyRunning.current = anyRunning;
+  }, [anyRunning]);
+
+  const collapsed = !anyRunning && hasEverRun && !userExpanded;
 
   const nodes: Node<AgentNodeData>[] = useMemo(
     () =>
@@ -87,8 +119,43 @@ export function AgentGraph() {
     [events]
   );
 
+  if (collapsed && lastDone) {
+    const label = AGENTS[lastDone.agent]?.label ?? lastDone.agent;
+    const toolCount = lastDone.toolCount ?? 0;
+    const durationMs = (lastDone.endedAt ?? 0) - lastDone.startedAt;
+    const durationS = (durationMs / 1000).toFixed(1);
+    return (
+      <button
+        type="button"
+        onClick={() => setUserExpanded(true)}
+        className="card-muted flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5"
+      >
+        <span className="flex items-center gap-2 text-xs text-[hsl(var(--text-primary))]">
+          <Activity className="h-3.5 w-3.5 text-accent" />
+          <span className="font-medium">{label}</span>
+          <span className="text-[hsl(var(--text-muted))]">
+            · {toolCount} {toolCount === 1 ? "tool" : "tools"} · {durationS}s
+          </span>
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+      </button>
+    );
+  }
+
   return (
     <div className="card-muted flex h-[320px] flex-col p-2">
+      {hasEverRun && !anyRunning && (
+        <div className="flex justify-end px-1 pb-1">
+          <button
+            type="button"
+            onClick={() => setUserExpanded(false)}
+            className="flex items-center gap-1 text-[10px] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text-primary))]"
+            aria-label="Collapse agent graph"
+          >
+            <ChevronUp className="h-3 w-3" /> Collapse
+          </button>
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         <ReactFlow
           nodes={nodes}

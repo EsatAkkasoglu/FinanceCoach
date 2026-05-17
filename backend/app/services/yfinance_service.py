@@ -45,10 +45,36 @@ def _cache_set(key: str, value: Any) -> None:
         _cache[key] = (time.time(), value)
 
 
+_session_singleton: Any | None = None
+_session_lock = threading.Lock()
+
+
+def _session():
+    """Browser-impersonating session shared across all yfinance calls.
+
+    Yahoo Finance returns HTTP 401 to plain Python requests (especially for
+    non-US tickers like THYAO.IS) because of new bot-detection. curl_cffi
+    impersonates Chrome's TLS fingerprint, which Yahoo accepts.
+    """
+    global _session_singleton
+    if _session_singleton is not None:
+        return _session_singleton
+    with _session_lock:
+        if _session_singleton is None:
+            try:
+                from curl_cffi import requests as cffi_requests  # noqa: PLC0415
+                _session_singleton = cffi_requests.Session(impersonate="chrome")
+            except Exception as exc:  # noqa: BLE001
+                log.warning("curl_cffi unavailable, falling back to default session: %s", exc)
+                _session_singleton = False  # sentinel: don't retry
+    return _session_singleton or None
+
+
 def _ticker(symbol: str):  # type: ignore[return]
     """Return a yfinance Ticker, importing lazily to avoid startup cost."""
     import yfinance as yf  # noqa: PLC0415
-    return yf.Ticker(symbol)
+    sess = _session()
+    return yf.Ticker(symbol, session=sess) if sess else yf.Ticker(symbol)
 
 
 def _now_iso() -> str:
@@ -179,13 +205,24 @@ def history(
 
     try:
         import yfinance as yf  # noqa: PLC0415
-        df = yf.download(symbol, period=period, interval=interval,
-                         auto_adjust=True, progress=False)
+        sess = _session()
+        kw: dict[str, Any] = {
+            "period": period, "interval": interval,
+            "auto_adjust": True, "progress": False,
+        }
+        if sess:
+            kw["session"] = sess
+        df = yf.download(symbol, **kw)
     except Exception as exc:  # noqa: BLE001
         raise YFinanceError(f"yfinance history failed for {symbol}: {exc}") from exc
 
     if df is None or df.empty:
         raise YFinanceError(f"yfinance returned no history for {symbol}")
+
+    # yfinance ≥0.2.x may return MultiIndex columns (field, ticker) when
+    # downloading a single symbol. Flatten to single-level so row[field] works.
+    if df.columns.nlevels > 1:
+        df.columns = df.columns.get_level_values(0)
 
     rows: list[dict[str, Any]] = []
     for ts, row in df.iloc[::-1].iterrows():
@@ -197,6 +234,51 @@ def history(
             "close": float(row["Close"]),
             "volume": int(row["Volume"]) if row["Volume"] else None,
         })
+    _cache_set(cache_key, rows)
+    return rows
+
+
+def earnings_surprises(symbol: str, limit: int = 4) -> list[dict[str, Any]]:
+    """Recent earnings surprises calculated from yfinance .earnings_dates.
+
+    Returns newest-first list of {date, estimate, reported, surprise_pct}.
+    """
+    cache_key = f"yf:earn:{symbol.upper()}"
+    cached = _cache_get(cache_key, ttl=6 * 3600)
+    if cached:
+        return cached
+    try:
+        tk = _ticker(symbol)
+        df = tk.earnings_dates
+    except Exception as exc:  # noqa: BLE001
+        raise YFinanceError(f"yfinance earnings failed for {symbol}: {exc}") from exc
+    if df is None or df.empty:
+        raise YFinanceError(f"yfinance returned no earnings for {symbol}")
+
+    # Only past quarters (Reported EPS present), newest first
+    rows: list[dict[str, Any]] = []
+    for ts, row in df.iterrows():
+        est = row.get("EPS Estimate")
+        rep = row.get("Reported EPS")
+        if est is None or rep is None:
+            continue
+        try:
+            est_f, rep_f = float(est), float(rep)
+        except (TypeError, ValueError):
+            continue
+        if est_f == 0:
+            continue
+        surprise_pct = (rep_f - est_f) / abs(est_f) * 100.0
+        rows.append({
+            "date": str(ts)[:10],
+            "estimate": round(est_f, 4),
+            "reported": round(rep_f, 4),
+            "surprise_pct": round(surprise_pct, 2),
+        })
+        if len(rows) >= limit:
+            break
+    if not rows:
+        raise YFinanceError(f"yfinance has no completed earnings for {symbol}")
     _cache_set(cache_key, rows)
     return rows
 

@@ -28,6 +28,36 @@ from app.agents.state import AgentState
 log = logging.getLogger("fincoach.advisor")
 
 
+class ReasoningDriver(BaseModel):
+    """One concrete factor that influenced an allocation decision.
+
+    Used for XAI ("why this recommendation") — connects each weight to a
+    specific data point the specialists actually returned.
+    """
+    source: str = Field(
+        description=(
+            "Which specialist or signal produced this factor. One of: "
+            "'risk_profiler', 'market_data', 'portfolio', 'budget', "
+            "'news', 'memory', 'user_input'."
+        )
+    )
+    factor: str = Field(
+        description=(
+            "One short clause naming the concrete observation in the user's "
+            "language. Examples: 'Risk skoru 78 (balanced)', "
+            "'Portföyde NVDA %42 ağırlık', 'Aylık nakit fazlası 3.500 TL', "
+            "'VOO 6 aylık trend +12%'."
+        )
+    )
+    impact: str = Field(
+        description=(
+            "How this factor moved the allocation, in the user's language. "
+            "Examples: 'hisse payını yukarı çeker', 'nakit tamponu artırır', "
+            "'tek hisseye konsantrasyonu sınırlar', 'nötr'."
+        )
+    )
+
+
 class AllocationBand(BaseModel):
     asset_class: str = Field(
         description=(
@@ -40,6 +70,14 @@ class AllocationBand(BaseModel):
     weight_pct_low: int = Field(ge=0, le=100)
     weight_pct_high: int = Field(ge=0, le=100)
     rationale: str = Field(description="One short sentence on why this weight for THIS user.")
+    drivers: list[ReasoningDriver] = Field(
+        default_factory=list,
+        description=(
+            "2-4 concrete drivers (source + factor + impact) that produced "
+            "THIS band's weight. Pull directly from specialist findings — "
+            "do not invent factors that were not in the inputs."
+        ),
+    )
 
 
 class AdvisorBrief(BaseModel):
@@ -57,6 +95,21 @@ class AdvisorBrief(BaseModel):
     open_questions: list[str] = Field(
         default_factory=list,
         description="Information still missing that would sharpen the plan (e.g. 'time horizon', 'tax residency').",
+    )
+    why_summary: str = Field(
+        default="",
+        description=(
+            "1-2 sentences (in the user's language) summarising the dominant "
+            "reasons this overall plan took its shape. Should reference the "
+            "user's risk profile and the most influential specialist signal."
+        ),
+    )
+    key_drivers: list[ReasoningDriver] = Field(
+        default_factory=list,
+        description=(
+            "3-5 dominant factors that shaped the OVERALL plan (not band-"
+            "specific). These power the XAI 'Why this recommendation?' panel."
+        ),
     )
 
 
@@ -84,9 +137,12 @@ HARD RULES:
      Treat these as starting bands; tighten them based on findings (e.g. if
      the budget desk shows no emergency fund, raise cash; if portfolio is
      already concentrated, lower equity).
-  3. Use the cash-flow / budget findings to size the plan. If the user has
-     no investable surplus, the FIRST next step is "build investable
-     surplus" — do not pretend money exists.
+  3. Use the cash-flow / budget findings to size the plan. ALWAYS provide
+     a full allocation framework with example fund types/references, even
+     when the user has no recorded investable surplus. Flag "build emergency
+     fund first" as next_step[0], but still answer the question — give the
+     allocation bands and reference instruments the user should look at once
+     ready. Never withhold the framework just because budget data is missing.
   4. Use the portfolio findings to flag concentration / gaps. If the user
      already holds 50% of one stock, your considerations must surface that.
   5. If a critical input is missing (e.g. no risk score, no budget data),
@@ -94,9 +150,23 @@ HARD RULES:
   6. Keep prose terse. Each rationale / consideration / step is ONE sentence.
   7. LANGUAGE: detect the language of the USER QUESTION below and write
      EVERY string field (headline, asset_class, rationale, considerations,
-     next_steps, open_questions) in THAT language. English question →
-     English output. Turkish question → Turkish output. This applies even
-     if specialist findings were summarised in a different language.
+     next_steps, open_questions, why_summary, drivers.factor, drivers.impact)
+     in THAT language. English question → English output. Turkish question
+     → Turkish output. This applies even if specialist findings were
+     summarised in a different language.
+  8. EXPLAINABILITY (XAI) — REQUIRED:
+     • For EACH allocation band, populate `drivers` with 2-4 concrete
+       factors PULLED FROM SPECIALIST FINDINGS (risk_profiler.extra,
+       portfolio data, budget numbers, market signals, news sentiment).
+       Each driver has `source`, `factor` (the observation), `impact`
+       (how it moved THIS band).
+     • Populate `key_drivers` (3-5 entries) with the OVERALL dominant
+       factors — typically: the user's risk profile, portfolio gaps,
+       cash runway, one market/news signal.
+     • Populate `why_summary` (1-2 sentences) explaining the plan as a
+       whole. Reference the risk profile and the strongest signal.
+     • NEVER invent a driver that did not appear in the inputs. If a
+       source is missing, omit it — do not fabricate numbers.
 
 Return ONLY the structured object."""
 

@@ -130,10 +130,18 @@ export interface PortfolioTotals {
 }
 
 export interface BriefingItem {
-  icon: "trending_up" | "trending_down" | "sparkles" | "alert_circle";
+  icon:
+    | "trending_up"
+    | "trending_down"
+    | "sparkles"
+    | "alert_circle"
+    | "flame"
+    | "newspaper"
+    | "coins";
   label: string;
   text: string;
   tone: "positive" | "negative" | "neutral" | "warning";
+  url?: string;
 }
 
 export interface ChatEvent {
@@ -146,10 +154,32 @@ export interface ChatEvent {
     | "citations"
     | "suggestions"
     | "agent_message"
+    | "agent_reasoning"
     | "agent_error"
     | "done"
     | "error";
   payload: Record<string, unknown>;
+}
+
+export interface ReasoningDriver {
+  source: string;
+  factor: string;
+  impact: string;
+}
+
+export interface AllocationDrivers {
+  asset_class: string;
+  drivers: ReasoningDriver[];
+}
+
+export interface ReasoningPayload {
+  agent: "advisor" | "risk_profiler" | string;
+  why_summary?: string;
+  key_drivers: ReasoningDriver[];
+  allocation_drivers?: AllocationDrivers[];
+  risk_score?: number;
+  profile?: string;
+  equity_band?: [number | undefined, number | undefined];
 }
 
 export interface Citation {
@@ -626,6 +656,21 @@ export async function createConversation(title?: string): Promise<Conversation> 
   return r.json();
 }
 
+export async function autotitleConversation(id: string, message: string): Promise<string | null> {
+  try {
+    const r = await apiFetch(`/conversations/${id}/autotitle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+    if (!r.ok) return null;
+    const data = (await r.json()) as { ok: boolean; title: string };
+    return data.title ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function updateConversationTitle(id: string, title: string): Promise<void> {
   await apiFetch(`/conversations/${id}`, {
     method: "PATCH",
@@ -731,4 +776,221 @@ export async function getFxRates(base: string): Promise<FxRates> {
   const r = await apiFetch(`/fx/rates?base=${encodeURIComponent(base)}`);
   if (!r.ok) throw new Error(`fx ${r.status}`);
   return r.json();
+}
+
+// ── Symbol autocomplete ─────────────────────────────────────────────────────
+
+export interface SymbolSuggestion {
+  ticker: string;
+  description: string;
+  asset_class: string;
+  source: string;
+  region?: string | null;
+}
+
+export async function resolveSymbol(q: string, limit = 10): Promise<SymbolSuggestion[]> {
+  const r = await apiFetch(`/symbols/resolve?q=${encodeURIComponent(q)}&limit=${limit}`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { results: SymbolSuggestion[] };
+  return data.results;
+}
+
+// ── Turkish funds (TEFAS) ───────────────────────────────────────────────────
+
+export interface FundRow {
+  code: string;
+  title: string | null;
+  price: number | null;
+  change_pct?: number | null;
+  category?: string | null;
+  risk?: string | null;
+  return_1m?: number | null;
+  return_3m?: number | null;
+  return_6m?: number | null;
+  return_1y?: number | null;
+  return_ytd?: number | null;
+  category_rank?: number | null;
+  category_total?: number | null;
+  as_of: string | null;
+}
+
+export interface FundHistoryPoint {
+  date: string;
+  price: number;
+}
+
+export async function searchFunds(
+  q: string,
+  kind: "mutual" | "pension" = "mutual",
+  limit = 20,
+): Promise<FundRow[]> {
+  const r = await apiFetch(
+    `/funds/search?q=${encodeURIComponent(q)}&kind=${kind}&limit=${limit}`,
+  );
+  if (!r.ok) return [];
+  const data = (await r.json()) as { results: FundRow[] };
+  return data.results;
+}
+
+export async function topFunds(
+  metric: "best_rank" | "worst_rank" = "best_rank",
+  limit = 20,
+  category?: string,
+): Promise<FundRow[]> {
+  const params = new URLSearchParams({ metric, limit: String(limit) });
+  if (category) params.set("category", category);
+  const r = await apiFetch(`/funds/top?${params.toString()}`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { results: FundRow[] };
+  return data.results;
+}
+
+export async function fundQuote(code: string): Promise<FundRow | null> {
+  const r = await apiFetch(`/funds/${encodeURIComponent(code)}/quote`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+export async function fundHistory(code: string, days = 90): Promise<FundHistoryPoint[]> {
+  const r = await apiFetch(`/funds/${encodeURIComponent(code)}/history?days=${days}`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { points: FundHistoryPoint[] };
+  return data.points;
+}
+
+// ── Insights (scanners + per-ticker analysis) ───────────────────────────────
+
+export interface EightDimResult {
+  ticker: string;
+  final_score: number | null;
+  recommendation: string | null;
+  dimensions: Record<string, { score: number; [k: string]: unknown }>;
+  weights: Record<string, number>;
+  unavailable_dimensions: string[];
+  degraded?: boolean;
+  error?: string;
+}
+
+export async function analyzeEightDim(ticker: string, fast = false): Promise<EightDimResult> {
+  const r = await apiFetch(`/insights/8dim/${encodeURIComponent(ticker)}?fast=${fast ? 1 : 0}`);
+  return r.json();
+}
+
+export interface TechnicalsResult {
+  ticker: string;
+  sma?: { period: number; value: number | null; signal: string };
+  rsi?: { period: number; value: number | null; signal: string };
+  current_price?: number | null;
+  error?: string;
+}
+
+export async function getTechnicals(ticker: string): Promise<TechnicalsResult> {
+  const r = await apiFetch(`/insights/technicals/${encodeURIComponent(ticker)}`);
+  return r.json();
+}
+
+export interface DividendResult {
+  ticker: string;
+  yield?: number | null;
+  payout_ratio?: number | null;
+  growth_5y_cagr?: number | null;
+  consecutive_increases?: number | null;
+  safety_score?: number | null;
+  income_rating?: string | null;
+  error?: string;
+}
+
+export async function getDividend(ticker: string): Promise<DividendResult> {
+  const r = await apiFetch(`/insights/dividend/${encodeURIComponent(ticker)}`);
+  return r.json();
+}
+
+export interface NewsArticle {
+  title: string;
+  source: string;
+  published_at?: string;
+  url: string;
+  snippet?: string;
+}
+
+export async function searchNews(query: string, limit = 5): Promise<NewsArticle[]> {
+  const r = await apiFetch(
+    `/insights/news?q=${encodeURIComponent(query)}&limit=${limit}`,
+  );
+  if (!r.ok) return [];
+  const data = (await r.json()) as { articles: NewsArticle[] };
+  return data.articles;
+}
+
+export interface TrendsResult {
+  top_gainers?: { ticker: string; price: number | null; change_pct: number | null; volume: number | null }[];
+  top_losers?: { ticker: string; price: number | null; change_pct: number | null; volume: number | null }[];
+  most_active?: { ticker: string; price: number | null; change_pct: number | null; volume: number | null }[];
+  crypto_trending?: { name: string; symbol: string; rank?: number | null }[];
+  crypto_global?: { market_cap_usd?: number; btc_dominance?: number; market_cap_change_pct_24h?: number };
+  as_of?: string;
+}
+
+export async function getTrends(): Promise<TrendsResult> {
+  const r = await apiFetch(`/insights/trends`);
+  return r.json();
+}
+
+export interface RumorItem {
+  title: string;
+  ticker?: string | null;
+  source: string;
+  sentiment?: number;
+  sentiment_label?: string;
+  relevance?: number;
+  impact_score?: number;
+  category?: string;
+  url: string;
+  published_at?: string;
+}
+
+export async function getRumors(): Promise<RumorItem[]> {
+  const r = await apiFetch(`/insights/rumors`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { rumors: RumorItem[] };
+  return data.rumors;
+}
+
+// ── Memory / conversation search ────────────────────────────────────────────
+
+export interface MemoryHit {
+  text: string;
+  metadata: Record<string, unknown>;
+}
+
+export async function searchMemory(q: string, k = 5): Promise<MemoryHit[]> {
+  const r = await apiFetch(`/memory/search?q=${encodeURIComponent(q)}&k=${k}`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { hits: MemoryHit[] };
+  return data.hits;
+}
+
+// ── Net worth history ──────────────────────────────────────────────────────
+
+export interface NetWorthPoint {
+  date: string;
+  value: number;
+  currency: string;
+}
+
+export async function captureNetWorth(value: number, currency: string): Promise<NetWorthPoint> {
+  const r = await apiFetch(`/networth/snapshot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value, currency }),
+  });
+  if (!r.ok) throw new Error(`networth snapshot ${r.status}`);
+  return r.json();
+}
+
+export async function netWorthHistory(days = 30): Promise<NetWorthPoint[]> {
+  const r = await apiFetch(`/networth/history?days=${days}`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { points: NetWorthPoint[] };
+  return data.points;
 }

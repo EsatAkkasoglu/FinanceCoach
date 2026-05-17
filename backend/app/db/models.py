@@ -214,6 +214,25 @@ class Document(Base):
     parsed_count = Column(Integer, default=0)
 
 
+class NetWorthSnapshot(Base):
+    """Daily net-worth snapshot for sparkline / trend charts.
+
+    Captured once per day per user. ``value`` is the converted total in
+    ``currency`` (typically USD or the user's display currency at write-time).
+    Two rows on the same date for the same user are unique-conflicted; the
+    writer upserts so manual refreshes don't pollute the timeline.
+    """
+
+    __tablename__ = "net_worth_snapshot"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    captured_on = Column(Date, nullable=False, index=True)
+    value = Column(Float, nullable=False)
+    currency = Column(String(8), nullable=False, default="USD")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class MessageFeedback(Base):
     """User rating + optional reason on a specific assistant message.
 

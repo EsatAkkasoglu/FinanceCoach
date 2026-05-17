@@ -51,6 +51,21 @@ def normalize_content(content: Any) -> str:
     return str(content) if content is not None else ""
 
 
+def latest_human_turn(messages: list) -> list:
+    """Return only the current user turn for specialist ReAct agents.
+
+    The supervisor checkpoint stores prior specialist outputs in ``messages``.
+    Passing that whole list back into every specialist repeats old analysis and
+    tool results, which can burn through per-minute input-token quota quickly.
+    """
+    from langchain_core.messages import HumanMessage
+
+    for msg in reversed(messages or []):
+        if isinstance(msg, HumanMessage):
+            return [msg]
+    return []
+
+
 def _summarize_tool_output(output: Any, max_len: int = 600) -> Any:
     """Best-effort: keep dicts/lists structured; truncate strings."""
     if output is None:

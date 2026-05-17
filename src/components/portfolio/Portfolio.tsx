@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Plus, Briefcase, Pencil, Trash2, Loader2, Sparkles,
+  Plus, Briefcase, Pencil, Trash2, Loader2, Sparkles, Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,6 +11,8 @@ import { useDashboardStore } from "@/store";
 import { useFxRates, type UseFxRates } from "@/lib/fx";
 import { Button } from "@/components/ui/Button";
 import { HoldingFormModal } from "./HoldingFormModal";
+import { TickerDrawer } from "@/components/insights/TickerDrawer";
+import { Disclaimer } from "@/components/ui/Disclaimer";
 
 const ASSET_BADGE: Record<string, string> = {
   stock: "bg-gain/15 text-gain",
@@ -29,6 +31,7 @@ export function Portfolio() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Holding | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [analysisTicker, setAnalysisTicker] = useState<string | null>(null);
 
   const invalidateDashboard = useDashboardStore((s) => s.invalidate);
   const fx = useFxRates();
@@ -110,6 +113,7 @@ export function Portfolio() {
             fx={fx}
             onEdit={setEditing}
             onDelete={handleDelete}
+            onAnalyze={setAnalysisTicker}
           />
         </>
       )}
@@ -125,6 +129,8 @@ export function Portfolio() {
         onSaved={refresh}
         editing={editing}
       />
+      <TickerDrawer ticker={analysisTicker} onClose={() => setAnalysisTicker(null)} />
+      <Disclaimer className="mt-8 text-center" />
     </div>
   );
 }
@@ -190,13 +196,14 @@ function SummaryRow({
 // ── Holdings table ──────────────────────────────────────────────────────────
 
 function HoldingsTable({
-  holdings, deletingId, fx, onEdit, onDelete,
+  holdings, deletingId, fx, onEdit, onDelete, onAnalyze,
 }: {
   holdings: Holding[];
   deletingId: number | null;
   fx: UseFxRates;
   onEdit: (h: Holding) => void;
   onDelete: (h: Holding) => void;
+  onAnalyze: (ticker: string) => void;
 }) {
   // Convert a per-holding figure to the display currency, falling back to
   // formatting in the holding's native currency when rates aren't ready.
@@ -253,21 +260,33 @@ function HoldingsTable({
                 {formatPercent(h.pnl_pct ?? 0)}
               </td>
               <td className="px-2 py-3">
-                <div className="flex items-center justify-end gap-0.5 opacity-0 transition group-hover:opacity-100">
-                  <button
-                    onClick={() => onEdit(h)}
-                    className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-accent"
-                    aria-label={`Edit ${h.ticker}`}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => onDelete(h)}
-                    className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-loss"
-                    aria-label={`Delete ${h.ticker}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                <div className="flex items-center justify-end gap-0.5">
+                  {(h.asset_class === "stock" || h.asset_class === "etf") && (
+                    <button
+                      onClick={() => onAnalyze(h.ticker)}
+                      className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-accent"
+                      title={`8-dim analysis for ${h.ticker}`}
+                      aria-label={`Analyze ${h.ticker}`}
+                    >
+                      <Activity className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      onClick={() => onEdit(h)}
+                      className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-accent"
+                      aria-label={`Edit ${h.ticker}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(h)}
+                      className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-loss"
+                      aria-label={`Delete ${h.ticker}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </td>
             </tr>

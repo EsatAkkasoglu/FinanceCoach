@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -171,12 +171,10 @@ export function OnboardingWizard() {
 
         {/* Step body */}
         <div className="card min-h-[420px]">
-          <AnimatePresence mode="wait">
-            <motion.div
+          <motion.div
               key={step}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
               {step === 0 && (
@@ -223,7 +221,6 @@ export function OnboardingWizard() {
                 />
               )}
             </motion.div>
-          </AnimatePresence>
         </div>
 
         {/* Navigation */}

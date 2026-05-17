@@ -63,33 +63,50 @@ def _is_av_rate_limited(exc: AlphaVantageError) -> bool:
 
 
 def _quote_stock(symbol: str) -> dict[str, Any]:
-    """AV GLOBAL_QUOTE → yfinance fallback on rate limit."""
+    """AV GLOBAL_QUOTE → yfinance → İş Yatırım (.IS only) fallback chain."""
+    # Skip AV entirely for non-US tickers (e.g. .IS suffix) — AV has no
+    # coverage there and the call wastes our daily quota.
+    if "." not in symbol:
+        try:
+            q = av.global_quote(symbol)
+            return {
+                "price": q["price"],
+                "previous_close": q["previous_close"],
+                "currency": "USD",
+                "via": "global_quote",
+                "volume": q.get("volume"),
+                "as_of_date": q.get("latest_trading_day"),
+                "source": "alpha_vantage",
+            }
+        except AlphaVantageError:
+            pass  # Any failure → try yfinance.
+
     try:
-        q = av.global_quote(symbol)
+        q = yf_svc.quote(symbol)
         return {
             "price": q["price"],
             "previous_close": q["previous_close"],
-            "currency": "USD",
-            "via": "global_quote",
+            "currency": q.get("currency", "USD"),
+            "via": "yfinance",
             "volume": q.get("volume"),
-            "as_of_date": q.get("latest_trading_day"),
-            "source": "alpha_vantage",
+            "as_of_date": _now_iso(),
+            "source": "yfinance",
         }
-    except AlphaVantageError as exc:
-        if not _is_av_rate_limited(exc):
-            raise
-        log.debug("AV rate-limited for stock %s — falling back to yfinance", symbol)
-
-    q = yf_svc.quote(symbol)
-    return {
-        "price": q["price"],
-        "previous_close": q["previous_close"],
-        "currency": q.get("currency", "USD"),
-        "via": "yfinance",
-        "volume": q.get("volume"),
-        "as_of_date": _now_iso(),
-        "source": "yfinance",
-    }
+    except YFinanceError:
+        # Last resort for BIST tickers — İş Yatırım public endpoint.
+        if symbol.upper().endswith(".IS"):
+            from app.services import isyatirim as iy_svc  # noqa: PLC0415
+            q = iy_svc.quote(symbol)
+            return {
+                "price": q["price"],
+                "previous_close": q["previous_close"],
+                "currency": "TRY",
+                "via": "isyatirim",
+                "volume": q.get("volume"),
+                "as_of_date": q.get("as_of"),
+                "source": "isyatirim",
+            }
+        raise
 
 
 def _quote_index(symbol: str) -> dict[str, Any]:
@@ -476,31 +493,37 @@ _RISK_WEIGHTS = {
 }
 
 
-def _score_earnings_surprise(symbol: str) -> tuple[float, dict[str, Any]]:
-    """AV-only dimension — no yfinance equivalent for surprise %."""
-    try:
-        payload = av.earnings(symbol)
-    except AlphaVantageError as exc:
-        if _is_av_rate_limited(exc):
-            return 0.5, {"error": "unavailable (AV rate-limited; no fallback)", "unavailable": True}
-        return 0.5, {"error": str(exc), "unavailable": True}
-    quarters = (payload.get("quarterlyEarnings") or [])[:4]
-    if not quarters:
-        return 0.5, {"surprises": []}
-    surprises: list[float] = []
-    for q in quarters:
-        try:
-            surprises.append(float(q.get("surprisePercentage")))
-        except (TypeError, ValueError):
-            continue
+def _surprises_to_score(surprises: list[float], *, source: str) -> tuple[float, dict[str, Any]]:
     if not surprises:
-        return 0.5, {"surprises": []}
+        return 0.5, {"surprises": [], "source": source}
     avg = sum(surprises) / len(surprises)
     score = max(0.0, min(1.0, 0.5 + (avg / 40.0)))
     return score, {
         "recent_surprise_pct": round(surprises[0], 2),
         "avg_4q_surprise_pct": round(avg, 2),
+        "source": source,
     }
+
+
+def _score_earnings_surprise(symbol: str) -> tuple[float, dict[str, Any]]:
+    try:
+        payload = av.earnings(symbol)
+        quarters = (payload.get("quarterlyEarnings") or [])[:4]
+        surprises: list[float] = []
+        for q in quarters:
+            try:
+                surprises.append(float(q.get("surprisePercentage")))
+            except (TypeError, ValueError):
+                continue
+        return _surprises_to_score(surprises, source="alpha_vantage")
+    except AlphaVantageError:
+        pass
+    try:
+        rows = yf_svc.earnings_surprises(symbol, limit=4)
+        surprises = [r["surprise_pct"] for r in rows]
+        return _surprises_to_score(surprises, source="yfinance")
+    except YFinanceError as exc:
+        return 0.5, {"error": f"yfinance fallback failed: {exc}", "unavailable": True}
 
 
 def _fundamentals_from_overview(ov: dict[str, Any], *, source: str) -> tuple[float, dict[str, Any]]:
@@ -538,9 +561,8 @@ def _fundamentals_from_overview(ov: dict[str, Any], *, source: str) -> tuple[flo
 def _score_fundamentals(symbol: str) -> tuple[float, dict[str, Any]]:
     try:
         return _fundamentals_from_overview(av.overview(symbol), source="alpha_vantage")
-    except AlphaVantageError as exc:
-        if not _is_av_rate_limited(exc):
-            return 0.5, {"error": str(exc), "unavailable": True}
+    except AlphaVantageError:
+        pass  # Any AV failure (rate-limit, invalid symbol, non-US) → try yfinance.
     try:
         return _fundamentals_from_overview(yf_svc.overview(symbol), source="yfinance")
     except YFinanceError as exc:
@@ -577,9 +599,8 @@ def _analyst_from_overview(ov: dict[str, Any], *, source: str) -> tuple[float, d
 def _score_analyst_sentiment(symbol: str) -> tuple[float, dict[str, Any]]:
     try:
         return _analyst_from_overview(av.overview(symbol), source="alpha_vantage")
-    except AlphaVantageError as exc:
-        if not _is_av_rate_limited(exc):
-            return 0.5, {"error": str(exc), "unavailable": True}
+    except AlphaVantageError:
+        pass
     try:
         return _analyst_from_overview(yf_svc.overview(symbol), source="yfinance")
     except YFinanceError as exc:
@@ -608,9 +629,8 @@ def _score_historical(symbol: str) -> tuple[float, dict[str, Any]]:
         score, detail = _historical_from_bars(av.time_series_daily(symbol, outputsize="full"))
         detail["source"] = "alpha_vantage"
         return score, detail
-    except AlphaVantageError as exc:
-        if not _is_av_rate_limited(exc):
-            return 0.5, {"error": str(exc), "unavailable": True}
+    except AlphaVantageError:
+        pass
     try:
         bars = yf_svc.history(symbol, period="1y")
         score, detail = _historical_from_bars(bars)
@@ -673,9 +693,7 @@ def _score_sector(sector: str | None) -> tuple[float, dict[str, Any]]:
     try:
         q = av.global_quote(etf)
         change = q.get("change_percent")
-    except AlphaVantageError as exc:
-        if not _is_av_rate_limited(exc):
-            return 0.5, {"sector": sector, "etf": etf, "error": str(exc), "unavailable": True}
+    except AlphaVantageError:
         try:
             yq = yf_svc.quote(etf)
             price, prev = yq.get("price"), yq.get("previous_close")
@@ -727,9 +745,8 @@ def _score_momentum(symbol: str) -> tuple[float, dict[str, Any]]:
         except AlphaVantageError:
             price = None
         return _momentum_from_values(rsi_v, sma_v, price, source="alpha_vantage")
-    except AlphaVantageError as exc:
-        if not _is_av_rate_limited(exc):
-            return 0.5, {"error": str(exc), "unavailable": True}
+    except AlphaVantageError:
+        pass
     try:
         rsi_rows = yf_svc.rsi(symbol, period=14)
         sma_rows = yf_svc.sma(symbol, period=50)

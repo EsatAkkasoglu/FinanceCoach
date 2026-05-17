@@ -11,7 +11,7 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import build_findings, extract_tool_calls
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
 from app.tools.portfolio_tools import (
     add_holding,
     add_holding_by_value,
@@ -143,7 +143,7 @@ def _build_agent(risk_profile: str = "balanced"):
 async def run(state: AgentState) -> AgentState:
     risk_profile = state.get("risk_profile", "balanced")
     agent = _build_agent(risk_profile)
-    result = await agent.ainvoke({"messages": state.get("messages", [])})
+    result = await agent.ainvoke({"messages": latest_human_turn(state.get("messages", []))})
     msgs = result["messages"]
     return {
         "messages": msgs[-1:],

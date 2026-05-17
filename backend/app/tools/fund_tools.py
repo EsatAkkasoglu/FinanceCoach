@@ -50,19 +50,131 @@ def _fold_tr(s: str) -> str:
 
 
 def _crawler():
-    """Lazy import — tefas-crawler hits the network on init in some versions.
-
-    Note on ``fund_limit``: the new tefas.gov.tr API no longer supports a
-    bulk-by-date request. ``fetch(kind=...)`` without ``name`` fans out one
-    HTTP request per fund. Each costs ~50-200ms, so a limit of 1500 → 60s+
-    first call. We cap at 300 for the universe snapshot — covers the most-
-    liquid retail funds (Ak/Garanti/İş/QNB/Ziraat majors) while keeping
-    first-search latency under ~10s.
-    """
+    """Lazy import — tefas-crawler used only for per-fund history fetches."""
     from tefas import Crawler
     c = Crawler()
-    c.fund_limit = 300
     return c
+
+
+_TEFAS_BULK_URL = "https://www.tefas.gov.tr/api/funds/fonGetiriBazliBilgiGetir"
+
+
+def _fetch_universe_tefas_bulk(kind: str) -> tuple[dict, ...]:
+    """Single-request snapshot of the entire TEFAS fund universe.
+
+    This is the JSON API powering tefas.gov.tr's own "Getiri Bazlı Bilgi"
+    page — one POST returns every fund (~1000 mutual, ~400 pension) with
+    name, category, risk score, and 1m/3m/6m/YTD/1y/3y/5y returns.
+
+    Note: bulk endpoint does NOT include current NAV price. Price is fetched
+    on demand by ``get_fund_quote`` when the user opens a fund detail.
+    """
+    import requests  # noqa: PLC0415
+
+    payload = {
+        "dil": "TR",
+        "fonTipi": kind,  # YAT | EMK
+        "kurucuKodu": None,
+        "sfonTurKod": None,
+        "fonTurAciklama": None,
+        "islem": 1,
+        "fonTurKod": None,
+        "fonGrubu": None,
+        "donemGetiri1a": "1",
+        "donemGetiri3a": "1",
+        "donemGetiri6a": "1",
+        "donemGetiri1y": "1",
+        "donemGetiriyb": "1",
+        "donemGetiri3y": "1",
+        "donemGetiri5y": "1",
+        "basTarih": None,
+        "bitTarih": None,
+        "calismaTipi": 2,
+        "getiriOrani": "1",
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; FinCoach/1.0)",
+        "Referer": "https://www.tefas.gov.tr/",
+    }
+    r = requests.post(_TEFAS_BULK_URL, json=payload, headers=headers, timeout=20)
+    r.raise_for_status()
+    rows = (r.json() or {}).get("resultList") or []
+    today = date_cls.today().isoformat()
+    out: list[dict] = []
+    for r_ in rows:
+        code = (r_.get("fonKodu") or "").strip()
+        if not code:
+            continue
+        out.append(
+            {
+                "code": code,
+                "title": (r_.get("fonUnvan") or "").strip(),
+                "category": (r_.get("fonTurAciklama") or "").strip(),
+                "risk": r_.get("riskDegeri"),
+                "return_1m": r_.get("getiri1a"),
+                "return_3m": r_.get("getiri3a"),
+                "return_6m": r_.get("getiri6a"),
+                "return_1y": r_.get("getiri1y"),
+                "return_ytd": r_.get("getiriyb"),
+                "price": None,
+                "category_rank": None,
+                "category_total": None,
+                "date": today,
+            }
+        )
+    return tuple(out)
+
+
+def _fetch_universe_isyatirim() -> tuple[dict, ...]:
+    """Fallback: İş Yatırım fund list endpoint.
+
+    Currently behind 401 from server-side IPs; kept as a stub so the fallback
+    chain remains in place if the policy changes.
+    """
+    import requests  # noqa: PLC0415
+
+    url = (
+        "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/"
+        "Common/Data.aspx/FonTumIstatistik"
+    )
+    params = {"strFundType": "YAT", "strPeriod": "1A", "intIslemSayisi": "0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; FinCoach/1.0)",
+        "Referer": "https://www.isyatirim.com.tr/tr-tr/analiz/fon/Sayfalar/default.aspx",
+        "Accept": "application/json, text/plain, */*",
+    }
+    r = requests.get(url, params=params, headers=headers, timeout=15)
+    r.raise_for_status()
+    rows = (r.json() or {}).get("data") or []
+    today = date_cls.today().isoformat()
+    out: list[dict] = []
+    for r_ in rows:
+        code = (r_.get("FONKODU") or "").strip()
+        if not code:
+            continue
+        try:
+            price = float(r_.get("SONFIYAT") or 0) or None
+        except (TypeError, ValueError):
+            price = None
+        out.append(
+            {
+                "code": code,
+                "title": (r_.get("FONUNVAN") or "").strip(),
+                "category": None,
+                "risk": None,
+                "return_1m": None,
+                "return_3m": None,
+                "return_6m": None,
+                "return_1y": None,
+                "return_ytd": None,
+                "price": price,
+                "category_rank": None,
+                "category_total": None,
+                "date": today,
+            }
+        )
+    return tuple(out)
 
 
 def prewarm_universe() -> None:
@@ -102,16 +214,39 @@ def _history_cached(code: str, days: int, today_iso: str) -> tuple[dict, ...]:
 
 @lru_cache(maxsize=4)
 def _universe_cached(kind: str, today_iso: str) -> tuple[dict, ...]:
-    """Snapshot of latest NAVs across the whole fund universe of one kind.
+    """Full snapshot of the TEFAS fund universe of one kind.
 
-    Used for search and ranked lists. ``kind`` = "YAT" (mutual) | "EMK" (pension).
-    Returns one row per fund (the most recent NAV in the window)."""
+    ``kind`` = "YAT" (mutual) | "EMK" (pension).
+
+    Strategy (each tier covers the whole ~1500-fund universe in one request;
+    we fall through on failure):
+        1. TEFAS BindComparisonFundReturns — primary, has category rank.
+        2. İş Yatırım FonTumIstatistik    — fallback, no rank but full list.
+        3. tefas-crawler bulk fetch       — last resort, slow per-fund fan-out.
+    """
+    try:
+        rows = _fetch_universe_tefas_bulk(kind)
+        if rows:
+            log.info("TEFAS bulk universe ok (%s): %d funds", kind, len(rows))
+            return rows
+    except Exception as exc:  # noqa: BLE001
+        log.warning("TEFAS bulk universe failed (%s): %s", kind, exc)
+
+    if kind == "YAT":
+        try:
+            rows = _fetch_universe_isyatirim()
+            if rows:
+                log.info("İş Yatırım universe fallback ok: %d funds", len(rows))
+                return rows
+        except Exception as exc:  # noqa: BLE001
+            log.warning("İş Yatırım universe fallback failed: %s", exc)
+
     end = date_cls.fromisoformat(today_iso)
-    start = end - timedelta(days=5)  # ensure we hit a business day
+    start = end - timedelta(days=5)
     try:
         df = _crawler().fetch(start=start.isoformat(), end=end.isoformat(), kind=kind)
-    except Exception as exc:
-        log.warning("TEFAS universe fetch failed (%s): %s", kind, exc)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("tefas-crawler universe fallback failed (%s): %s", kind, exc)
         return ()
     if df is None or df.empty:
         return ()
@@ -219,11 +354,11 @@ def list_top_funds(
     metric: Literal["best_rank", "worst_rank"] = "best_rank",
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """List the top or bottom mutual funds by category rank.
+    """List the top or bottom mutual funds by 6-month return.
 
-    Rank is *within the fund's own category* (e.g. equity funds), so it
-    compares like-for-like rather than absolute return. Lower rank = better
-    performance vs peers.
+    The TEFAS bulk endpoint no longer exposes within-category rank, so we
+    sort by 6-month return as a proxy. ``best_rank`` = highest returns,
+    ``worst_rank`` = laggards.
 
     Args:
         metric: 'best_rank' (top performers) or 'worst_rank' (laggards)
@@ -232,7 +367,7 @@ def list_top_funds(
     universe = _universe_cached("YAT", today_iso=date_cls.today().isoformat())
     if not universe:
         return []
-    rows = [f for f in universe if f.get("category_rank") is not None]
-    reverse = metric == "worst_rank"
-    rows.sort(key=lambda x: x["category_rank"], reverse=reverse)
+    rows = [f for f in universe if f.get("return_6m") is not None]
+    descending = metric == "best_rank"
+    rows.sort(key=lambda x: x["return_6m"], reverse=descending)
     return rows[:limit]

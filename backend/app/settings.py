@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Behavior flags
     demo_mode: bool = Field(default=False, alias="FINCOACH_DEMO_MODE")
 
+    # Admin allowlist (comma-separated usernames). Empty = admin endpoints disabled.
+    admin_usernames: str = Field(default="", alias="FINCOACH_ADMIN_USERNAMES")
+
     # Auth
     jwt_secret: str = Field(default="dev-secret-change-me-in-production", alias="FINCOACH_JWT_SECRET")
     jwt_algorithm: str = "HS256"

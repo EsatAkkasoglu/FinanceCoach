@@ -3,7 +3,7 @@
  *
  * Sections:
  *   - Personalized hero header: greeting + avatar + risk badge
- *   - Net Worth card: sum of holdings (incl. cash) with day P&L
+ *   - Net Worth card: sum of holdings (incl. cash) with all-time P&L
  *   - Budget snapshot: income vs expense MTD + savings rate
  *   - Daily Brief card: 3 dynamic items from /briefing
  *   - Portfolio Donut: allocation by asset class
@@ -11,33 +11,39 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import {
-  TrendingUp, TrendingDown, Sparkles, AlertCircle, type LucideIcon,
+  TrendingUp, TrendingDown, Sparkles, AlertCircle, Flame, Newspaper, Coins,
+  type LucideIcon,
   Loader2, ArrowUpRight, ArrowDownRight, PiggyBank,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+  LineChart, Line, XAxis, YAxis,
 } from "recharts";
 
-import { listPortfolio, getBriefing, getBudgetSummary, type Holding, type PortfolioTotals, type BriefingItem, type BudgetSummary } from "@/lib/api";
+import { listPortfolio, getBriefing, getBudgetSummary, captureNetWorth, netWorthHistory, type Holding, type PortfolioTotals, type BriefingItem, type BudgetSummary, type NetWorthPoint } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { useFxRates } from "@/lib/fx";
 import { cn } from "@/lib/cn";
 import { useDashboardStore, useUserStore } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
+import { Disclaimer } from "@/components/ui/Disclaimer";
 
 const ICONS: Record<BriefingItem["icon"], LucideIcon> = {
   trending_up: TrendingUp,
   trending_down: TrendingDown,
   sparkles: Sparkles,
   alert_circle: AlertCircle,
+  flame: Flame,
+  newspaper: Newspaper,
+  coins: Coins,
 };
 
 const ASSET_COLORS: Record<string, string> = {
-  stock: "#1FB57A",
-  etf: "#3FCB95",
-  crypto: "#F59E0B",
-  bond: "#3B82F6",
-  cash: "#9CA3AF",
+  stock: "#14B8A6",   // teal — non-brand so it doesn't read as interactive
+  etf: "#8B5CF6",     // violet — was #3FCB95, too close to stock green
+  crypto: "#F59E0B",  // amber
+  bond: "#3B82F6",    // blue
+  cash: "#9CA3AF",    // gray
 };
 
 // Cache verisi 5 dakika taze kabul edilir
@@ -70,6 +76,7 @@ export function Dashboard() {
   const holdings = cache?.holdings ?? [];
   const totals = cache?.totals ?? null;
   const briefing = cache?.briefing ?? null;
+  const [history, setHistory] = useState<NetWorthPoint[]>([]);
 
   useEffect(() => {
     if (cache && Date.now() - cache.fetchedAt < STALE_MS) return;
@@ -88,6 +95,12 @@ export function Dashboard() {
         if (cancelled) return;
         setCache({ holdings: p.holdings, totals: p.totals, briefing: b.items, fetchedAt: Date.now() });
         setBudget(budgetData);
+
+        // Capture today's net-worth snapshot (idempotent) + load 30-day history.
+        if (p.totals && p.totals.count > 0) {
+          captureNetWorth(p.totals.value, "USD").catch(() => {});
+        }
+        netWorthHistory(30).then((pts) => { if (!cancelled) setHistory(pts); }).catch(() => {});
       } catch (err) {
         if (!cancelled) setError((err as Error).message);
       } finally {
@@ -101,19 +114,24 @@ export function Dashboard() {
 
   return (
     <div>
+      {/* Top bar — anchors page title vs page content */}
+      <div className="mb-6 flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+          Dashboard
+        </span>
+        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide", badge.cls)}>
+          {badge.label}
+        </span>
+      </div>
+
       {/* Personalized hero header */}
-      <div className="mb-8 flex items-center gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/20 text-2xl leading-none shadow-glow shrink-0">
+      <div className="mb-10 flex items-center gap-5">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/20 text-3xl leading-none shadow-glow shrink-0">
           {avatarMeta.emoji}
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight truncate">{greeting}</h1>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-sm text-[hsl(var(--text-muted))]">Today at a glance</span>
-            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide", badge.cls)}>
-              {badge.label}
-            </span>
-          </div>
+          <h1 className="text-[32px] font-semibold leading-tight tracking-tight truncate">{greeting}</h1>
+          <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">Today at a glance</p>
         </div>
       </div>
 
@@ -123,23 +141,26 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <NetWorthCard totals={totals} holdings={holdings} loading={loading && !cache} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-6">
+        <NetWorthCard totals={totals} holdings={holdings} history={history} loading={loading && !cache} />
         <BudgetSnapshotCard budget={budget} loading={loading && !cache} />
         <BriefingCard items={briefing} loading={loading && !cache} />
         <PortfolioCard holdings={holdings} loading={loading && !cache} />
         <HoldingsTable holdings={holdings} loading={loading && !cache} />
       </div>
+
+      <Disclaimer className="mt-8 text-center" />
     </div>
   );
 }
 
 // ---------- Net Worth ----------
 function NetWorthCard({
-  totals, holdings, loading,
+  totals, holdings, history, loading,
 }: {
   totals: PortfolioTotals | null;
   holdings: Holding[];
+  history: NetWorthPoint[];
   loading: boolean;
 }) {
   const fx = useFxRates();
@@ -162,7 +183,7 @@ function NetWorthCard({
     pnlPct = c > 0 ? (pnl / c) * 100 : 0;
   }
   return (
-    <div className="card lg:col-span-1">
+    <div className="card lg:col-span-2">
       <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Net worth</div>
       {loading ? (
         <div className="mt-2 flex h-12 items-center">
@@ -174,6 +195,27 @@ function NetWorthCard({
           <div className={cn("mt-1 text-sm", pnl >= 0 ? "text-gain" : "text-loss")}>
             {formatPercent(pnlPct)} ({formatCurrency(pnl, displayCcy)}) all-time
           </div>
+          {history.length >= 2 && (
+            <div className="mt-3 h-12">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history}>
+                  <XAxis dataKey="date" hide />
+                  <YAxis domain={["dataMin", "dataMax"]} hide />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke={pnl >= 0 ? "#10B981" : "#EF4444"}
+                    strokeWidth={1.5}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <p className="text-[10px] text-[hsl(var(--text-muted))]">
+                Last {history.length} days
+              </p>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -223,7 +265,7 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
   }, [totalIncome, totalExpense, monthlyIncome, fx]);
 
   return (
-    <div className="card lg:col-span-1">
+    <div className="card lg:col-span-2">
       <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">This month</div>
       {loading ? (
         <div className="mt-2 flex h-12 items-center">
@@ -318,7 +360,7 @@ function PortfolioCard({ holdings, loading }: { holdings: Holding[]; loading: bo
   const data = aggregateByAssetClass(convertedHoldings);
   const hasData = data.length > 0;
   return (
-    <div className="card lg:col-span-1">
+    <div className="card lg:col-span-2">
       <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Allocation</div>
       {loading ? (
         <div className="mt-3 flex h-44 items-center justify-center">
@@ -349,7 +391,13 @@ function PortfolioCard({ holdings, loading }: { holdings: Holding[]; loading: bo
                   borderRadius: 8,
                   fontSize: 12,
                 }}
-                formatter={(v: number) => formatCurrency(v, displayCcy)}
+                formatter={(v: number, name: string) => [
+                  formatCurrency(v, displayCcy),
+                  name.charAt(0).toUpperCase() + name.slice(1),
+                ]}
+                labelFormatter={() => ""}
+                separator=": "
+                itemStyle={{ color: "hsl(var(--text))" }}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -394,7 +442,7 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
     return conv == null ? formatCurrency(v, native) : formatCurrency(conv, fx.target);
   }
   return (
-    <div className="card lg:col-span-2">
+    <div className="card lg:col-span-4">
       <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Holdings</div>
       {loading ? (
         <div className="mt-3 flex h-32 items-center">
@@ -406,25 +454,25 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
         </p>
       ) : (
         <div className="mt-3 overflow-x-auto">
-          <table className="num min-w-full text-xs">
-            <thead className="text-[hsl(var(--text-muted))]">
+          <table className="num min-w-full text-sm">
+            <thead className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
               <tr className="border-b border-[hsl(var(--border))]">
-                <th className="py-2 pr-4 text-left font-normal">Ticker</th>
-                <th className="py-2 pr-4 text-right font-normal">Qty</th>
-                <th className="py-2 pr-4 text-right font-normal">Price</th>
-                <th className="py-2 pr-4 text-right font-normal">Value</th>
-                <th className="py-2 text-right font-normal">P&L</th>
+                <th className="py-3 pr-4 text-left font-normal">Ticker</th>
+                <th className="py-3 pr-4 text-right font-normal">Qty</th>
+                <th className="py-3 pr-4 text-right font-normal">Price</th>
+                <th className="py-3 pr-4 text-right font-normal">Value</th>
+                <th className="py-3 text-right font-normal">P&L</th>
               </tr>
             </thead>
             <tbody>
               {holdings.map((h) => (
                 <tr key={h.ticker} className="border-b border-[hsl(var(--border))] last:border-0">
-                  <td className="py-2 pr-4 font-semibold">{h.ticker}</td>
-                  <td className="py-2 pr-4 text-right">{h.quantity}</td>
-                  <td className="py-2 pr-4 text-right">{fmt(h.current_price ?? h.cost_basis, h)}</td>
-                  <td className="py-2 pr-4 text-right">{fmt(h.current_value ?? 0, h)}</td>
+                  <td className="py-3 pr-4 font-semibold">{h.ticker}</td>
+                  <td className="py-3 pr-4 text-right">{h.quantity}</td>
+                  <td className="py-3 pr-4 text-right">{fmt(h.current_price ?? h.cost_basis, h)}</td>
+                  <td className="py-3 pr-4 text-right">{fmt(h.current_value ?? 0, h)}</td>
                   <td className={cn(
-                    "py-2 text-right",
+                    "py-3 text-right font-medium",
                     (h.pnl ?? 0) >= 0 ? "text-gain" : "text-loss"
                   )}>
                     {formatPercent(h.pnl_pct ?? 0)}

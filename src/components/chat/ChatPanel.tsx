@@ -3,12 +3,12 @@ import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2, 
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { streamChat, sendFeedback, type Citation as ApiCitation } from "@/lib/api";
+import { streamChat, sendFeedback, autotitleConversation, type Citation as ApiCitation } from "@/lib/api";
 import { parseToolResult } from "@/lib/parseToolResult";
 import { useChatStore, useAgentVizStore, useConversationStore, type ToolActivity } from "@/store";
 import { cn } from "@/lib/cn";
-import { AgentGraph } from "./AgentGraph";
 import { AgentBadge } from "./AgentBadge";
+import { Disclaimer } from "@/components/ui/Disclaimer";
 import { CitationChip } from "./CitationChip";
 
 const SUGGESTIONS = [
@@ -30,6 +30,8 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   } = useChatStore();
   const messages = messagesByConv[convId] ?? [];
   const setAgentEvent = useAgentVizStore((s) => s.setEvent);
+  const markAgentDone = useAgentVizStore((s) => s.markDone);
+  const incrementAgentToolCount = useAgentVizStore((s) => s.incrementToolCount);
   const clearAgentEvents = useAgentVizStore((s) => s.clear);
   const updateTitle = useConversationStore((s) => s.updateTitle);
   const activeConv = useConversationStore((s) => s.conversations.find((c) => c.id === convId));
@@ -38,6 +40,8 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
   const toolActivitiesRef = useRef<ToolActivity[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const [stoppedPrompt, setStoppedPrompt] = useState<string | null>(null);
+  const inFlightPromptRef = useRef<string | null>(null);
   const scrollAnchor = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lastAsstId = useRef<string | null>(null);
@@ -77,6 +81,8 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     appendMessage(convId, { id: asstId, role: "assistant", content: "", createdAt: Date.now() });
     setInput("");
     setStreaming(true);
+    setStoppedPrompt(null);
+    inFlightPromptRef.current = text;
     clearAgentEvents();
     setActiveAgent(null);
     setToolActivities([]);
@@ -134,13 +140,15 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           }
           case "agent_done": {
             const agentName = event.payload.agent as string;
-            setAgentEvent({ agent: agentName, status: "done", startedAt: Date.now() });
+            markAgentDone(agentName);
             break;
           }
           case "tool_call": {
             const runId = event.payload.run_id as string ?? String(Date.now());
             const tool = event.payload.tool as string;
             const args = (event.payload.args ?? {}) as Record<string, unknown>;
+            const parentAgent = event.payload.agent as string | undefined;
+            if (parentAgent) incrementAgentToolCount(parentAgent);
             toolRunsRef.current.set(runId, { tool, argsKey: stableKey(args) });
             setToolActivities((prev) => {
               const next = [...prev, { runId, tool, args, status: "running" as const }];
@@ -166,9 +174,13 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             break;
           }
           case "agent_message":
-            // Badge is already set on agent_start. Just auto-title the conversation.
+            // Badge is already set on agent_start. Generate a real LLM title once per conv.
             if (activeConv && !activeConv.title) {
-              updateTitle(convId, text.slice(0, 60));
+              const fallback = text.slice(0, 60);
+              updateTitle(convId, fallback);
+              void autotitleConversation(convId, text).then((t) => {
+                if (t && t !== fallback) updateTitle(convId, t);
+              });
             }
             break;
           case "citations": {
@@ -194,6 +206,9 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 return { ...c, agent, result };
               })
             );
+            break;
+          }
+          case "agent_reasoning": {
             break;
           }
           case "suggestions": {
@@ -224,11 +239,13 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     } catch (err) {
       if ((err as Error)?.name === "AbortError") {
         appendToken(convId, asstId, "\n\n_Stopped by user._");
+        if (inFlightPromptRef.current) setStoppedPrompt(inFlightPromptRef.current);
       } else {
         appendToken(convId, asstId, `\n\n_Error: ${(err as Error).message}_`);
       }
     } finally {
       abortRef.current = null;
+      inFlightPromptRef.current = null;
       setStreaming(false);
       setActiveAgent(null);
       // Persist completed steps into the message before clearing transient state.
@@ -266,9 +283,8 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   })();
 
   return (
-    <div className="flex h-full gap-6">
-      {/* LEFT: chat column */}
-      <div className="flex flex-1 min-w-0 flex-col">
+    <div className="flex h-full">
+      <div className="flex min-w-0 flex-1 flex-col">
         <div className="mb-6 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Coach</h1>
@@ -276,17 +292,19 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
               Ask anything about your finances. Sources are cited under each answer.
             </p>
           </div>
-          {messages.length > 0 && (
-            <button
-              type="button"
-              onClick={clearChat}
-              disabled={streaming}
-              className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:border-loss hover:text-loss disabled:opacity-30"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear chat
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={clearChat}
+                disabled={streaming}
+                className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:border-loss hover:text-loss disabled:opacity-30"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear chat
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto pr-2">
@@ -336,12 +354,17 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 {isThinking ? (
                   <AgentActivity agent={activeAgent} activities={toolActivities} />
                 ) : (
-                  <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap">
+                  <div
+                    className={cn(
+                      "prose prose-invert prose-sm max-w-none whitespace-pre-wrap",
+                      isStreamingThis && "chat-streaming-fade"
+                    )}
+                  >
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {m.content || (isAssistant ? "…" : "")}
                     </ReactMarkdown>
                     {isStreamingThis && (
-                      <span className="ml-0.5 inline-block h-3 w-1.5 -translate-y-0.5 animate-pulse bg-accent align-middle" />
+                      <span className="ml-0.5 inline-block h-3 w-1.5 -translate-y-0.5 bg-accent align-middle chat-cursor-blink" />
                     )}
                   </div>
                 )}
@@ -391,11 +414,34 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                     </div>
                   </div>
                 )}
+                <p className="mt-2 text-right text-[10px] text-[hsl(var(--text-muted))]/50 select-none">
+                  {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
+                </p>
               </div>
             );
           })}
           <div ref={scrollAnchor} />
         </div>
+
+        {stoppedPrompt && !streaming && (
+          <div className="mt-4 flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-xs">
+            <span className="text-[hsl(var(--text-muted))]">
+              Yanıt durduruldu. Aynı soruyu yeniden gönder?
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const p = stoppedPrompt;
+                setStoppedPrompt(null);
+                void send(p);
+              }}
+              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Devam et
+            </button>
+          </div>
+        )}
 
         <form
           onSubmit={(e) => {
@@ -434,12 +480,9 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             </button>
           )}
         </form>
+        <Disclaimer className="mt-2 text-center" />
       </div>
 
-      {/* RIGHT: agent graph rail */}
-      <div className="hidden w-[460px] shrink-0 lg:block">
-        <AgentGraph />
-      </div>
     </div>
   );
 }
@@ -1168,3 +1211,4 @@ function CopyButton({ text }: { text: string }) {
     </button>
   );
 }
+

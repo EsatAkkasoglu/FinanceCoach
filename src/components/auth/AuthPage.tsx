@@ -2,8 +2,12 @@ import { useState } from "react";
 import { login, register } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { toast } from "sonner";
+import { KeyRound } from "lucide-react";
 
 type Mode = "login" | "register";
+
+const TEST_USERNAME = "testUser";
+const TEST_PASSWORD = "TestUser123!";
 
 export function AuthPage() {
   const [mode, setMode] = useState<Mode>("login");
@@ -30,6 +34,12 @@ export function AuthPage() {
   }
 
   const isRegister = mode === "register";
+
+  function useTestAccount() {
+    setMode("login");
+    setUsername(TEST_USERNAME);
+    setPassword(TEST_PASSWORD);
+  }
 
   return (
     <div className="flex h-screen items-center justify-center bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
@@ -80,6 +90,34 @@ export function AuthPage() {
             {submitting ? "Please wait…" : isRegister ? "Create account" : "Sign in"}
           </button>
         </form>
+
+        {!isRegister && (
+          <div className="mt-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-3">
+            <div className="flex items-start gap-2.5">
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-muted text-accent">
+                <KeyRound className="h-3.5 w-3.5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium">Want to try it first?</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-[hsl(var(--text-muted))]">
+                  Use the test account to explore the app with sample data.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <code className="rounded bg-[hsl(var(--bg))] px-1.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+                    {TEST_USERNAME}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={useTestAccount}
+                    className="rounded-md bg-[hsl(var(--bg))] px-2 py-1 text-[11px] font-medium text-[hsl(var(--text))] transition hover:bg-accent hover:text-white"
+                  >
+                    Use test account
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <button
           type="button"

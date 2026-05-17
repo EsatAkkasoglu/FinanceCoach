@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
 from app.agents._helpers import normalize_content
+from app.auth import get_current_user_id_or_none
 
 log = logging.getLogger("fincoach.synthesizer")
 
@@ -88,12 +89,30 @@ You write the final reply AND propose 2-4 follow-up prompts the user can tap.
      NO allocation tables, NO disclaimers.
 
 2) `advisory` AND `requires_advisor=true` (a NEW plan was produced):
-     Build the reply around the NEW advisor_brief.
+     Build the reply around the NEW advisor_brief. CRITICAL: always answer
+     the user's ACTUAL question first — if they asked for fund recommendations,
+     show the allocation table and reference instruments BEFORE any caveats.
        • Lead with the headline.
        • Render allocation as a tight markdown table.
+       • If findings include TEFAS fund results or market data instruments,
+         reference them by name under the relevant asset class row.
        • Weave key considerations and next_steps into 2-3 short paragraphs.
+         If emergency-fund or budget caveats exist, put them AFTER the table.
        • Surface open_questions briefly so the user knows what would sharpen
          the plan.
+       • EXPLAINABILITY: if `advisor_brief.why_summary` is non-empty, append
+         a final short section titled **Neden bu öneri?** (Turkish) or
+         **Why this recommendation?** (English). Use `why_summary` as the
+         opening sentence and list 2-3 entries from `key_drivers` as
+         bullets formatted as `- {source label}: {factor} → {impact}`.
+         Source labels: risk_profiler→"Risk profilin"/"Your risk profile",
+         market_data→"Piyasa verisi"/"Market data",
+         portfolio→"Portföyün"/"Your portfolio",
+         budget→"Bütçen"/"Your budget",
+         news→"Haberler"/"News",
+         memory→"Geçmiş konuşmalar"/"Past conversations",
+         user_input→"Senin tercihin"/"Your stated preference".
+         Keep the whole section under 6 lines.
 
 3) `follow_up` (USER IS ACTING ON OR REFINING A PRIOR PLAN):
      CONVERSATIONAL CONTINUATION. Critical rules:
@@ -111,6 +130,14 @@ You write the final reply AND propose 2-4 follow-up prompts the user can tap.
 
 4) `mixed`:
      Address each part in 1-2 sentences. No table unless needed.
+
+5) EXPLICIT "WHY" QUESTIONS (any question_type):
+     If the CURRENT user message asks "neden", "niye", "gerekçe", "açıkla",
+     "why", "explain", "rationale" AND an advisor_brief is available
+     (fresh OR stale), reply with the structured drivers in detail —
+     list `key_drivers` first, then for each allocation band list its
+     `drivers` as a short indented bullet list. Skip the allocation table
+     itself if the user already saw it (follow_up); otherwise include both.
 
 ═══ GENERAL RULES ═══
   • Language: see the LANGUAGE RULE at the top — it is non-negotiable.
@@ -250,6 +277,46 @@ def _get_llm():
     return _synth_llm
 
 
+def _format_user_context() -> str:
+    """Compact bullet-list of who-this-user-is so suggestion picks stay
+    grounded to their actual portfolio + risk profile. Best-effort: any
+    failure (no auth, DB hiccup) silently returns a generic placeholder so
+    a chat reply is never blocked on personalization.
+    """
+    try:
+        user_id = get_current_user_id_or_none()
+        if user_id is None:
+            return "(no signed-in user context)"
+        from sqlalchemy import select
+        from app.db.models import Holding, User
+        from app.db.session import SessionLocal
+
+        with SessionLocal() as db:
+            user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+            holdings = db.execute(
+                select(Holding).where(Holding.user_id == user_id)
+            ).scalars().all()
+
+        bits: list[str] = []
+        if user is not None:
+            if user.risk_profile:
+                bits.append(f"risk_profile={user.risk_profile}")
+            if user.monthly_income:
+                bits.append(f"monthly_income~={int(user.monthly_income)}")
+            if getattr(user, "roast_mode", 0):
+                bits.append("roast_mode=on")
+        if holdings:
+            tickers = ", ".join(
+                sorted({h.ticker for h in holdings if h.asset_class != "cash"})[:8]
+            )
+            if tickers:
+                bits.append(f"holdings=[{tickers}]")
+        return ", ".join(bits) if bits else "(empty profile — onboarding incomplete)"
+    except Exception as exc:  # noqa: BLE001
+        log.debug("_format_user_context skipped: %s", exc)
+        return "(user context unavailable)"
+
+
 def _format_advisor_brief(
     brief: dict[str, Any] | None, *, is_fresh: bool
 ) -> str:
@@ -274,13 +341,16 @@ async def run(state: AgentState) -> AgentState:
 
     payload = (
         f"USER MESSAGE (current turn):\n{user_query}\n\n"
+        f"USER PROFILE (use to personalize suggestions): {_format_user_context()}\n\n"
         f"PLAN: question_type={question_type}, requires_advisor={requires_advisor}, "
         f"specialists_called={plan.get('specialists') or []}\n\n"
         f"RECENT CONVERSATION (last 2 completed turns, excludes current):\n"
         f"{_format_recent_history(messages, k=2)}\n\n"
         f"SPECIALIST FINDINGS (this turn):\n{_format_findings_section(findings)}\n\n"
         f"ADVISOR BRIEF:\n{_format_advisor_brief(brief, is_fresh=requires_advisor)}\n\n"
-        "Produce the SynthesisOutput now (reply + suggestions)."
+        "Produce the SynthesisOutput now (reply + suggestions). "
+        "When crafting suggestions, prefer ones that reference the user's "
+        "actual holdings or risk profile from USER PROFILE above."
     )
 
     try:

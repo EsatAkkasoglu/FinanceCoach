@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   MessageSquare, LayoutDashboard, Briefcase, Wallet, Target, FileText, Settings as SettingsIcon,
-  Circle, Plus, Trash2, Pencil, Check, X, LogOut,
+  Coins, Compass, Search, Brain,
+  Circle, Plus, Trash2, Pencil, Check, X, LogOut, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   listConversations, createConversation, deleteConversation, updateConversationTitle,
-  logout as apiLogout,
-  type Conversation,
+  logout as apiLogout, searchMemory,
+  type Conversation, type MemoryHit,
 } from "@/lib/api";
 import { useAuthStore, useConversationStore, useChatStore, useUserStore } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
@@ -17,6 +18,8 @@ const NAV: { path: string; label: string; icon: typeof MessageSquare }[] = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/portfolio", label: "Portfolio", icon: Briefcase },
   { path: "/budget", label: "Budget", icon: Wallet },
+  { path: "/funds", label: "Funds (TR)", icon: Coins },
+  { path: "/discover", label: "Discover", icon: Compass },
   { path: "/goals", label: "Goals", icon: Target },
   { path: "/documents", label: "Documents", icon: FileText },
   { path: "/settings", label: "Settings", icon: SettingsIcon },
@@ -26,9 +29,11 @@ interface Props {
   healthy: boolean | null;
   onSelectConversation: (conv: Conversation) => void;
   activeConvId: string | null;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export function Sidebar({ healthy, onSelectConversation, activeConvId }: Props) {
+export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpen = false, onMobileClose }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
@@ -45,8 +50,32 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId }: Props) 
     setAuthUser(null);
   }
   const [creating, setCreating] = useState(false);
+  const [recentOpen, setRecentOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<MemoryHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const q = search.trim();
+    if (q.length < 2) {
+      setSearchResults(null);
+      return;
+    }
+    setSearching(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const hits = await searchMemory(q, 5);
+        setSearchResults(hits);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
   const avatarMeta = AVATARS.find((a) => a.id === avatar) ?? AVATARS[0];
 
   useEffect(() => {
@@ -112,7 +141,21 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId }: Props) 
   }
 
   return (
-    <aside className="flex w-60 flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
+    <aside
+      className={cn(
+        "z-40 flex w-60 flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4",
+        "fixed inset-y-0 left-0 transition-transform duration-200 md:static md:translate-x-0",
+        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}
+    >
       {/* Logo + user identity */}
       <div className="mb-4 flex items-center gap-2 px-2">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent shadow-glow text-lg leading-none">
@@ -120,9 +163,11 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId }: Props) 
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold tracking-tight">FinCoach</div>
-          <div className="truncate text-[10px] text-[hsl(var(--text-muted))]">
-            {name || authUser?.username || "v0.1 · hackathon"}
-          </div>
+          {(name || authUser?.username) && (
+            <div className="truncate text-[10px] text-[hsl(var(--text-muted))]">
+              {name || authUser?.username}
+            </div>
+          )}
         </div>
         <button
           onClick={handleLogout}
@@ -133,22 +178,82 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId }: Props) 
         </button>
       </div>
 
-      {/* New Chat button */}
-      <button
-        onClick={handleNewChat}
-        disabled={creating}
-        className="mb-4 flex items-center gap-2 rounded-lg border border-dashed border-[hsl(var(--border))] px-3 py-2 text-xs text-[hsl(var(--text-muted))] transition hover:border-accent hover:text-accent disabled:opacity-40"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        {creating ? "Creating…" : "New chat"}
-      </button>
+      {/* Main nav — product spine */}
+      <nav className="mb-4 flex flex-col gap-1">
+        {NAV.map(({ path, label, icon: Icon }) => {
+          const active = currentPath === path || currentPath.startsWith(`${path}/`);
+          return (
+            <button
+              key={path}
+              onClick={() => void handleNavClick(path)}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
+                active
+                  ? "bg-accent-muted text-accent"
+                  : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          );
+        })}
+      </nav>
 
-      {/* Conversation list */}
-      {conversations.length > 0 && (
-        <div className="mb-4">
-          <p className="mb-1 px-2 text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
-            Chats
-          </p>
+      {/* Semantic memory search */}
+      <div className="mb-3 px-2">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search past chats…"
+            className="w-full rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] py-1 pl-7 pr-2 text-[11px] outline-none focus:border-accent"
+          />
+        </div>
+        {searchResults && (
+          <div className="mt-1.5 max-h-44 overflow-y-auto rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-1.5 text-[10px]">
+            {searching && <div className="px-1 py-1 text-[hsl(var(--text-muted))]">Searching…</div>}
+            {!searching && searchResults.length === 0 && (
+              <div className="px-1 py-1 text-[hsl(var(--text-muted))]">No matches</div>
+            )}
+            {!searching && searchResults.map((h, i) => (
+              <div key={i} className="flex items-start gap-1.5 rounded px-1 py-1 hover:bg-[hsl(var(--surface-2))]">
+                <Brain className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 leading-snug text-[hsl(var(--text))]">{h.text}</p>
+                  {(h.metadata as { kind?: string }).kind && (
+                    <p className="mt-0.5 uppercase tracking-wide text-[9px] text-[hsl(var(--text-muted))]">
+                      {(h.metadata as { kind?: string }).kind}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent chats (collapsible) */}
+      <div className="mb-4">
+        <div className="mb-1 flex items-center justify-between px-2">
+          <button
+            onClick={() => setRecentOpen((v) => !v)}
+            className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))]"
+          >
+            {recentOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            Recent
+          </button>
+          <button
+            onClick={handleNewChat}
+            disabled={creating}
+            title="New chat"
+            className="rounded-md p-1 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-accent disabled:opacity-40"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {recentOpen && conversations.length > 0 && (
           <div className="flex flex-col gap-0.5 overflow-y-auto max-h-52">
             {conversations.map((conv) => (
               <div
@@ -209,30 +314,11 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId }: Props) 
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Main nav */}
-      <nav className="flex flex-col gap-1">
-        {NAV.map(({ path, label, icon: Icon }) => {
-          const active = currentPath === path || currentPath.startsWith(`${path}/`);
-          return (
-            <button
-              key={path}
-              onClick={() => void handleNavClick(path)}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
-                active
-                  ? "bg-accent-muted text-accent"
-                  : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          );
-        })}
-      </nav>
+        )}
+        {recentOpen && conversations.length === 0 && (
+          <p className="px-2 text-[10px] text-[hsl(var(--text-muted))]">No chats yet</p>
+        )}
+      </div>
 
       {/* Status */}
       <div className="mt-auto rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-3">
@@ -246,10 +332,11 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId }: Props) 
             )}
           />
           <span className="text-[hsl(var(--text-muted))]">
-            {healthy === true ? "Coach online" : healthy === false ? "Backend down" : "Connecting…"}
+            {healthy === true ? "Coach online" : healthy === false ? "Offline — retry" : "Reconnecting…"}
           </span>
         </div>
       </div>
     </aside>
+    </>
   );
 }

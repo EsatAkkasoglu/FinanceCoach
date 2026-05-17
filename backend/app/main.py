@@ -38,8 +38,14 @@ from app.agents.supervisor import (
     SYNTHESIZER_NODE,
     build_supervisor,
 )
+from app.routers.admin import router as admin_router
 from app.routers.budget import router as budget_router
+from app.routers.funds import router as funds_router
 from app.routers.fx import router as fx_router
+from app.routers.insights import router as insights_router
+from app.routers.memory import router as memory_router
+from app.routers.networth import router as networth_router
+from app.routers.symbols import router as symbols_router
 from app.services.document_processor.router import router as documents_router
 
 log = logging.getLogger("fincoach")
@@ -97,6 +103,12 @@ app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(budget_router)
 app.include_router(fx_router)
+app.include_router(funds_router)
+app.include_router(symbols_router)
+app.include_router(insights_router)
+app.include_router(memory_router)
+app.include_router(networth_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")
@@ -224,6 +236,51 @@ async def post_feedback(payload: FeedbackIn, user_id: int = Depends(get_current_
     return {"ok": True, "rating": payload.rating}
 
 
+@app.post("/conversations/{conv_id}/autotitle")
+async def autotitle_conversation(
+    conv_id: str, payload: dict, user_id: int = Depends(get_current_user_id)
+):
+    """Generate a short (4-6 word) title from the user's first message via Gemini."""
+    message: str = (payload.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message required")
+    with SessionLocal() as db:
+        conv = db.execute(
+            select(Conversation).where(Conversation.id == conv_id, Conversation.user_id == user_id)
+        ).scalar_one_or_none()
+        if conv is None:
+            raise HTTPException(status_code=404, detail="conversation not found")
+
+    title = message[:60]
+    try:
+        from app.agents.llm import get_llm
+        prompt = (
+            "Generate a concise 4-6 word title for a finance chat that starts with "
+            "the message below. Match the user's language (English or Turkish). "
+            "Return ONLY the title — no quotes, no punctuation at the end, no prefix.\n\n"
+            f"Message: {message[:500]}"
+        )
+        resp = await get_llm().ainvoke(prompt)
+        raw = getattr(resp, "content", "")
+        if isinstance(raw, list):
+            raw = " ".join(part.get("text", "") if isinstance(part, dict) else str(part) for part in raw)
+        candidate = str(raw).strip().strip('"\'').strip()
+        candidate = candidate.splitlines()[0] if candidate else ""
+        if candidate:
+            title = candidate[:80]
+    except Exception as exc:
+        log.warning("autotitle fallback (%s): %s", conv_id, _safe_error_message(exc))
+
+    with SessionLocal() as db:
+        conv = db.execute(
+            select(Conversation).where(Conversation.id == conv_id, Conversation.user_id == user_id)
+        ).scalar_one_or_none()
+        if conv is not None:
+            conv.title = title
+            db.commit()
+    return {"ok": True, "title": title}
+
+
 @app.delete("/conversations/{conv_id}")
 async def delete_conversation(conv_id: str, user_id: int = Depends(get_current_user_id)):
     """Archive (soft-delete) a conversation."""
@@ -318,6 +375,10 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
         done_nodes: set[str] = set()
         started_nodes: set[str] = set()
         collected_citations: list[dict] = []
+        # XAI: capture structured reasoning emitted by advisor / risk_profiler
+        # so we can ship it to the UI alongside the final reply.
+        advisor_brief_seen: dict | None = None
+        risk_brief_seen: dict | None = None
 
         try:
             async for ev in supervisor.astream_events(initial_state, config=config, version="v2"):
@@ -374,6 +435,14 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                             collected_citations.extend(
                                 {**c, "agent": name} for c in citations
                             )
+                        # Capture risk_profiler's structured brief for XAI.
+                        if name == "risk_profiler":
+                            findings = output.get("findings") or {}
+                            rp = findings.get("risk_profiler") if isinstance(findings, dict) else None
+                            if isinstance(rp, dict):
+                                extra = rp.get("extra") or {}
+                                if isinstance(extra, dict) and isinstance(extra.get("brief"), dict):
+                                    risk_brief_seen = extra["brief"]
                         if err:
                             log.warning(
                                 "specialist %s errored (folded into advisor/synthesizer): %s/%s",
@@ -384,6 +453,12 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                 # ── Strategist / advisor finished — internal, silent end ─
                 elif kind == "on_chain_end" and name in {STRATEGIST_NODE, ADVISOR_NODE} and name not in done_nodes:
                     done_nodes.add(name)
+                    if name == ADVISOR_NODE:
+                        output = data.get("output") or {}
+                        if isinstance(output, dict):
+                            brief = output.get("advisor_brief")
+                            if isinstance(brief, dict):
+                                advisor_brief_seen = brief
                     yield _evt("agent_done", {"agent": name})
 
                 # ── Synthesizer finished → emit the single visible reply ─
@@ -411,6 +486,42 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                                 yield _evt("citations", {
                                     "agent": name,
                                     "items": collected_citations,
+                                })
+                            # XAI: surface structured "why this recommendation"
+                            # data so the UI can render a reasoning panel.
+                            if advisor_brief_seen and (
+                                advisor_brief_seen.get("why_summary")
+                                or advisor_brief_seen.get("key_drivers")
+                            ):
+                                yield _evt("agent_reasoning", {
+                                    "agent": "advisor",
+                                    "why_summary": advisor_brief_seen.get("why_summary", ""),
+                                    "key_drivers": advisor_brief_seen.get("key_drivers", []),
+                                    "allocation_drivers": [
+                                        {
+                                            "asset_class": b.get("asset_class", ""),
+                                            "drivers": b.get("drivers", []),
+                                        }
+                                        for b in (advisor_brief_seen.get("allocation") or [])
+                                        if isinstance(b, dict)
+                                    ],
+                                })
+                            if risk_brief_seen and (
+                                risk_brief_seen.get("reasoning")
+                                or risk_brief_seen.get("drivers")
+                            ):
+                                yield _evt("agent_reasoning", {
+                                    "agent": "risk_profiler",
+                                    "why_summary": " ".join(
+                                        risk_brief_seen.get("reasoning") or []
+                                    ).strip(),
+                                    "key_drivers": risk_brief_seen.get("drivers", []),
+                                    "risk_score": risk_brief_seen.get("score"),
+                                    "profile": risk_brief_seen.get("profile"),
+                                    "equity_band": [
+                                        risk_brief_seen.get("equity_low"),
+                                        risk_brief_seen.get("equity_high"),
+                                    ],
                                 })
                             for tok in _chunked(content, 24):
                                 yield _evt("token", {"text": tok})
@@ -868,34 +979,90 @@ async def update_profile(payload: ProfileUpdate, user_id: int = Depends(get_curr
         return _serialize_user(user)
 
 
+_BRIEFING_CACHE: dict[int, tuple[float, dict]] = {}
+_BRIEFING_TTL_SECONDS = 15 * 60
+
+
+def _trends_or_none() -> dict | None:
+    try:
+        from app.tools.market_tools import scan_hot_trends
+        return scan_hot_trends.invoke({"no_social": False})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("scan_hot_trends failed: %s", exc)
+        return None
+
+
+def _news_or_none(query: str) -> list[dict] | None:
+    try:
+        from app.tools.news_tools import search_news
+        return search_news.invoke({"query": query, "limit": 3})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("search_news failed: %s", exc)
+        return None
+
+
+def _dividend_or_none(ticker: str) -> dict | None:
+    try:
+        from app.tools.market_tools import get_dividend_metrics
+        res = get_dividend_metrics.invoke({"ticker": ticker})
+        if isinstance(res, dict) and not res.get("error"):
+            return res
+    except Exception as exc:  # noqa: BLE001
+        log.warning("get_dividend_metrics failed for %s: %s", ticker, exc)
+    return None
+
+
 @app.get("/briefing")
 async def daily_briefing(user_id: int = Depends(get_current_user_id)):
-    """Personalized 3-bullet briefing for the dashboard widget.
+    """Personalized 5-7 item briefing for the dashboard widget.
 
-    All Alpha Vantage calls run in parallel (S&P 500 + VIX + all holdings at once).
+    Combines (a) market context — S&P 500 + VIX, (b) personal — portfolio
+    day move, (c) discovery — trending US movers, (d) news — fresh headline
+    for one of the user's holdings, (e) income — dividend alert for the
+    biggest div-paying holding. All external calls run in parallel and
+    failures degrade silently. Results cached per-user for 15 minutes.
     """
     import asyncio
+    import time
     from concurrent.futures import ThreadPoolExecutor
+
+    cached = _BRIEFING_CACHE.get(user_id)
+    if cached and time.time() - cached[0] < _BRIEFING_TTL_SECONDS:
+        return cached[1]
 
     with SessionLocal() as db:
         holdings = db.execute(select(Holding).where(Holding.user_id == user_id)).scalars().all()
 
     non_cash = [h for h in holdings if h.asset_class != "cash"]
+    # Pick "main" holding by quantity * cost_basis as a cheap proxy for size.
+    main_holding = max(
+        non_cash, key=lambda h: (h.quantity or 0) * (h.cost_basis or 0), default=None,
+    )
+    div_candidates = [h for h in non_cash if h.asset_class in ("stock", "etf")][:1]
+    div_ticker = div_candidates[0].ticker if div_candidates else None
+
     tickers_to_fetch = ["^GSPC", "^VIX"] + [h.ticker for h in non_cash]
+    aux_jobs: list = []  # (name, callable, *args)
+    aux_jobs.append(("trends", _trends_or_none))
+    if main_holding:
+        aux_jobs.append(("news", _news_or_none, main_holding.ticker))
+    if div_ticker:
+        aux_jobs.append(("dividend", _dividend_or_none, div_ticker))
 
     loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor(max_workers=min(len(tickers_to_fetch), 10)) as pool:
-        results = await asyncio.gather(
-            *[loop.run_in_executor(pool, _quote_or_none, t) for t in tickers_to_fetch],
-            return_exceptions=True,
-        )
+    pool_size = min(len(tickers_to_fetch) + len(aux_jobs), 12)
+    with ThreadPoolExecutor(max_workers=pool_size) as pool:
+        quote_futs = [loop.run_in_executor(pool, _quote_or_none, t) for t in tickers_to_fetch]
+        aux_futs = [loop.run_in_executor(pool, j[1], *j[2:]) for j in aux_jobs]
+        results = await asyncio.gather(*quote_futs, *aux_futs, return_exceptions=True)
 
     def _safe(r):
-        return r if isinstance(r, dict) else None
+        return r if isinstance(r, (dict, list)) else None
 
     spx = _safe(results[0])
     vix = _safe(results[1])
     holding_quotes = {h.ticker: _safe(results[2 + i]) for i, h in enumerate(non_cash)}
+    aux_results = {j[0]: _safe(results[len(tickers_to_fetch) + i]) for i, j in enumerate(aux_jobs)}
 
     items: list[dict] = []
 
@@ -947,4 +1114,56 @@ async def daily_briefing(user_id: int = Depends(get_current_user_id)):
             "tone": "neutral" if vix["price"] < 20 else "warning",
         })
 
-    return {"items": items, "as_of": datetime.utcnow().isoformat() + "Z"}
+    # 4. Trending — top US gainer (skipped if user already holds it)
+    trends = aux_results.get("trends")
+    if isinstance(trends, dict):
+        held = {h.ticker.upper() for h in non_cash}
+        gainers = trends.get("top_gainers") or []
+        pick = next((g for g in gainers if g.get("ticker") and g["ticker"].upper() not in held), None)
+        if pick and pick.get("change_pct") is not None:
+            items.append({
+                "icon": "flame",
+                "label": "Trending",
+                "text": f"{pick['ticker']} +{pick['change_pct']:.1f}% today — top US gainer",
+                "tone": "positive",
+            })
+
+    # 5. News — fresh headline for the user's biggest holding
+    news = aux_results.get("news")
+    if isinstance(news, list) and news and main_holding is not None:
+        top_article = news[0]
+        title = (top_article.get("title") or "").strip()
+        if title:
+            if len(title) > 110:
+                title = title[:107] + "…"
+            items.append({
+                "icon": "newspaper",
+                "label": f"News · {main_holding.ticker}",
+                "text": title,
+                "tone": "neutral",
+                "url": top_article.get("url"),
+            })
+
+    # 6. Income — dividend signal on a held equity
+    dividend = aux_results.get("dividend")
+    if isinstance(dividend, dict) and div_ticker:
+        yield_ = dividend.get("yield")
+        safety = dividend.get("safety_score")
+        rating = dividend.get("income_rating")
+        if yield_ is not None and yield_ > 0:
+            yld_pct = yield_ * 100 if yield_ < 1 else yield_
+            bits = [f"{yld_pct:.2f}% yield"]
+            if rating:
+                bits.append(str(rating))
+            if safety is not None:
+                bits.append(f"safety {int(safety)}/100")
+            items.append({
+                "icon": "coins",
+                "label": f"Income · {div_ticker}",
+                "text": " · ".join(bits),
+                "tone": "positive" if (rating or "").lower() in ("excellent", "good") else "neutral",
+            })
+
+    payload = {"items": items, "as_of": datetime.utcnow().isoformat() + "Z"}
+    _BRIEFING_CACHE[user_id] = (time.time(), payload)
+    return payload

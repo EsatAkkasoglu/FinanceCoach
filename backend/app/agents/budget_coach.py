@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import build_findings, extract_tool_calls
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
 from app.db.models import User
 from app.db.session import SessionLocal
 from app.tools.portfolio_tools import list_transactions
@@ -108,7 +108,7 @@ async def run(state: AgentState) -> AgentState:
     base = SYSTEM_PROMPT_ROAST_BASE if use_roast else SYSTEM_PROMPT_DEFAULT_BASE
     prompt = _build_prompt(base, risk_profile, use_roast)
     agent = _build(prompt)
-    result = await agent.ainvoke({"messages": state.get("messages", [])})
+    result = await agent.ainvoke({"messages": latest_human_turn(state.get("messages", []))})
     msgs = result["messages"]
     return {
         "messages": msgs[-1:],

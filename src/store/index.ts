@@ -131,6 +131,22 @@ export interface ToolActivity {
   result?: string;
 }
 
+export interface ReasoningDriverLocal {
+  source: string;
+  factor: string;
+  impact: string;
+}
+
+export interface ReasoningEntry {
+  agent: string;
+  why_summary?: string;
+  key_drivers: ReasoningDriverLocal[];
+  allocation_drivers?: { asset_class: string; drivers: ReasoningDriverLocal[] }[];
+  risk_score?: number;
+  profile?: string;
+  equity_band?: [number | undefined, number | undefined];
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -139,6 +155,7 @@ export interface ChatMessage {
   citations?: Citation[];
   steps?: ToolActivity[];
   suggestions?: string[];
+  reasoning?: ReasoningEntry[];
   createdAt: number;
 }
 
@@ -152,6 +169,7 @@ interface ChatState {
   addCitations: (convId: string, id: string, citations: Citation[]) => void;
   setMessageSteps: (convId: string, id: string, steps: ToolActivity[]) => void;
   setMessageSuggestions: (convId: string, id: string, suggestions: string[]) => void;
+  addReasoning: (convId: string, id: string, entry: ReasoningEntry) => void;
   setStreaming: (v: boolean) => void;
   resetConv: (convId: string) => void;
 }
@@ -203,6 +221,21 @@ export const useChatStore = create<ChatState>()(
           );
           return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
         }),
+      addReasoning: (convId, id, entry) =>
+        set((s) => {
+          const msgs = (s.messagesByConv[convId] ?? []).map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  reasoning: [
+                    ...(m.reasoning ?? []).filter((r) => r.agent !== entry.agent),
+                    entry,
+                  ],
+                }
+              : m
+          );
+          return { messagesByConv: { ...s.messagesByConv, [convId]: msgs } };
+        }),
       setStreaming: (v) => set({ streaming: v }),
       resetConv: (convId) =>
         set((s) => {
@@ -223,11 +256,15 @@ export interface AgentEvent {
   agent: string;
   status: "idle" | "running" | "done" | "error";
   startedAt: number;
+  endedAt?: number;
+  toolCount?: number;
 }
 
 interface AgentVizState {
   events: Record<string, AgentEvent>;
   setEvent: (e: AgentEvent) => void;
+  markDone: (agent: string) => void;
+  incrementToolCount: (agent: string) => void;
   clear: () => void;
 }
 
@@ -288,6 +325,25 @@ export const useConversationStore = create<ConversationStore>((set) => ({
 
 export const useAgentVizStore = create<AgentVizState>((set) => ({
   events: {},
-  setEvent: (e) => set((s) => ({ events: { ...s.events, [e.agent]: e } })),
+  setEvent: (e) => set((s) => ({ events: { ...s.events, [e.agent]: { ...s.events[e.agent], ...e } } })),
+  markDone: (agent) =>
+    set((s) => {
+      const prev = s.events[agent];
+      if (!prev) return s;
+      return {
+        events: { ...s.events, [agent]: { ...prev, status: "done", endedAt: Date.now() } },
+      };
+    }),
+  incrementToolCount: (agent) =>
+    set((s) => {
+      const prev = s.events[agent];
+      if (!prev) return s;
+      return {
+        events: {
+          ...s.events,
+          [agent]: { ...prev, toolCount: (prev.toolCount ?? 0) + 1 },
+        },
+      };
+    }),
   clear: () => set({ events: {} }),
 }));
