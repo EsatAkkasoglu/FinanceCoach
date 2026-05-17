@@ -25,12 +25,15 @@ backend/.env
 
 # Local databases
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 backend/fincoach.db
 backend/chroma_db/
 
 # IDE
+.claude/
 .vscode/*
 !.vscode/extensions.json
 .idea/
