@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Plus, Briefcase, Pencil, Trash2, Loader2, Sparkles, Activity,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const ASSET_BADGE: Record<string, string> = {
 };
 
 export function Portfolio() {
+  const { t } = useTranslation("portfolio");
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [totals, setTotals] = useState<PortfolioTotals | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,14 +84,14 @@ export function Portfolio() {
     <div>
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-[hsl(var(--text-muted))]">
-            Everything you own, all in one place.
+            {t("subtitle")}
           </p>
         </div>
         {!isEmpty && (
           <Button onClick={() => setAddOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> Add holding
+            <Plus className="h-3.5 w-3.5" /> {t("addHolding")}
           </Button>
         )}
       </header>
@@ -145,6 +147,7 @@ function SummaryRow({
   holdings: Holding[];
   fx: UseFxRates;
 }) {
+  const { t } = useTranslation("portfolio");
   if (!totals) return null;
 
   // If FX rates are loaded, recompute totals in the display currency by
@@ -173,11 +176,11 @@ function SummaryRow({
   return (
     <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
       <div className="card">
-        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Net worth</div>
+        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("netWorth")}</div>
         <div className="num mt-2 text-2xl font-semibold">{formatCurrency(value, displayCcy)}</div>
       </div>
       <div className="card">
-        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">All-time P&L</div>
+        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("allTimePnl")}</div>
         <div className={cn("num mt-2 text-2xl font-semibold", positive ? "text-gain" : "text-loss")}>
           {formatPercent(pnlPct)}
         </div>
@@ -186,7 +189,7 @@ function SummaryRow({
         </div>
       </div>
       <div className="card">
-        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Positions</div>
+        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("positions")}</div>
         <div className="num mt-2 text-2xl font-semibold">{count}</div>
       </div>
     </div>
@@ -205,6 +208,7 @@ function HoldingsTable({
   onDelete: (h: Holding) => void;
   onAnalyze: (ticker: string) => void;
 }) {
+  const { t } = useTranslation("portfolio");
   // Convert a per-holding figure to the display currency, falling back to
   // formatting in the holding's native currency when rates aren't ready.
   function fmt(v: number, h: Holding) {
@@ -218,13 +222,13 @@ function HoldingsTable({
       <table className="num min-w-full text-sm">
         <thead className="text-xs text-[hsl(var(--text-muted))]">
           <tr className="border-b border-[hsl(var(--border))]">
-            <th className="px-4 py-3 text-left font-normal">Ticker</th>
-            <th className="px-3 py-3 text-left font-normal">Type</th>
-            <th className="px-3 py-3 text-right font-normal">Qty</th>
-            <th className="px-3 py-3 text-right font-normal">Cost</th>
-            <th className="px-3 py-3 text-right font-normal">Price</th>
-            <th className="px-3 py-3 text-right font-normal">Value</th>
-            <th className="px-3 py-3 text-right font-normal">P&L</th>
+            <th className="px-4 py-3 text-left font-normal">{t("table.ticker")}</th>
+            <th className="px-3 py-3 text-left font-normal">{t("table.type")}</th>
+            <th className="px-3 py-3 text-right font-normal">{t("table.qty")}</th>
+            <th className="px-3 py-3 text-right font-normal">{t("table.cost")}</th>
+            <th className="px-3 py-3 text-right font-normal">{t("table.price")}</th>
+            <th className="px-3 py-3 text-right font-normal">{t("table.value")}</th>
+            <th className="px-3 py-3 text-right font-normal">{t("table.pnl")}</th>
             <th className="px-2 py-3 w-20"></th>
           </tr>
         </thead>
@@ -300,31 +304,30 @@ function HoldingsTable({
 // ── Empty / loading ─────────────────────────────────────────────────────────
 
 function EmptyPortfolio({ onAdd }: { onAdd: () => void }) {
+  const { t } = useTranslation("portfolio");
   return (
     <div className="card flex flex-col items-center text-center py-12">
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-accent-muted">
         <Briefcase className="h-6 w-6 text-accent" />
       </div>
-      <h2 className="text-lg font-semibold tracking-tight">Add your investments</h2>
+      <h2 className="text-lg font-semibold tracking-tight">{t("empty.title")}</h2>
       <p className="mt-1 max-w-md text-sm text-[hsl(var(--text-muted))]">
-        Track stocks, ETFs, crypto, and bonds in one place. To import from a broker
-        statement, head to <span className="font-medium text-accent">Budget</span> — the AI
-        figures out where each row belongs.
+        {t("empty.desc")}
       </p>
 
       <div className="mt-6 grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
         <CTACard
           icon={<Plus className="h-5 w-5" />}
-          title="Add manually"
-          description="Enter your positions one by one — quick and precise."
+          title={t("empty.addManually")}
+          description={t("empty.addManuallyDesc")}
           accent
           onClick={onAdd}
         />
         <CTACard
           icon={<Sparkles className="h-5 w-5" />}
-          title="Ask the coach"
-          description="Describe your holdings in chat — the assistant logs them for you."
-          onClick={() => toast.info("Open New chat from the sidebar to get started.")}
+          title={t("empty.askCoach")}
+          description={t("empty.askCoachDesc")}
+          onClick={() => toast.info(t("empty.openChat"))}
         />
       </div>
     </div>

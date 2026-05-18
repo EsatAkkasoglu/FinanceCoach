@@ -1,7 +1,10 @@
+import { useTranslation } from "react-i18next";
+
 export function Disclaimer({ className = "" }: { className?: string }) {
+  const { t } = useTranslation();
   return (
     <p className={`text-[10px] text-[hsl(var(--text-muted))] ${className}`}>
-      AI-generated suggestions, not financial advice. Consult a licensed advisor.
+      {t("disclaimer")}
     </p>
   );
 }

@@ -1,0 +1,55 @@
+{
+  "appName": "FinCoach",
+  "loading": "Yükleniyor…",
+  "save": "Değişiklikleri kaydet",
+  "saving": "Kaydediliyor…",
+  "saved": "Kaydedildi",
+  "cancel": "İptal",
+  "close": "Kapat",
+  "add": "Ekle",
+  "edit": "Düzenle",
+  "delete": "Sil",
+  "confirm": "Onayla",
+  "next": "İleri",
+  "back": "Geri",
+  "skip": "Atla",
+  "search": "Ara",
+  "noResults": "Sonuç yok",
+  "openNav": "Navigasyonu aç",
+  "disclaimer": "Yapay zeka önerileridir, finansal tavsiye değildir. Lisanslı bir danışmana başvurun.",
+  "nav": {
+    "dashboard": "Özet",
+    "portfolio": "Portföy",
+    "budget": "Bütçe",
+    "funds": "Fonlar (TR)",
+    "discover": "Keşfet",
+    "goals": "Hedefler",
+    "documents": "Belgeler",
+    "settings": "Ayarlar"
+  },
+  "errors": {
+    "backendUnreachable": "Sunucuya ulaşılamıyor. `uv run uvicorn app.main:app` komutu ile başlatın.",
+    "sessionExpired": "Oturum süresi doldu. Lütfen tekrar giriş yapın.",
+    "demoMode": "Demo modu açık — önbelleğe alınmış yanıtlar kullanılıyor"
+  },
+  "currency": {
+    "try": "TRY",
+    "usd": "USD",
+    "eur": "EUR"
+  },
+  "time": {
+    "daysLate": "{{days}} gün geç",
+    "overdue": "gecikmiş",
+    "today": "bugün",
+    "tomorrow": "yarın",
+    "inDays": "{{days}} gün sonra",
+    "daysPastTarget": "{{days}} gün geçti",
+    "dueToday": "bugün son gün",
+    "daysToGo": "{{days}} gün kaldı"
+  },
+  "recent": "Son sohbetler",
+  "noChatsYet": "Henüz sohbet yok",
+  "language": "Dil",
+  "languageEn": "English",
+  "languageTr": "Türkçe"
+}

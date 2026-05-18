@@ -1,0 +1,28 @@
+{
+  "title": "Turkish Funds",
+  "subtitle": "Daily net asset value (NAV) for Turkish mutual funds.",
+  "allBest": "All (best)",
+  "searchPlaceholder": "Search by code or name (AFA, İş Bankası)…",
+  "noResults": "No results. Try a different category or keyword.",
+  "close": "Close",
+  "noHistoricalData": "No historical data.",
+  "daysReturn": "{{days}}d return:",
+  "minMax": "min {{min}} · max {{max}}",
+  "table": {
+    "code": "Code",
+    "name": "Name",
+    "category": "Category",
+    "risk": "Risk",
+    "oneMonth": "1M",
+    "sixMonths": "6M",
+    "oneYear": "1Y"
+  },
+  "categories": {
+    "gold": "Gold",
+    "equity": "Equity",
+    "eurobond": "Eurobond",
+    "basket": "Fund basket",
+    "preciousMetals": "Precious metals",
+    "shortTerm": "Short term"
+  }
+}

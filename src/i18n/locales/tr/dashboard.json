@@ -1,0 +1,26 @@
+{
+  "title": "Özet",
+  "todayAtAGlance": "Bugünün özeti",
+  "netWorth": "Net değer",
+  "allTime": "tüm zamanlar",
+  "lastNDays": "Son {{count}} gün",
+  "noHoldings": "Henüz varlık yok — Portföy sekmesinden ekleyin",
+  "thisMonth": "Bu ay",
+  "noBudgetData": "Henüz bütçe verisi yok — işlem ekleyin.",
+  "income": "Gelir",
+  "expenses": "Giderler",
+  "savingsRate": "Tasarruf oranı",
+  "todaysBrief": "Günlük özet",
+  "briefUnavailable": "Özet şu an kullanılamıyor.",
+  "allocation": "Dağılım",
+  "addHoldingsForBreakdown": "Dağılımı görmek için varlık ekleyin.",
+  "holdings": "Varlıklar",
+  "noHoldingsDesc": "Henüz varlık yok. Canlı değerleme için Portföy sekmesinden ekleyin.",
+  "table": {
+    "ticker": "Sembol",
+    "qty": "Adet",
+    "price": "Fiyat",
+    "value": "Değer",
+    "pnl": "K/Z"
+  }
+}

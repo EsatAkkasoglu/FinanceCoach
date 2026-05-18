@@ -1,0 +1,33 @@
+{
+  "steps": {
+    "welcome": "Hoş Geldin",
+    "goals": "Hedefler",
+    "finances": "Finanslar",
+    "risk": "Risk",
+    "portfolio": "Portföy"
+  },
+  "stepOptional": "Bu adım isteğe bağlıdır — finanslarınızı girmeden atlayabilirsiniz.",
+  "next": "İleri",
+  "settingUp": "Ayarlanıyor…",
+  "complete": "Tamamla",
+  "welcomeBack": "Hoş geldiniz, {{name}} — hazırsınız!",
+  "welcome": {
+    "title": "FinCoach'a Hoş Geldiniz",
+    "setupProfile": "Profilinizi oluşturalım",
+    "subtitle": "Bir dakikadan az sürer — her şeyi sizin için kişiselleştireceğim.",
+    "memberSince": "FinCoach üyesi",
+    "whatToCall": "Size nasıl hitap edeyim?",
+    "namePlaceholder": "Ahmet",
+    "niceMeet": "Tanıştığımıza memnun oldum, {{name}} 👋",
+    "pickAnimal": "Ruh hayvanınızı seçin"
+  },
+  "goals": {
+    "title": "Ne için biriktiriyorsunuz?",
+    "subtitle": "Birincil hedefini seç — sonra daha fazlasını ekleyebilirsin.",
+    "targetAmount": "Hedef tutar",
+    "byWhen": "Ne zamana kadar?",
+    "familiar": "Bunlardan tanıdık gelenler var mı?",
+    "familiarHint": "Uygunalanları seçin — yargılamıyorum.",
+    "numbersOnly": "Yalnızca sayı"
+  }
+}

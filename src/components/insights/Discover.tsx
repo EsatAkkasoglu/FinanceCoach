@@ -3,6 +3,7 @@
  * Clicking a row opens the shared TickerDrawer.
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Flame, AlertTriangle, Loader2, ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
 import {
   getTrends, getRumors,
@@ -12,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { TickerDrawer } from "./TickerDrawer";
 
 export function Discover() {
+  const { t } = useTranslation("discover");
   const [trends, setTrends] = useState<TrendsResult | null>(null);
   const [rumors, setRumors] = useState<RumorItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,9 +32,9 @@ export function Discover() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Discover</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-[hsl(var(--text-muted))]">
-          Today's movers, trending crypto, and M&A whispers — click a ticker to dig in.
+          {t("subtitle")}
         </p>
       </header>
 
@@ -53,6 +55,7 @@ export function Discover() {
 }
 
 function TrendsCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (t: string) => void }) {
+  const { t } = useTranslation("discover");
   const gainers = trends?.top_gainers?.slice(0, 5) ?? [];
   const losers = trends?.top_losers?.slice(0, 5) ?? [];
   const crypto = trends?.crypto_trending?.slice(0, 5) ?? [];
@@ -61,12 +64,12 @@ function TrendsCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (
     <section className="card">
       <header className="mb-3 flex items-center gap-2">
         <Flame className="h-4 w-4 text-warning" />
-        <h2 className="text-sm font-semibold">Hot today</h2>
+        <h2 className="text-sm font-semibold">{t("hotToday")}</h2>
       </header>
 
       {gainers.length > 0 && (
         <>
-          <p className="text-[10px] uppercase tracking-widest text-gain">Top gainers</p>
+          <p className="text-[10px] uppercase tracking-widest text-gain">{t("topGainers")}</p>
           <ul className="mt-1 mb-3 divide-y divide-[hsl(var(--border))]">
             {gainers.map((g) => (
               <li key={g.ticker}>
@@ -85,7 +88,7 @@ function TrendsCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (
 
       {losers.length > 0 && (
         <>
-          <p className="text-[10px] uppercase tracking-widest text-loss">Top losers</p>
+          <p className="text-[10px] uppercase tracking-widest text-loss">{t("topLosers")}</p>
           <ul className="mt-1 mb-3 divide-y divide-[hsl(var(--border))]">
             {losers.map((g) => (
               <li key={g.ticker}>
@@ -104,7 +107,7 @@ function TrendsCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (
 
       {crypto.length > 0 && (
         <>
-          <p className="text-[10px] uppercase tracking-widest text-accent">Trending crypto</p>
+          <p className="text-[10px] uppercase tracking-widest text-accent">{t("trendingCrypto")}</p>
           <ul className="mt-1 flex flex-wrap gap-1.5">
             {crypto.map((c) => (
               <li key={c.symbol}>
@@ -124,7 +127,7 @@ function TrendsCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (
 
       {gainers.length === 0 && losers.length === 0 && crypto.length === 0 && (
         <p className="text-xs text-[hsl(var(--text-muted))]">
-          No trend data — Alpha Vantage and CoinGecko both unavailable.
+          {t("noTrendData")}
         </p>
       )}
     </section>
@@ -132,15 +135,16 @@ function TrendsCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (
 }
 
 function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: string) => void }) {
+  const { t } = useTranslation("discover");
   if (rumors.length === 0) {
     return (
       <section className="card">
         <header className="mb-3 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-warning" />
-          <h2 className="text-sm font-semibold">Rumor mill</h2>
+          <h2 className="text-sm font-semibold">{t("rumorMill")}</h2>
         </header>
         <p className="text-xs text-[hsl(var(--text-muted))]">
-          No fresh M&A or actionable rumors right now.
+          {t("noRumors")}
         </p>
       </section>
     );
@@ -149,7 +153,7 @@ function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: strin
     <section className="card">
       <header className="mb-3 flex items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-warning" />
-        <h2 className="text-sm font-semibold">Rumor mill</h2>
+        <h2 className="text-sm font-semibold">{t("rumorMill")}</h2>
       </header>
       <ul className="divide-y divide-[hsl(var(--border))]">
         {rumors.slice(0, 8).map((r, i) => {
@@ -177,7 +181,7 @@ function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: strin
                 )}
                 {r.impact_score != null && (
                   <span className="ml-auto text-[10px] text-[hsl(var(--text-muted))]">
-                    impact {r.impact_score}/10
+                    {t("impact", { score: r.impact_score })}
                   </span>
                 )}
               </div>

@@ -1,0 +1,23 @@
+{
+  "coach": "Koç",
+  "placeholder": "Koçunuza sorun… (Yeni satır için Shift+Enter)",
+  "clearChat": "Sohbeti temizle",
+  "tryOneOfThese": "Bunlardan birini deneyin:",
+  "sources": "Kaynaklar",
+  "tryNext": "Sonrakini dene",
+  "noResults": "Sonuç yok",
+  "responseStopped": "Yanıt durduruldu. Aynı soruyu yeniden gönderin?",
+  "continue": "Devam et",
+  "thinking": "Düşünüyor",
+  "toolsProgress": "{{done}} / {{total}} araç",
+  "newConversation": "Yeni sohbet başlatılıyor…",
+  "conversationNotFound": "Sohbet bulunamadı. Kenar çubuğundan birini seçin veya",
+  "newChat": "Yeni sohbet",
+  "greeting": "Finanslarınız hakkında her şeyi sorun. Kaynaklar her yanıtın altında gösterilir.",
+  "suggestions": {
+    "portfolioSummary": "Portföyüme hızlı bir bakış at",
+    "budgetAnalysis": "Bu ayki harcamalarım nasıl görünüyor?",
+    "riskCheck": "Çok fazla risk alıyor muyum?",
+    "savingsTip": "Daha fazla tasarruf için ne yapabilirim?"
+  }
+}

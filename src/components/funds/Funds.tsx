@@ -6,6 +6,7 @@
  * NAV history for any fund.
  */
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2, Search } from "lucide-react";
 import {
   CartesianGrid, LineChart, Line, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis,
@@ -30,16 +31,17 @@ function ReturnCell({ value }: { value: number | null | undefined }) {
   );
 }
 
-const CATEGORIES: { key: string; label: string }[] = [
-  { key: "altın", label: "Gold" },
-  { key: "hisse", label: "Equity" },
-  { key: "eurobond", label: "Eurobond" },
-  { key: "fon sepeti", label: "Fund basket" },
-  { key: "kıymetli", label: "Precious metals" },
-  { key: "kısa vadeli", label: "Short term" },
+const CATEGORY_KEYS: { key: string; tKey: string }[] = [
+  { key: "altın", tKey: "categories.gold" },
+  { key: "hisse", tKey: "categories.equity" },
+  { key: "eurobond", tKey: "categories.eurobond" },
+  { key: "fon sepeti", tKey: "categories.basket" },
+  { key: "kıymetli", tKey: "categories.preciousMetals" },
+  { key: "kısa vadeli", tKey: "categories.shortTerm" },
 ];
 
 export function Funds() {
+  const { t } = useTranslation("funds");
   const [category, setCategory] = useState<string | null>("altın");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<FundRow[]>([]);
@@ -78,14 +80,14 @@ export function Funds() {
   return (
     <div className="flex flex-col gap-4">
       <header>
-        <h1 className="text-xl font-semibold tracking-tight">Turkish Funds</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-[hsl(var(--text-muted))]">
-          Daily net asset value (NAV) from TEFAS — explore by category or search by name.
+          {t("subtitle")}
         </p>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
-        {CATEGORIES.map((c) => (
+        {CATEGORY_KEYS.map((c) => (
           <button
             key={c.key}
             onClick={() => { setCategory(c.key); setQuery(""); }}
@@ -96,7 +98,8 @@ export function Funds() {
                 : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
             )}
           >
-            {c.label}
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {(t as any)(c.tKey)}
           </button>
         ))}
         <button
@@ -108,7 +111,7 @@ export function Funds() {
               : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
           )}
         >
-          All (best)
+          {t("allBest")}
         </button>
 
         <div className="ml-auto relative w-full max-w-xs">
@@ -116,7 +119,7 @@ export function Funds() {
           <input
             value={query}
             onChange={(e) => { setQuery(e.target.value); }}
-            placeholder="Search by code or name (AFA, İş Bankası)…"
+            placeholder={t("searchPlaceholder")}
             className="w-full rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] py-1.5 pl-8 pr-3 text-xs outline-none focus:border-accent"
           />
         </div>
@@ -133,20 +136,20 @@ export function Funds() {
         )}
         {!loading && !error && rows.length === 0 && (
           <div className="p-6 text-center text-sm text-[hsl(var(--text-muted))]">
-            No results. Try a different category or keyword.
+            {t("noResults")}
           </div>
         )}
         {!loading && !error && rows.length > 0 && (
           <table className="w-full text-sm">
             <thead className="bg-[hsl(var(--surface-2))] text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
               <tr>
-                <th className="px-3 py-2 text-left">Code</th>
-                <th className="px-3 py-2 text-left">Name</th>
-                <th className="px-3 py-2 text-left">Category</th>
-                <th className="px-3 py-2 text-right">Risk</th>
-                <th className="px-3 py-2 text-right">1M</th>
-                <th className="px-3 py-2 text-right">6M</th>
-                <th className="px-3 py-2 text-right">1Y</th>
+                <th className="px-3 py-2 text-left">{t("table.code")}</th>
+                <th className="px-3 py-2 text-left">{t("table.name")}</th>
+                <th className="px-3 py-2 text-left">{t("table.category")}</th>
+                <th className="px-3 py-2 text-right">{t("table.risk")}</th>
+                <th className="px-3 py-2 text-right">{t("table.oneMonth")}</th>
+                <th className="px-3 py-2 text-right">{t("table.sixMonths")}</th>
+                <th className="px-3 py-2 text-right">{t("table.oneYear")}</th>
               </tr>
             </thead>
             <tbody>
@@ -181,6 +184,7 @@ export function Funds() {
 }
 
 function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void }) {
+  const { t } = useTranslation("funds");
   const [days, setDays] = useState(90);
   const [points, setPoints] = useState<FundHistoryPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -256,7 +260,7 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
             onClick={onClose}
             className="rounded-full border border-[hsl(var(--border))] px-2.5 py-0.5 text-[10px] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
           >
-            Close
+            {t("close")}
           </button>
         </div>
       </div>
@@ -264,13 +268,13 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
       {stats && (
         <div className="mt-2 flex gap-4 text-xs">
           <span>
-            <span className="text-[hsl(var(--text-muted))]">{days}d return: </span>
+            <span className="text-[hsl(var(--text-muted))]">{t("daysReturn", { days })} </span>
             <span className={cn("num font-semibold", stats.totalReturn >= 0 ? "text-gain" : "text-loss")}>
               {stats.totalReturn >= 0 ? "+" : ""}{stats.totalReturn.toFixed(2)}%
             </span>
           </span>
           <span className="text-[hsl(var(--text-muted))]">
-            min {stats.min.toFixed(4)} · max {stats.max.toFixed(4)}
+            {t("minMax", { min: stats.min.toFixed(4), max: stats.max.toFixed(4) })}
           </span>
         </div>
       )}
@@ -282,7 +286,7 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
           </div>
         ) : points.length < 2 ? (
           <div className="flex h-full items-center justify-center text-xs text-[hsl(var(--text-muted))]">
-            No historical data.
+            {t("noHistoricalData")}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">

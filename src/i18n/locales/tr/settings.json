@@ -1,0 +1,78 @@
+{
+  "title": "Ayarlar",
+  "categories": {
+    "ai": "Yapay Zeka & Anahtarlar",
+    "appearance": "Görünüm",
+    "behaviour": "Davranış",
+    "profile": "Profil",
+    "danger": "Tehlikeli Bölge"
+  },
+  "ai": {
+    "title": "Yapay Zeka & API Anahtarları",
+    "subtitle": "Yapay zeka modellerini ve harici API anahtarlarını yapılandırın.",
+    "geminiKey": "Gemini API Anahtarı",
+    "geminiRequired": "Zorunlu.",
+    "geminiHint": "Google AI Studio'dan ücretsiz anahtar alın.",
+    "geminiPlaceholder": "AIza...",
+    "newsKey": "News API Anahtarı",
+    "newsOptional": "İsteğe bağlı",
+    "newsPowers": "Haberler ve duygu analizini destekler.",
+    "keyStatus": {
+      "set": "Anahtar ayarlı",
+      "notSet": "Anahtar ayarlı değil",
+      "invalid": "Geçersiz anahtar",
+      "checking": "Kontrol ediliyor…"
+    }
+  },
+  "model": {
+    "title": "Model",
+    "subtitle": "Koçun kullanacağı Gemini modelini seçin.",
+    "mostPowerful": "En güçlü",
+    "recommended": "Önerilen",
+    "deepAnalysis": "Derin analiz için en iyi.",
+    "qualitySpeed": "Kalite ve hız arasında güçlü denge."
+  },
+  "temperature": {
+    "title": "Yaratıcılık (sıcaklık)",
+    "subtitle": "Düşük değerler olgusal kalır. Yüksek değerler daha fazla keşfeder.",
+    "precise": "Kesin",
+    "balanced": "Dengeli",
+    "creative": "Yaratıcı"
+  },
+  "appearance": {
+    "title": "Görünüm",
+    "subtitle": "FinCoach ekranınızda nasıl görünsün.",
+    "dark": "Koyu",
+    "light": "Açık"
+  },
+  "behaviour": {
+    "title": "Davranış",
+    "subtitle": "Koç nasıl yanıt versin.",
+    "demoMode": "Demo modu",
+    "demoModeDesc": "Önbelleğe alınmış yanıtları kullan — API çağrısı yok.",
+    "roastMode": "Sert mod",
+    "roastModeDesc": "Koç şekerlemeyi atlayıp doğruyu söyler."
+  },
+  "profile": {
+    "title": "Profiliniz",
+    "subtitle": "Koç sizi nasıl görüyor.",
+    "spiritAnimal": "Ruh hayvanı",
+    "name": "Ad",
+    "riskProfile": "Risk profili",
+    "riskProfileHint": "Koç önerilerinde ne kadar agresif olsun?",
+    "retakeQuiz": "Testi yeniden al",
+    "unsavedChanges": "Kaydedilmemiş değişiklikleriniz var.",
+    "saveChanges": "Değişiklikleri kaydet",
+    "riskUpdated": "Risk profili {{label}} olarak güncellendi"
+  },
+  "danger": {
+    "title": "Tehlikeli Bölge",
+    "subtitle": "Bu işlemler geri alınamaz.",
+    "resetOnboarding": "Kurulumu sıfırla",
+    "resetOnboardingDesc": "Adınızı, gelirinizi ve risk profilinizi temizler. Sihirbazdan tekrar geçersiniz."
+  },
+  "language": {
+    "title": "Dil",
+    "subtitle": "Uygulamanın görüntüleme dilini seçin."
+  }
+}

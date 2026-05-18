@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { login, register } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { toast } from "sonner";
@@ -10,6 +11,7 @@ const TEST_USERNAME = "testUser";
 const TEST_PASSWORD = "TestUser123!";
 
 export function AuthPage() {
+  const { t } = useTranslation("auth");
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -46,13 +48,13 @@ export function AuthPage() {
       <div className="w-full max-w-sm rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-8 shadow-lg">
         <h1 className="mb-1 text-2xl font-semibold">FinCoach</h1>
         <p className="mb-6 text-sm text-[hsl(var(--text-muted))]">
-          {isRegister ? "Create your account" : "Sign in to continue"}
+          {isRegister ? t("createAccount") : t("signInToContinue")}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-[hsl(var(--text-muted))]">
-              Username
+              {t("username")}
             </span>
             <input
               type="text"
@@ -68,7 +70,7 @@ export function AuthPage() {
 
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-[hsl(var(--text-muted))]">
-              Password
+              {t("password")}
             </span>
             <input
               type="password"
@@ -87,7 +89,7 @@ export function AuthPage() {
             disabled={submitting}
             className="w-full rounded-md bg-[hsl(var(--accent))] px-4 py-2 text-sm font-medium text-[hsl(var(--accent-fg))] transition hover:opacity-90 disabled:opacity-50"
           >
-            {submitting ? "Please wait…" : isRegister ? "Create account" : "Sign in"}
+            {submitting ? t("pleaseWait") : isRegister ? t("createAccountBtn") : t("signIn")}
           </button>
         </form>
 
@@ -98,9 +100,9 @@ export function AuthPage() {
                 <KeyRound className="h-3.5 w-3.5" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium">Want to try it first?</p>
+                <p className="text-xs font-medium">{t("tryFirst")}</p>
                 <p className="mt-0.5 text-[11px] leading-4 text-[hsl(var(--text-muted))]">
-                  Use the test account to explore the app with sample data.
+                  {t("testAccountDesc")}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <code className="rounded bg-[hsl(var(--bg))] px-1.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
@@ -111,7 +113,7 @@ export function AuthPage() {
                     onClick={useTestAccount}
                     className="rounded-md bg-[hsl(var(--bg))] px-2 py-1 text-[11px] font-medium text-[hsl(var(--text))] transition hover:bg-accent hover:text-white"
                   >
-                    Use test account
+                    {t("useTestAccount")}
                   </button>
                 </div>
               </div>
@@ -124,7 +126,7 @@ export function AuthPage() {
           onClick={() => setMode(isRegister ? "login" : "register")}
           className="mt-4 w-full text-center text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
         >
-          {isRegister ? "Already have an account? Sign in" : "Need an account? Register"}
+          {isRegister ? t("alreadyHaveAccount") : t("needAccount")}
         </button>
       </div>
     </div>

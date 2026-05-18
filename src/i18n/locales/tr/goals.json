@@ -1,0 +1,26 @@
+{
+  "title": "Hedefler",
+  "subtitle": "Biriktirdiğiniz şeyi takip edin. İstediğiniz zaman katkı düzenleyin.",
+  "addGoal": "Hedef ekle",
+  "noGoals": "Henüz hedef yok",
+  "noGoalsDesc": "Bir hedef belirleyin — ev, acil fon, tatil...",
+  "createFirstGoal": "İlk hedefi oluştur",
+  "pctReached": "%{{pct}} ulaşıldı",
+  "remainingToGo": "{{remaining}} kaldı",
+  "validationError": "Başlık ve pozitif bir hedef tutarı gereklidir.",
+  "form": {
+    "editTitle": "Hedefi düzenle",
+    "newTitle": "Yeni hedef",
+    "saveChanges": "Değişiklikleri kaydet",
+    "create": "Oluştur",
+    "title": "Başlık",
+    "titlePlaceholder": "Acil fon",
+    "icon": "İkon",
+    "targetAmount": "Hedef tutar",
+    "targetPlaceholder": "10000",
+    "currentAmount": "Mevcut tutar",
+    "currentHint": "İsteğe bağlı",
+    "targetDate": "Hedef tarih",
+    "targetDateHint": "İsteğe bağlı"
+  }
+}

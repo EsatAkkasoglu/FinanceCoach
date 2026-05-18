@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Menu } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Menu, Globe } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -29,8 +30,7 @@ function PlaceholderView({ name }: { name: string }) {
     <div className="flex h-full items-center justify-center text-[hsl(var(--text-muted))]">
       <div className="card-muted">
         <p className="text-sm">
-          <span className="font-semibold capitalize">{name}</span> view —
-          placeholder. Implementation coming next.
+          <span className="font-semibold capitalize">{name}</span>
         </p>
       </div>
     </div>
@@ -38,6 +38,7 @@ function PlaceholderView({ name }: { name: string }) {
 }
 
 function ChatRoute() {
+  const { t } = useTranslation("chat");
   const { convId } = useParams<{ convId: string }>();
   const navigate = useNavigate();
   const { conversations, setActive, addConversation } = useConversationStore();
@@ -64,7 +65,7 @@ function ChatRoute() {
   if (!convId) {
     return (
       <div className="flex h-full items-center justify-center text-[hsl(var(--text-muted))]">
-        <div className="card-muted text-sm">Starting a new conversation…</div>
+        <div className="card-muted text-sm">{t("newConversation")}</div>
       </div>
     );
   }
@@ -72,8 +73,8 @@ function ChatRoute() {
     return (
       <div className="flex h-full items-center justify-center text-[hsl(var(--text-muted))]">
         <div className="card-muted text-sm">
-          Conversation not found. Pick one from the sidebar or start a{" "}
-          <span className="font-semibold text-accent">New chat</span>.
+          {t("conversationNotFound")}{" "}
+          <span className="font-semibold text-accent">{t("newChat")}</span>.
         </div>
       </div>
     );
@@ -81,24 +82,46 @@ function ChatRoute() {
   return <ChatPanel convId={conv.id} threadId={conv.thread_id} />;
 }
 
+const ROUTE_TITLE_KEYS: Record<string, string> = {
+  "/dashboard": "nav.dashboard",
+  "/portfolio": "nav.portfolio",
+  "/budget":    "nav.budget",
+  "/funds":     "nav.funds",
+  "/discover":  "nav.discover",
+  "/goals":     "nav.goals",
+  "/documents": "nav.documents",
+  "/settings":  "nav.settings",
+};
+
 export default function App() {
+  const { t, i18n } = useTranslation();
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const { user, ready, setUser, setReady } = useAuthStore();
   const navigate = useNavigate();
   const { activeConversationId } = useConversationStore();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const location = useLocation();
   useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
+
+  // Sync browser tab title with current route + language
+  useEffect(() => {
+    const key = Object.keys(ROUTE_TITLE_KEYS).find((k) =>
+      location.pathname === k || location.pathname.startsWith(k + "/")
+    );
+    const pageLabel = key ? t(ROUTE_TITLE_KEYS[key]) : t("appName");
+    document.title = `${pageLabel} — ${t("appName")}`;
+  }, [location.pathname, i18n.language, t]);
 
   useEffect(() => {
     ping()
       .then((r) => {
         setHealthy(true);
-        if (r.demo_mode) toast.info("Demo mode is on — using cached responses");
+        if (r.demo_mode) toast.info(t("errors.demoMode"));
       })
       .catch(() => {
         setHealthy(false);
-        toast.error("Backend not reachable. Start it with `uv run uvicorn app.main:app`.");
+        toast.error(t("errors.backendUnreachable"));
       });
   }, []);
 
@@ -113,7 +136,7 @@ export default function App() {
   useEffect(() => {
     return onUnauthorized(() => {
       setUser(null);
-      toast.error("Session expired. Please sign in again.");
+      toast.error(t("errors.sessionExpired"));
     });
   }, [setUser]);
 
@@ -145,7 +168,7 @@ export default function App() {
   if (!ready) {
     return (
       <div className="flex h-screen items-center justify-center bg-[hsl(var(--bg))] text-sm text-[hsl(var(--text-muted))]">
-        Loading…
+        {t("loading")}
       </div>
     );
   }
@@ -158,6 +181,35 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
+      {/* Floating language switcher */}
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+        {langOpen && (
+          <div className="flex flex-col gap-1.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2 shadow-xl">
+            {(["tr", "en"] as const).map((lang) => (
+              <button
+                key={lang}
+                onClick={() => { i18n.changeLanguage(lang); setLangOpen(false); }}
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  i18n.language === lang
+                    ? "bg-accent text-white"
+                    : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+                }`}
+              >
+                <span className="text-base leading-none">{lang === "tr" ? "🇹🇷" : "🇬🇧"}</span>
+                {t(lang === "tr" ? "languageTr" : "languageEn")}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => setLangOpen((v) => !v)}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:bg-accent/90 active:scale-95"
+          title={t("language")}
+        >
+          <Globe className="h-4 w-4" />
+        </button>
+      </div>
+
       <Sidebar
         healthy={healthy}
         onSelectConversation={handleSelectConversation}
@@ -171,11 +223,11 @@ export default function App() {
             type="button"
             onClick={() => setMobileNavOpen(true)}
             className="rounded-lg p-2 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))] md:hidden"
-            aria-label="Open navigation"
+            aria-label={t("openNav")}
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="text-sm font-semibold tracking-tight md:hidden">FinCoach</span>
+          <span className="text-sm font-semibold tracking-tight md:hidden">{t("appName")}</span>
           <div className="ml-auto">
             <CurrencySwitcher />
           </div>

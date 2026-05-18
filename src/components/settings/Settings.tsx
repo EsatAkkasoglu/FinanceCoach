@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSettingsStore, useUserStore, type GeminiModelId } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
@@ -190,6 +191,7 @@ function SecretInput({
 // ─── Panels ───────────────────────────────────────────────────────────────────
 
 function AIPanel() {
+  const { t } = useTranslation("settings");
   const {
     geminiApiKey, setGeminiApiKey,
     newsApiKey, setNewsApiKey,
@@ -219,8 +221,8 @@ function AIPanel() {
   return (
     <>
       <PanelHeader
-        title="AI & API Keys"
-        description="FinCoach runs on Google Gemini. Add your keys and choose how the model behaves."
+        title={t("ai.title")}
+        description={t("ai.subtitle")}
       />
 
       <div className="space-y-5">
@@ -396,10 +398,11 @@ function AIPanel() {
 }
 
 function AppearancePanel() {
+  const { t } = useTranslation("settings");
   const { theme, toggleTheme } = useSettingsStore();
   return (
     <>
-      <PanelHeader title="Appearance" description="How FinCoach looks on your screen." />
+      <PanelHeader title={t("appearance.title")} description={t("appearance.subtitle")} />
       <Card>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -408,7 +411,7 @@ function AppearancePanel() {
               : <Sun className="h-4 w-4 text-[hsl(var(--text-muted))]" />
             }
             <div>
-              <p className="text-sm font-medium">{theme === "dark" ? "Dark mode" : "Light mode"}</p>
+              <p className="text-sm font-medium">{theme === "dark" ? t("appearance.dark") : t("appearance.light")}</p>
               <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
                 {theme === "dark" ? "Easier on the eyes at night." : "Bright and high-contrast."}
               </p>
@@ -432,22 +435,56 @@ function AppearancePanel() {
           </button>
         </div>
       </Card>
+
+      <Card>
+        <LanguageSwitcher />
+      </Card>
     </>
   );
 }
 
+function LanguageSwitcher() {
+  const { t, i18n } = useTranslation("settings");
+  const { t: tCommon } = useTranslation("common");
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium">{t("language.title")}</p>
+        <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{t("language.subtitle")}</p>
+      </div>
+      <div className="flex gap-2">
+        {(["en", "tr"] as const).map((lang) => (
+          <button
+            key={lang}
+            onClick={() => i18n.changeLanguage(lang)}
+            className={cn(
+              "rounded-lg border px-3 py-1.5 text-xs font-medium transition",
+              i18n.language === lang
+                ? "border-accent bg-accent-muted text-accent"
+                : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+            )}
+          >
+            {tCommon(lang === "en" ? "languageEn" : "languageTr")}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BehaviourPanel() {
+  const { t } = useTranslation("settings");
   const { demoMode, setDemoMode, roastMode, setRoastMode } = useSettingsStore();
   return (
     <>
-      <PanelHeader title="Behaviour" description="How the coach responds and where its data comes from." />
+      <PanelHeader title={t("behaviour.title")} description={t("behaviour.subtitle")} />
       <div className="space-y-5">
         <Card>
           <Toggle
             checked={demoMode}
             onChange={setDemoMode}
-            label="Demo mode"
-            description="Use cached responses instead of live API calls. No API key needed."
+            label={t("behaviour.demoMode")}
+            description={t("behaviour.demoModeDesc")}
           />
         </Card>
         <Card>
@@ -457,8 +494,8 @@ function BehaviourPanel() {
               <Toggle
                 checked={roastMode}
                 onChange={setRoastMode}
-                label="Roast mode"
-                description="The coach skips the sugarcoating and tells it like it is."
+                label={t("behaviour.roastMode")}
+                description={t("behaviour.roastModeDesc")}
               />
             </div>
           </div>
@@ -475,6 +512,8 @@ const RISK_PROFILES: { id: UserProfile["risk_profile"]; label: string; descripti
 ];
 
 function ProfilePanel() {
+  const { t } = useTranslation("settings");
+  const { t: tCommon } = useTranslation("common");
   const setUserProfile = useUserStore((s) => s.setProfile);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [draft, setDraft] = useState<UserProfile | null>(null);
@@ -507,7 +546,7 @@ function ProfilePanel() {
   if (loading || !draft || !profile) {
     return (
       <>
-        <PanelHeader title="Your Profile" />
+        <PanelHeader title={t("profile.title")} />
         <div className="card flex h-32 items-center justify-center">
           {error
             ? <p className="text-sm text-loss">{error}</p>
@@ -554,14 +593,14 @@ function ProfilePanel() {
   return (
     <>
       <PanelHeader
-        title="Your Profile"
-        description="The coach uses these to tailor advice. Update any time."
+        title={t("profile.title")}
+        description={t("profile.subtitle")}
       />
 
       <div className="space-y-5">
         {/* Avatar */}
         <Card>
-          <h3 className="mb-3 text-sm font-semibold">Spirit animal</h3>
+          <h3 className="mb-3 text-sm font-semibold">{t("profile.spiritAnimal")}</h3>
           <div className="flex flex-wrap gap-2">
             {AVATARS.map((a) => {
               const active = draft.avatar === a.id;
@@ -589,7 +628,7 @@ function ProfilePanel() {
         <Card>
           <h3 className="mb-3 text-sm font-semibold">Basics</h3>
           <div className="space-y-4">
-            <Field label="Name">
+            <Field label={t("profile.name")}>
               <input
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -603,17 +642,16 @@ function ProfilePanel() {
         <Card>
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <h3 className="mb-1 text-sm font-semibold">Risk profile</h3>
+              <h3 className="mb-1 text-sm font-semibold">{t("profile.riskProfile")}</h3>
               <p className="text-xs text-[hsl(var(--text-muted))]">
-                How aggressive should the coach be when suggesting positions?
+                {t("profile.riskProfileHint")}
               </p>
             </div>
             <button
               onClick={() => setQuizOpen(true)}
               className="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-muted/30 px-2.5 py-1.5 text-xs font-medium text-accent transition hover:bg-accent-muted/60"
-              title="Score your risk profile again with the 5-question quiz"
             >
-              <RefreshCw className="h-3 w-3" /> Retake quiz
+              <RefreshCw className="h-3 w-3" /> {t("profile.retakeQuiz")}
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -644,7 +682,7 @@ function ProfilePanel() {
           onSaved={(score, profileLabel) => {
             setDraft({ ...draft, risk_profile: profileLabel });
             useUserStore.getState().setProfile({ riskScore: score, riskProfile: profileLabel });
-            toast.success(`Risk profile updated to ${profileLabel}`);
+            toast.success(t("profile.riskUpdated", { label: profileLabel }));
             setQuizOpen(false);
           }}
         />
@@ -652,20 +690,20 @@ function ProfilePanel() {
         {/* Sticky save bar */}
         {dirty && (
           <div className="sticky bottom-2 flex items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent-muted/40 px-4 py-2.5 backdrop-blur-sm">
-            <span className="text-xs text-[hsl(var(--text))]">You have unsaved changes.</span>
+            <span className="text-xs text-[hsl(var(--text))]">{t("profile.unsavedChanges")}</span>
             <div className="flex gap-2">
               <button
                 onClick={discard}
                 className="rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))]"
               >
-                Discard
+                {tCommon("cancel")}
               </button>
               <button
                 onClick={save}
                 disabled={saving}
                 className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
               >
-                {saving ? "Saving…" : "Save changes"}
+                {saving ? tCommon("saving") : t("profile.saveChanges")}
               </button>
             </div>
           </div>
@@ -736,16 +774,17 @@ function RetakeQuizModal({
 }
 
 function DangerPanel() {
+  const { t } = useTranslation("settings");
   const { resetOnboarding } = useUserStore();
   return (
     <>
-      <PanelHeader title="Danger Zone" description="These actions can't be undone." />
+      <PanelHeader title={t("danger.title")} description={t("danger.subtitle")} />
       <div className="rounded-xl border border-loss/40 bg-loss/5 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium">Reset onboarding</p>
+            <p className="text-sm font-medium">{t("danger.resetOnboarding")}</p>
             <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
-              Clears your name, income, and risk profile, then restarts the setup wizard.
+              {t("danger.resetOnboardingDesc")}
             </p>
           </div>
           <button
@@ -768,15 +807,26 @@ function DangerPanel() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function Settings() {
+  const { t } = useTranslation("settings");
   const [active, setActive] = useState<CategoryId>("ai");
+
+  const CATEGORY_LABELS: Record<CategoryId, string> = {
+    ai: t("categories.ai"),
+    appearance: t("categories.appearance"),
+    behaviour: t("categories.behaviour"),
+    profile: t("categories.profile"),
+    danger: t("categories.danger"),
+  };
 
   return (
     <div className="mx-auto flex h-full max-w-5xl gap-6 overflow-hidden">
       {/* Sub-nav */}
       <nav className="w-60 shrink-0 sticky top-0 self-start">
-        <h1 className="mb-4 px-2 text-2xl font-bold tracking-tight">Settings</h1>
+        <h1 className="mb-4 px-2 text-2xl font-bold tracking-tight">{t("title")}</h1>
         <div className="flex flex-col gap-0.5">
-          {CATEGORIES.map(({ id, label, description, icon: Icon }) => {
+          {CATEGORIES.map(({ id, icon: Icon }) => {
+            const label = CATEGORY_LABELS[id];
+            const description = "";
             const isActive = active === id;
             const isDanger = id === "danger";
             return (

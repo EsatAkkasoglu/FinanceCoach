@@ -1,0 +1,15 @@
+{
+  "title": "Keşfet",
+  "subtitle": "Günün hareketleri, trend kriptolar ve M&A fısıltıları.",
+  "hotToday": "Bugün popüler",
+  "topGainers": "En çok kazananlar",
+  "topLosers": "En çok kaybedenler",
+  "trendingCrypto": "Trend kriptolar",
+  "noTrendData": "Trend verisi yok — Alpha Vantage ve CoinGecko erişilemiyor.",
+  "rumorMill": "Söylenti değirmeni",
+  "noRumors": "Şu an taze M&A veya işlem yapılabilir söylenti yok.",
+  "impact": "etki {{score}}/10",
+  "categories": {
+    "ma": "M&A"
+  }
+}

@@ -3,6 +3,7 @@
  * Below: accounts panel + subscriptions panel side-by-side, then transactions table.
  */
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Upload, Plus, Wallet, TrendingUp, TrendingDown, RefreshCcw,
   Pencil, Trash2, CreditCard, Banknote, Building2, Loader2,
@@ -65,6 +66,7 @@ const SUBSCRIPTION_ICON: Record<string, LucideIcon> = {
 };
 
 export function Budget() {
+  const { t } = useTranslation("budget");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [subs, setSubs] = useState<Subscription[]>([]);
@@ -166,9 +168,9 @@ export function Budget() {
     <div>
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Budget</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-[hsl(var(--text-muted))]">
-            Track money in, out, and where it lives.
+            {t("subtitle")}
           </p>
         </div>
       </header>
@@ -211,9 +213,9 @@ export function Budget() {
               onDelete={handleDeleteAccount}
             />
             <RecurringPanel
-              title="Income sources"
-              subtitle="Salary, rent, dividends — anything that lands on a schedule."
-              emptyHint="Add a salary or other regular income to track what comes in each month."
+              title={t("incomeSources")}
+              subtitle={t("recurringIncome")}
+              emptyHint={t("kpi.recurringHint")}
               tone="income"
               subscriptions={subs.filter((s) => s.direction === "income")}
               monthlyTotals={summary?.recurring.income_monthly_by_currency ?? {}}
@@ -227,9 +229,9 @@ export function Budget() {
 
           <div className="mt-4">
             <RecurringPanel
-              title="Subscriptions"
-              subtitle="Recurring charges so nothing surprises you."
-              emptyHint="Add Netflix, Spotify, gym — anything that bills automatically."
+              title={t("subscriptions")}
+              subtitle={t("subscriptionsHint")}
+              emptyHint={t("subscriptionsHint")}
               tone="expense"
               subscriptions={subs.filter((s) => s.direction !== "income")}
               monthlyTotals={summary?.recurring.expense_monthly_by_currency ?? {}}
@@ -293,6 +295,7 @@ export function Budget() {
 // ── Summary KPIs ────────────────────────────────────────────────────────────
 
 function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxRates }) {
+  const { t } = useTranslation("budget");
   if (!summary) return null;
   const cashByCcy = summary.cash_on_hand;
   const incomeByCcy = summary.income_mtd;
@@ -305,38 +308,36 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <KPICard
-        title="Cash on hand"
+        title={t("kpi.cashOnHand")}
         icon={<Wallet className="h-4 w-4" />}
         bag={cashByCcy}
         fx={fx}
-        subtitle={Object.keys(cashByCcy).length === 0 ? "No accounts yet" : undefined}
+        subtitle={Object.keys(cashByCcy).length === 0 ? t("kpi.noAccounts") : undefined}
       />
       <KPICard
-        title="Income this month"
+        title={t("kpi.incomeThisMonth")}
         icon={<TrendingUp className="h-4 w-4 text-gain" />}
         bag={incomeByCcy}
         fx={fx}
-        subtitle={Object.keys(incomeByCcy).length === 0 ? "No income logged yet" : undefined}
+        subtitle={Object.keys(incomeByCcy).length === 0 ? t("kpi.noIncome") : undefined}
         delta={incomeMoM}
         deltaPositiveIsGood
       />
       <KPICard
-        title="Spending this month"
+        title={t("kpi.spendingThisMonth")}
         icon={<TrendingDown className="h-4 w-4 text-loss" />}
         bag={expenseByCcy}
         fx={fx}
-        subtitle={Object.keys(expenseByCcy).length === 0 ? "Nothing spent yet" : undefined}
+        subtitle={Object.keys(expenseByCcy).length === 0 ? t("kpi.nothingSpent") : undefined}
         delta={expenseMoM}
         deltaPositiveIsGood={false}
       />
       <KPICard
-        title="Recurring income / mo"
+        title={t("kpi.recurringIncome")}
         icon={<Repeat className="h-4 w-4 text-accent" />}
         bag={recurringIncome}
         fx={fx}
-        subtitle={Object.keys(recurringIncome).length === 0
-          ? "Mark a transaction as recurring to track it"
-          : undefined}
+        subtitle={Object.keys(recurringIncome).length === 0 ? t("kpi.recurringHint") : undefined}
       />
     </div>
   );
@@ -424,7 +425,25 @@ const CATEGORY_COLORS = [
   "#14B8A6", "#8B5CF6", "#F59E0B", "#3B82F6", "#EC4899", "#10B981", "#EF4444",
 ];
 
+const CATEGORY_LABELS_TR: Record<string, string> = {
+  rent: "Kira", housing: "Konut", dining: "Yemek", groceries: "Market",
+  food: "Yiyecek", entertainment: "Eğlence", shopping: "Alışveriş",
+  transport: "Ulaşım", health: "Sağlık", education: "Eğitim",
+  utilities: "Faturalar", subscriptions: "Abonelikler", salary: "Maaş",
+  freelance: "Serbest", investment: "Yatırım", savings: "Birikim",
+  travel: "Seyahat", clothing: "Giyim", software: "Yazılım",
+  insurance: "Sigorta", gym: "Spor salonu", fitness: "Spor",
+  transfer: "Transfer", other: "Diğer", uncategorized: "Kategorisiz",
+};
+
+function localizeCategory(name: string, lang: string): string {
+  const key = name.toLowerCase().trim();
+  if (lang === "tr") return CATEGORY_LABELS_TR[key] ?? name;
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
 function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRates }) {
+  const { t, i18n } = useTranslation("budget");
   const items = useMemo(() => {
     const list = (summary.top_categories ?? []).map((c) => {
       const value = fx.rates
@@ -440,9 +459,9 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
   if (items.length === 0) {
     return (
       <section className="card">
-        <h2 className="text-sm font-semibold">Top spending categories</h2>
+        <h2 className="text-sm font-semibold">{t("topCategories")}</h2>
         <p className="mt-3 rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
-          No expenses logged yet this month.
+          {t("whereMoneyWent")}
         </p>
       </section>
     );
@@ -450,38 +469,50 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
 
   return (
     <section className="card">
-      <h2 className="text-sm font-semibold">Top spending categories</h2>
-      <p className="text-[11px] text-[hsl(var(--text-muted))]">Where this month's money went</p>
-      <div className="mt-3 flex items-center gap-4">
-        <div className="h-32 w-32 shrink-0">
+      <h2 className="text-sm font-semibold">{t("topCategories")}</h2>
+      <p className="text-[11px] text-[hsl(var(--text-muted))]">{t("whereMoneyWent")}</p>
+
+      <div className="mt-4 flex gap-5">
+        {/* Donut */}
+        <div className="relative h-36 w-36 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={items} dataKey="value" nameKey="name" innerRadius={36} outerRadius={56} paddingAngle={2}>
+              <Pie data={items} dataKey="value" nameKey="name" innerRadius={42} outerRadius={64} paddingAngle={2}>
                 {items.map((_, i) => (
                   <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} stroke="none" />
                 ))}
               </Pie>
               <RechartsTooltip
-                contentStyle={{ background: "hsl(var(--surface))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
-                formatter={(v: number) => (fx.rates ? formatCurrency(v, fx.target) : v.toFixed(2))}
+                contentStyle={{ background: "hsl(var(--surface))", border: "1px solid hsl(var(--border))", fontSize: 12, borderRadius: 8 }}
+                formatter={(v: number, _: unknown, entry: { payload: { name: string } }) => [
+                  fx.rates ? formatCurrency(v, fx.target) : v.toFixed(2),
+                  localizeCategory(entry.payload.name, i18n.language),
+                ]}
               />
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <ul className="flex-1 space-y-1.5 text-xs">
+
+        {/* Legend list */}
+        <ul className="flex-1 self-center space-y-2">
           {items.map((it, i) => {
             const pct = total ? (it.value / total) * 100 : 0;
+            const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
             return (
-              <li key={it.name} className="flex items-center gap-2">
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
-                />
-                <span className="truncate uppercase text-[10px] text-[hsl(var(--text-muted))] flex-1">{it.name}</span>
-                <span className="num font-semibold">
+              <li key={it.name} className="grid items-center gap-x-2 text-xs" style={{ gridTemplateColumns: "8px 1fr auto auto" }}>
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: color }} />
+                <span className="truncate text-[hsl(var(--text))] capitalize">
+                  {localizeCategory(it.name, i18n.language)}
+                </span>
+                <span className="num font-semibold tabular-nums">
                   {fx.rates ? formatCurrency(it.value, fx.target) : `${it.raw.toFixed(0)} ${it.currency}`}
                 </span>
-                <span className="text-[10px] text-[hsl(var(--text-muted))] w-8 text-right">{pct.toFixed(0)}%</span>
+                <span
+                  className="rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-right min-w-[2.5rem]"
+                  style={{ background: `${color}22`, color }}
+                >
+                  {pct.toFixed(0)}%
+                </span>
               </li>
             );
           })}
@@ -494,6 +525,7 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
 // ── Upcoming charges (next 30 days) ─────────────────────────────────────────
 
 function UpcomingCharges({ summary, fx }: { summary: BudgetSummary; fx: UseFxRates }) {
+  const { t } = useTranslation("budget");
   const upcoming = useMemo(() => {
     const list = (summary.recurring.upcoming ?? []).slice();
     list.sort((a, b) => {
@@ -508,15 +540,15 @@ function UpcomingCharges({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
     <section className="card lg:col-span-2">
       <header className="mb-2 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold">Coming up (next 30 days)</h2>
+          <h2 className="text-sm font-semibold">{t("upcomingTitle")}</h2>
           <p className="text-[11px] text-[hsl(var(--text-muted))]">
-            Recurring charges and income on the calendar.
+            {t("upcomingDesc")}
           </p>
         </div>
       </header>
       {upcoming.length === 0 ? (
         <p className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
-          Nothing scheduled. Mark a transaction as recurring to track it here.
+          {t("upcomingEmpty")}
         </p>
       ) : (
         <ul className="divide-y divide-[hsl(var(--border))]">
@@ -570,6 +602,7 @@ function UpcomingCharges({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
 // ── Action strip ────────────────────────────────────────────────────────────
 
 function ActionStrip({ onImport, onAddManual }: { onImport: () => void; onAddManual: () => void }) {
+  const { t } = useTranslation("budget");
   return (
     <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
       <button
@@ -580,9 +613,9 @@ function ActionStrip({ onImport, onAddManual }: { onImport: () => void; onAddMan
           <Upload className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">Upload a document</p>
+          <p className="text-sm font-semibold">{t("uploadDoc")}</p>
           <p className="text-xs text-[hsl(var(--text-muted))]">
-            Bank statement, payslip, receipt — AI fills the rest.
+            {t("uploadDocDesc")}
           </p>
         </div>
         <Sparkles className="h-4 w-4 text-accent opacity-60" />
@@ -595,9 +628,9 @@ function ActionStrip({ onImport, onAddManual }: { onImport: () => void; onAddMan
           <Plus className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">Add manually</p>
+          <p className="text-sm font-semibold">{t("addManually")}</p>
           <p className="text-xs text-[hsl(var(--text-muted))]">
-            One income or expense — fast keyboard entry.
+            {t("addManuallyDesc")}
           </p>
         </div>
       </button>
@@ -616,17 +649,18 @@ function AccountsPanel({
   onEdit: (a: Account) => void;
   onDelete: (a: Account) => void;
 }) {
+  const { t } = useTranslation("budget");
   return (
     <section className="card">
       <header className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Accounts</h2>
+        <h2 className="text-sm font-semibold">{t("accounts")}</h2>
         <Button variant="ghost" size="sm" onClick={onAdd}>
-          <Plus className="h-3.5 w-3.5" /> Add
+          <Plus className="h-3.5 w-3.5" /> {t("common:add", "Add")}
         </Button>
       </header>
       {accounts.length === 0 ? (
         <p className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
-          Add your first account — bank, wallet, or credit card.
+          {t("noAccountsYet")}
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -905,6 +939,7 @@ function TransactionsPanel({
   onDelete: (t: Transaction) => void;
   onMarkRecurring: (t: Transaction) => void;
 }) {
+  const { t: tBudget } = useTranslation("budget");
   const accountsById = useMemo(
     () => Object.fromEntries(accounts.map((a) => [a.id, a])),
     [accounts],
@@ -926,48 +961,49 @@ function TransactionsPanel({
     <section className="card mt-6">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold">Transactions</h2>
+          <h2 className="text-sm font-semibold">{tBudget("transactions.title")}</h2>
           <p className="text-[11px] text-[hsl(var(--text-muted))]">
-            Showing {visibleTxs.length} of {transactions.length}
-            {transactions.length !== allCount ? ` (filtered from ${allCount})` : ""}
+            {transactions.length !== allCount
+              ? tBudget("transactions.showingFiltered", { visible: visibleTxs.length, total: transactions.length, all: allCount })
+              : tBudget("transactions.showing", { visible: visibleTxs.length, total: transactions.length })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <FilterChip active={filterType === "all"} onClick={() => setFilterType("all")}>All</FilterChip>
+          <FilterChip active={filterType === "all"} onClick={() => setFilterType("all")}>{tBudget("transactions.all")}</FilterChip>
           <FilterChip active={filterType === "income"} onClick={() => setFilterType("income")}>
-            <ArrowDownRight className="h-3 w-3" /> Income
+            <ArrowDownRight className="h-3 w-3" /> {tBudget("transactions.income")}
           </FilterChip>
           <FilterChip active={filterType === "expense"} onClick={() => setFilterType("expense")}>
-            <ArrowUpRight className="h-3 w-3" /> Expense
+            <ArrowUpRight className="h-3 w-3" /> {tBudget("transactions.expense")}
           </FilterChip>
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
             className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1 text-xs"
           >
-            <option value="all">All categories</option>
+            <option value="all">{tBudget("transactions.allCategories")}</option>
             {allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <Button size="sm" onClick={onAdd}>
-            <Plus className="h-3 w-3" /> Add
+            <Plus className="h-3 w-3" /> {tBudget("common:add", "Add")}
           </Button>
         </div>
       </header>
 
       {transactions.length === 0 ? (
         <p className="rounded-lg border border-dashed border-[hsl(var(--border))] py-8 text-center text-xs text-[hsl(var(--text-muted))]">
-          No transactions match these filters.
+          {tBudget("transactions.noMatch")}
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="num min-w-full text-sm">
             <thead className="text-xs text-[hsl(var(--text-muted))]">
               <tr className="border-b border-[hsl(var(--border))]">
-                <th className="px-2 py-2 text-left font-normal">Date</th>
-                <th className="px-2 py-2 text-left font-normal">Description</th>
-                <th className="px-2 py-2 text-left font-normal">Category</th>
-                <th className="px-2 py-2 text-left font-normal">Account</th>
-                <th className="px-2 py-2 text-right font-normal">Amount</th>
+                <th className="px-2 py-2 text-left font-normal">{tBudget("transactions.headers.date")}</th>
+                <th className="px-2 py-2 text-left font-normal">{tBudget("transactions.headers.description")}</th>
+                <th className="px-2 py-2 text-left font-normal">{tBudget("transactions.headers.category")}</th>
+                <th className="px-2 py-2 text-left font-normal">{tBudget("transactions.headers.account")}</th>
+                <th className="px-2 py-2 text-right font-normal">{tBudget("transactions.headers.amount")}</th>
                 <th className="w-16 px-2 py-2"></th>
               </tr>
             </thead>
@@ -981,7 +1017,7 @@ function TransactionsPanel({
                     <td className="px-2 py-2.5">
                       <div className="flex items-center gap-1.5">
                         <SourceBadge source={t.source} />
-                        <span className="truncate">{t.description || <span className="text-[hsl(var(--text-muted))]">(no description)</span>}</span>
+                        <span className="truncate">{t.description || <span className="text-[hsl(var(--text-muted))]">{tBudget("transactions.noDescription")}</span>}</span>
                       </div>
                     </td>
                     <td className="px-2 py-2.5">
@@ -1030,7 +1066,7 @@ function TransactionsPanel({
                   onClick={() => setVisibleCount((n) => n + VISIBLE_STEP)}
                   className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
                 >
-                  Show more
+                  {tBudget("transactions.showMore")}
                 </button>
               )}
               {hasMore && (
@@ -1039,7 +1075,7 @@ function TransactionsPanel({
                   onClick={() => setVisibleCount(transactions.length)}
                   className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
                 >
-                  Show all
+                  {tBudget("transactions.showAll")}
                 </button>
               )}
               {visibleCount > VISIBLE_STEP && (
@@ -1048,7 +1084,7 @@ function TransactionsPanel({
                   onClick={() => setVisibleCount(VISIBLE_STEP)}
                   className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
                 >
-                  Show less
+                  {tBudget("transactions.showLess")}
                 </button>
               )}
             </div>
@@ -1060,11 +1096,12 @@ function TransactionsPanel({
 }
 
 function SourceBadge({ source }: { source: Transaction["source"] }) {
+  const { t } = useTranslation("budget");
   const map = {
-    manual: { icon: Pencil, title: "Manual entry" },
-    upload: { icon: Upload, title: "From an uploaded document" },
-    chat: { icon: Sparkles, title: "Added via chat" },
-    subscription: { icon: Calendar, title: "Recurring" },
+    manual: { icon: Pencil, title: t("transactions.sources.manual") },
+    upload: { icon: Upload, title: t("transactions.sources.upload") },
+    chat: { icon: Sparkles, title: t("transactions.sources.chat") },
+    subscription: { icon: Calendar, title: t("transactions.sources.subscription") },
   };
   const { icon: Icon, title } = map[source] ?? map.manual;
   return (
@@ -1150,34 +1187,35 @@ function BudgetEmpty({
   onAddAccount: () => void;
   onAddManual: () => void;
 }) {
+  const { t } = useTranslation("budget");
   return (
     <div className="card flex flex-col items-center text-center py-12">
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-accent-muted">
         <Banknote className="h-6 w-6 text-accent" />
       </div>
-      <h2 className="text-lg font-semibold tracking-tight">Set up your budget</h2>
+      <h2 className="text-lg font-semibold tracking-tight">{t("onboarding.title")}</h2>
       <p className="mt-1 max-w-md text-sm text-[hsl(var(--text-muted))]">
-        Pick the path that fits how you have your numbers handy.
+        {t("onboarding.subtitle")}
       </p>
 
       <div className="mt-6 grid w-full max-w-2xl grid-cols-1 gap-3 md:grid-cols-3">
         <CTACard
           icon={<Upload className="h-5 w-5" />}
-          title="Upload statement"
-          description="Drop a bank PDF or screenshot. AI extracts transactions."
+          title={t("onboarding.uploadStatement")}
+          description={t("onboarding.uploadStatementDesc")}
           accent
           onClick={onImport}
         />
         <CTACard
           icon={<Building2 className="h-5 w-5" />}
-          title="Add an account"
-          description="Tell us where your money lives — bank, cash, credit card."
+          title={t("onboarding.addAccount")}
+          description={t("onboarding.addAccountDesc")}
           onClick={onAddAccount}
         />
         <CTACard
           icon={<Plus className="h-5 w-5" />}
-          title="Log a transaction"
-          description="Quick-enter a single income or expense."
+          title={t("onboarding.logTransaction")}
+          description={t("onboarding.logTransactionDesc")}
           onClick={onAddManual}
         />
       </div>

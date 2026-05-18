@@ -1,0 +1,26 @@
+{
+  "title": "Dashboard",
+  "todayAtAGlance": "Today at a glance",
+  "netWorth": "Net worth",
+  "allTime": "all-time",
+  "lastNDays": "Last {{count}} days",
+  "noHoldings": "No holdings yet — add some from the Portfolio tab",
+  "thisMonth": "This month",
+  "noBudgetData": "No budget data yet — add transactions.",
+  "income": "Income",
+  "expenses": "Expenses",
+  "savingsRate": "Savings rate",
+  "todaysBrief": "Today's brief",
+  "briefUnavailable": "Brief unavailable right now.",
+  "allocation": "Allocation",
+  "addHoldingsForBreakdown": "Add holdings to see breakdown.",
+  "holdings": "Holdings",
+  "noHoldingsDesc": "No holdings yet. Add from the Portfolio tab to see live valuations.",
+  "table": {
+    "ticker": "Ticker",
+    "qty": "Qty",
+    "price": "Price",
+    "value": "Value",
+    "pnl": "P&L"
+  }
+}

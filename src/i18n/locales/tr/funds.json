@@ -1,0 +1,28 @@
+{
+  "title": "Türk Fonları",
+  "subtitle": "Türk yatırım fonları için günlük net varlık değeri (BYF).",
+  "allBest": "Tümü (en iyi)",
+  "searchPlaceholder": "Kod veya adla ara (AFA, İş Bankası)…",
+  "noResults": "Sonuç yok. Farklı bir kategori veya anahtar kelime deneyin.",
+  "close": "Kapat",
+  "noHistoricalData": "Geçmiş veri yok.",
+  "daysReturn": "{{days}} günlük getiri:",
+  "minMax": "min {{min}} · maks {{max}}",
+  "table": {
+    "code": "Kod",
+    "name": "Ad",
+    "category": "Kategori",
+    "risk": "Risk",
+    "oneMonth": "1A",
+    "sixMonths": "6A",
+    "oneYear": "1Y"
+  },
+  "categories": {
+    "gold": "Altın",
+    "equity": "Hisse senedi",
+    "eurobond": "Eurobond",
+    "basket": "Fon sepeti",
+    "preciousMetals": "Değerli metaller",
+    "shortTerm": "Kısa vadeli"
+  }
+}

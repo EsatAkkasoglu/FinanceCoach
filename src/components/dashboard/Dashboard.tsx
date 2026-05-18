@@ -10,6 +10,7 @@
  *   - Holdings table: per-position P&L
  */
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   TrendingUp, TrendingDown, Sparkles, AlertCircle, Flame, Newspaper, Coins,
   type LucideIcon,
@@ -64,6 +65,7 @@ const RISK_BADGE: Record<string, { label: string; cls: string }> = {
 };
 
 export function Dashboard() {
+  const { t } = useTranslation("dashboard");
   const { cache, loading, setCache, setLoading } = useDashboardStore();
   const [error, setError] = useState<string | null>(null);
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
@@ -117,7 +119,7 @@ export function Dashboard() {
       {/* Top bar — anchors page title vs page content */}
       <div className="mb-6 flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
         <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-          Dashboard
+          {t("title")}
         </span>
         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide", badge.cls)}>
           {badge.label}
@@ -131,7 +133,7 @@ export function Dashboard() {
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-[32px] font-semibold leading-tight tracking-tight truncate">{greeting}</h1>
-          <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">Today at a glance</p>
+          <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{t("todayAtAGlance")}</p>
         </div>
       </div>
 
@@ -163,6 +165,7 @@ function NetWorthCard({
   history: NetWorthPoint[];
   loading: boolean;
 }) {
+  const { t } = useTranslation("dashboard");
   const fx = useFxRates();
   let value = totals?.value ?? 0;
   let pnl = totals?.pnl ?? 0;
@@ -184,7 +187,7 @@ function NetWorthCard({
   }
   return (
     <div className="card lg:col-span-2">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Net worth</div>
+      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("netWorth")}</div>
       {loading ? (
         <div className="mt-2 flex h-12 items-center">
           <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
@@ -193,7 +196,7 @@ function NetWorthCard({
         <>
           <div className="num mt-2 text-3xl font-semibold">{formatCurrency(value, displayCcy)}</div>
           <div className={cn("mt-1 text-sm", pnl >= 0 ? "text-gain" : "text-loss")}>
-            {formatPercent(pnlPct)} ({formatCurrency(pnl, displayCcy)}) all-time
+            {formatPercent(pnlPct)} ({formatCurrency(pnl, displayCcy)}) {t("allTime")}
           </div>
           {history.length >= 2 && (
             <div className="mt-3 h-12">
@@ -212,7 +215,7 @@ function NetWorthCard({
                 </LineChart>
               </ResponsiveContainer>
               <p className="text-[10px] text-[hsl(var(--text-muted))]">
-                Last {history.length} days
+                {t("lastNDays", { count: history.length })}
               </p>
             </div>
           )}
@@ -221,7 +224,7 @@ function NetWorthCard({
         <>
           <div className="num mt-2 text-3xl font-semibold">{formatCurrency(0, displayCcy)}</div>
           <div className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-            No holdings yet — add some from the Portfolio tab
+            {t("noHoldings")}
           </div>
         </>
       )}
@@ -231,6 +234,7 @@ function NetWorthCard({
 
 // ---------- Budget Snapshot ----------
 function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null; loading: boolean }) {
+  const { t } = useTranslation("dashboard");
   const fx = useFxRates();
   const { monthlyIncome } = useUserStore();
 
@@ -266,19 +270,19 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
 
   return (
     <div className="card lg:col-span-2">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">This month</div>
+      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("thisMonth")}</div>
       {loading ? (
         <div className="mt-2 flex h-12 items-center">
           <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
         </div>
       ) : budget == null ? (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">No budget data yet — add transactions.</p>
+        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{t("noBudgetData")}</p>
       ) : (
         <div className="mt-3 space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
               <ArrowUpRight className="h-3.5 w-3.5 text-gain" />
-              Income
+              {t("income")}
             </span>
             <span className="num font-medium text-gain">
               {totalIncome != null ? formatCurrency(totalIncome, displayCcy) : "—"}
@@ -287,7 +291,7 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
               <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
-              Expenses
+              {t("expenses")}
             </span>
             <span className="num font-medium text-loss">
               {totalExpense != null ? formatCurrency(totalExpense, displayCcy) : "—"}
@@ -297,7 +301,7 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
             <div className="flex items-center justify-between border-t border-[hsl(var(--border))] pt-2 text-sm">
               <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
                 <PiggyBank className="h-3.5 w-3.5 text-accent" />
-                Savings rate
+                {t("savingsRate")}
               </span>
               <span className={cn("num font-semibold", savingsRate >= 0 ? "text-gain" : "text-loss")}>
                 {formatPercent(savingsRate)}
@@ -312,9 +316,10 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
 
 // ---------- Briefing ----------
 function BriefingCard({ items, loading }: { items: BriefingItem[] | null; loading: boolean }) {
+  const { t } = useTranslation("dashboard");
   return (
     <div className="card lg:col-span-2">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Today's brief</div>
+      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("todaysBrief")}</div>
       {loading ? (
         <div className="mt-3 flex h-16 items-center">
           <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
@@ -340,7 +345,7 @@ function BriefingCard({ items, loading }: { items: BriefingItem[] | null; loadin
           })}
         </ul>
       ) : (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">Brief unavailable right now.</p>
+        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{t("briefUnavailable")}</p>
       )}
     </div>
   );
@@ -348,6 +353,7 @@ function BriefingCard({ items, loading }: { items: BriefingItem[] | null; loadin
 
 // ---------- Portfolio donut ----------
 function PortfolioCard({ holdings, loading }: { holdings: Holding[]; loading: boolean }) {
+  const { t } = useTranslation("dashboard");
   const fx = useFxRates();
   const displayCcy = fx.rates ? fx.target : "USD";
   // Convert each holding's value into the display currency before aggregating.
@@ -361,13 +367,13 @@ function PortfolioCard({ holdings, loading }: { holdings: Holding[]; loading: bo
   const hasData = data.length > 0;
   return (
     <div className="card lg:col-span-2">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Allocation</div>
+      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("allocation")}</div>
       {loading ? (
         <div className="mt-3 flex h-44 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
         </div>
       ) : !hasData ? (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">Add holdings to see breakdown.</p>
+        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{t("addHoldingsForBreakdown")}</p>
       ) : (
         <div className="mt-2 h-44">
           <ResponsiveContainer width="100%" height="100%">
@@ -434,6 +440,7 @@ function aggregateByAssetClass(holdings: Holding[]): { name: string; value: numb
 
 // ---------- Holdings table ----------
 function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: boolean }) {
+  const { t } = useTranslation("dashboard");
   const fx = useFxRates();
   function fmt(v: number, h: Holding) {
     const native = h.currency ?? "USD";
@@ -443,25 +450,25 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
   }
   return (
     <div className="card lg:col-span-4">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Holdings</div>
+      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("holdings")}</div>
       {loading ? (
         <div className="mt-3 flex h-32 items-center">
           <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
         </div>
       ) : holdings.length === 0 ? (
         <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">
-          No holdings yet. Add from the Portfolio tab to see live valuations.
+          {t("noHoldingsDesc")}
         </p>
       ) : (
         <div className="mt-3 overflow-x-auto">
           <table className="num min-w-full text-sm">
             <thead className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
               <tr className="border-b border-[hsl(var(--border))]">
-                <th className="py-3 pr-4 text-left font-normal">Ticker</th>
-                <th className="py-3 pr-4 text-right font-normal">Qty</th>
-                <th className="py-3 pr-4 text-right font-normal">Price</th>
-                <th className="py-3 pr-4 text-right font-normal">Value</th>
-                <th className="py-3 text-right font-normal">P&L</th>
+                <th className="py-3 pr-4 text-left font-normal">{t("table.ticker")}</th>
+                <th className="py-3 pr-4 text-right font-normal">{t("table.qty")}</th>
+                <th className="py-3 pr-4 text-right font-normal">{t("table.price")}</th>
+                <th className="py-3 pr-4 text-right font-normal">{t("table.value")}</th>
+                <th className="py-3 text-right font-normal">{t("table.pnl")}</th>
               </tr>
             </thead>
             <tbody>

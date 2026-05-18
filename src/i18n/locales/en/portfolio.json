@@ -1,0 +1,26 @@
+{
+  "title": "Portfolio",
+  "subtitle": "Everything you own, all in one place.",
+  "addHolding": "Add holding",
+  "netWorth": "Net worth",
+  "allTimePnl": "All-time P&L",
+  "positions": "Positions",
+  "table": {
+    "ticker": "Ticker",
+    "type": "Type",
+    "qty": "Qty",
+    "cost": "Cost",
+    "price": "Price",
+    "value": "Value",
+    "pnl": "P&L"
+  },
+  "empty": {
+    "title": "Add your investments",
+    "desc": "Track stocks, ETFs, crypto, and bonds in one place.",
+    "addManually": "Add manually",
+    "addManuallyDesc": "Enter your positions one by one.",
+    "askCoach": "Ask the coach",
+    "askCoachDesc": "Describe your holdings in chat.",
+    "openChat": "Open New chat from the sidebar to get started."
+  }
+}

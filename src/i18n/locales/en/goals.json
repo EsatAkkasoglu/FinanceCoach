@@ -1,0 +1,26 @@
+{
+  "title": "Goals",
+  "subtitle": "Track what you're saving toward. Edit a contribution any time.",
+  "addGoal": "Add goal",
+  "noGoals": "No goals yet",
+  "noGoalsDesc": "Set a target — a down payment, an emergency fund, a trip...",
+  "createFirstGoal": "Create first goal",
+  "pctReached": "{{pct}}% reached",
+  "remainingToGo": "{{remaining}} to go",
+  "validationError": "Title and a positive target amount are required.",
+  "form": {
+    "editTitle": "Edit goal",
+    "newTitle": "New goal",
+    "saveChanges": "Save changes",
+    "create": "Create",
+    "title": "Title",
+    "titlePlaceholder": "Emergency fund",
+    "icon": "Icon",
+    "targetAmount": "Target amount",
+    "targetPlaceholder": "10000",
+    "currentAmount": "Current amount",
+    "currentHint": "Optional",
+    "targetDate": "Target date",
+    "targetDateHint": "Optional"
+  }
+}

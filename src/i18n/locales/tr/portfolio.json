@@ -1,0 +1,26 @@
+{
+  "title": "Portföy",
+  "subtitle": "Sahip olduğunuz her şey, tek bir yerde.",
+  "addHolding": "Varlık ekle",
+  "netWorth": "Net değer",
+  "allTimePnl": "Tüm zamanlarda K/Z",
+  "positions": "Pozisyonlar",
+  "table": {
+    "ticker": "Sembol",
+    "type": "Tür",
+    "qty": "Adet",
+    "cost": "Maliyet",
+    "price": "Fiyat",
+    "value": "Değer",
+    "pnl": "K/Z"
+  },
+  "empty": {
+    "title": "Yatırımlarınızı ekleyin",
+    "desc": "Hisse, ETF, kripto ve tahvilleri tek yerden takip edin.",
+    "addManually": "Manuel ekle",
+    "addManuallyDesc": "Pozisyonlarınızı tek tek girin.",
+    "askCoach": "Koça sor",
+    "askCoachDesc": "Varlıklarınızı sohbette anlatın.",
+    "openChat": "Başlamak için kenar çubuğundan Yeni sohbet açın."
+  }
+}

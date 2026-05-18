@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   MessageSquare, LayoutDashboard, Briefcase, Wallet, Target, FileText, Settings as SettingsIcon,
@@ -14,15 +15,15 @@ import {
 import { useAuthStore, useConversationStore, useChatStore, useUserStore } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
 
-const NAV: { path: string; label: string; icon: typeof MessageSquare }[] = [
-  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { path: "/budget", label: "Budget", icon: Wallet },
-  { path: "/funds", label: "Funds (TR)", icon: Coins },
-  { path: "/discover", label: "Discover", icon: Compass },
-  { path: "/goals", label: "Goals", icon: Target },
-  { path: "/documents", label: "Documents", icon: FileText },
-  { path: "/settings", label: "Settings", icon: SettingsIcon },
+const NAV_PATHS: { path: string; key: keyof typeof import("../i18n/locales/en/common.json")["nav"]; icon: typeof MessageSquare }[] = [
+  { path: "/dashboard", key: "dashboard", icon: LayoutDashboard },
+  { path: "/portfolio", key: "portfolio", icon: Briefcase },
+  { path: "/budget", key: "budget", icon: Wallet },
+  { path: "/funds", key: "funds", icon: Coins },
+  { path: "/discover", key: "discover", icon: Compass },
+  { path: "/goals", key: "goals", icon: Target },
+  { path: "/documents", key: "documents", icon: FileText },
+  { path: "/settings", key: "settings", icon: SettingsIcon },
 ];
 
 interface Props {
@@ -34,6 +35,8 @@ interface Props {
 }
 
 export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpen = false, onMobileClose }: Props) {
+  const { t } = useTranslation();
+  const { t: tChat } = useTranslation("chat");
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
@@ -162,7 +165,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
           {avatarMeta.emoji}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold tracking-tight">FinCoach</div>
+          <div className="text-sm font-semibold tracking-tight">{t("appName")}</div>
           {(name || authUser?.username) && (
             <div className="truncate text-[10px] text-[hsl(var(--text-muted))]">
               {name || authUser?.username}
@@ -180,7 +183,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
 
       {/* Main nav — product spine */}
       <nav className="mb-4 flex flex-col gap-1">
-        {NAV.map(({ path, label, icon: Icon }) => {
+        {NAV_PATHS.map(({ path, key, icon: Icon }) => {
           const active = currentPath === path || currentPath.startsWith(`${path}/`);
           return (
             <button
@@ -194,7 +197,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
               )}
             >
               <Icon className="h-4 w-4" />
-              {label}
+              {t(`nav.${key}`)}
             </button>
           );
         })}
@@ -207,15 +210,15 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search past chats…"
+            placeholder={t("search")}
             className="w-full rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] py-1 pl-7 pr-2 text-[11px] outline-none focus:border-accent"
           />
         </div>
         {searchResults && (
           <div className="mt-1.5 max-h-44 overflow-y-auto rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-1.5 text-[10px]">
-            {searching && <div className="px-1 py-1 text-[hsl(var(--text-muted))]">Searching…</div>}
+            {searching && <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("loading")}</div>}
             {!searching && searchResults.length === 0 && (
-              <div className="px-1 py-1 text-[hsl(var(--text-muted))]">No matches</div>
+              <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("noResults")}</div>
             )}
             {!searching && searchResults.map((h, i) => (
               <div key={i} className="flex items-start gap-1.5 rounded px-1 py-1 hover:bg-[hsl(var(--surface-2))]">
@@ -242,12 +245,12 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
             className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))]"
           >
             {recentOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            Recent
+            {t("recent")}
           </button>
           <button
             onClick={handleNewChat}
             disabled={creating}
-            title="New chat"
+            title={tChat("newChat")}
             className="rounded-md p-1 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-accent disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -316,7 +319,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
           </div>
         )}
         {recentOpen && conversations.length === 0 && (
-          <p className="px-2 text-[10px] text-[hsl(var(--text-muted))]">No chats yet</p>
+          <p className="px-2 text-[10px] text-[hsl(var(--text-muted))]">{t("noChatsYet")}</p>
         )}
       </div>
 
@@ -332,7 +335,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
             )}
           />
           <span className="text-[hsl(var(--text-muted))]">
-            {healthy === true ? "Coach online" : healthy === false ? "Offline — retry" : "Reconnecting…"}
+            {healthy === true ? tChat("coach") + " online" : healthy === false ? "Offline" : t("loading")}
           </span>
         </div>
       </div>

@@ -1,0 +1,78 @@
+{
+  "title": "Settings",
+  "categories": {
+    "ai": "AI & Keys",
+    "appearance": "Appearance",
+    "behaviour": "Behaviour",
+    "profile": "Profile",
+    "danger": "Danger Zone"
+  },
+  "ai": {
+    "title": "AI & API Keys",
+    "subtitle": "Configure the AI models and external API keys.",
+    "geminiKey": "Gemini API Key",
+    "geminiRequired": "Required.",
+    "geminiHint": "Get a free key at Google AI Studio.",
+    "geminiPlaceholder": "AIza...",
+    "newsKey": "News API Key",
+    "newsOptional": "Optional",
+    "newsPowers": "Powers headlines and sentiment analysis.",
+    "keyStatus": {
+      "set": "Key is set",
+      "notSet": "Key not set",
+      "invalid": "Invalid key",
+      "checking": "Checking…"
+    }
+  },
+  "model": {
+    "title": "Model",
+    "subtitle": "Pick the Gemini variant the coach will use.",
+    "mostPowerful": "Most powerful",
+    "recommended": "Recommended",
+    "deepAnalysis": "Best for deep analysis.",
+    "qualitySpeed": "Strong balance of quality and speed."
+  },
+  "temperature": {
+    "title": "Creativity (temperature)",
+    "subtitle": "Lower values stay factual. Higher values explore more.",
+    "precise": "Precise",
+    "balanced": "Balanced",
+    "creative": "Creative"
+  },
+  "appearance": {
+    "title": "Appearance",
+    "subtitle": "How FinCoach looks on your screen.",
+    "dark": "Dark",
+    "light": "Light"
+  },
+  "behaviour": {
+    "title": "Behaviour",
+    "subtitle": "How the coach responds.",
+    "demoMode": "Demo mode",
+    "demoModeDesc": "Use cached responses — no API calls.",
+    "roastMode": "Roast mode",
+    "roastModeDesc": "The coach skips the sugarcoating and tells it like it is."
+  },
+  "profile": {
+    "title": "Your Profile",
+    "subtitle": "How the coach sees you.",
+    "spiritAnimal": "Spirit animal",
+    "name": "Name",
+    "riskProfile": "Risk profile",
+    "riskProfileHint": "How aggressive should the coach be with suggestions?",
+    "retakeQuiz": "Retake quiz",
+    "unsavedChanges": "You have unsaved changes.",
+    "saveChanges": "Save changes",
+    "riskUpdated": "Risk profile updated to {{label}}"
+  },
+  "danger": {
+    "title": "Danger Zone",
+    "subtitle": "These actions can't be undone.",
+    "resetOnboarding": "Reset onboarding",
+    "resetOnboardingDesc": "Clears your name, income, and risk profile. You'll go through the wizard again."
+  },
+  "language": {
+    "title": "Language",
+    "subtitle": "Choose the display language for the app."
+  }
+}

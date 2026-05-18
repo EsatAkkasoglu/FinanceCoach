@@ -1,0 +1,15 @@
+{
+  "title": "Discover",
+  "subtitle": "Today's movers, trending crypto, and M&A whispers.",
+  "hotToday": "Hot today",
+  "topGainers": "Top gainers",
+  "topLosers": "Top losers",
+  "trendingCrypto": "Trending crypto",
+  "noTrendData": "No trend data — Alpha Vantage and CoinGecko both unavailable.",
+  "rumorMill": "Rumor mill",
+  "noRumors": "No fresh M&A or actionable rumors right now.",
+  "impact": "impact {{score}}/10",
+  "categories": {
+    "ma": "M&A"
+  }
+}

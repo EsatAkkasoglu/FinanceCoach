@@ -1,0 +1,33 @@
+{
+  "steps": {
+    "welcome": "Welcome",
+    "goals": "Goals",
+    "finances": "Finances",
+    "risk": "Risk",
+    "portfolio": "Portfolio"
+  },
+  "stepOptional": "This step is optional — you can skip it and continue without entering finances.",
+  "next": "Next",
+  "settingUp": "Setting up…",
+  "complete": "Complete",
+  "welcomeBack": "Welcome aboard, {{name}} — you're all set!",
+  "welcome": {
+    "title": "Welcome to FinCoach",
+    "setupProfile": "Let's set up your profile",
+    "subtitle": "Takes under a minute — I'll personalize everything for you.",
+    "memberSince": "FinCoach member",
+    "whatToCall": "What should I call you?",
+    "namePlaceholder": "Alex",
+    "niceMeet": "Nice to meet you, {{name}} 👋",
+    "pickAnimal": "Pick your spirit animal"
+  },
+  "goals": {
+    "title": "What are you saving for?",
+    "subtitle": "Pick a primary goal — you can add more later.",
+    "targetAmount": "Target amount",
+    "byWhen": "By when?",
+    "familiar": "Any of these feel familiar?",
+    "familiarHint": "Select all that apply — no judgment here.",
+    "numbersOnly": "Numbers only"
+  }
+}

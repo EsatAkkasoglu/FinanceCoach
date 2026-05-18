@@ -6,6 +6,7 @@
  * inline current-amount editing, and quick contribute / withdraw actions.
  */
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Target, Calendar, Loader2 } from "lucide-react";
 
@@ -24,6 +25,7 @@ import { Field, TextInput } from "@/components/ui/Field";
 const ICON_CHOICES = ["🎯", "🏠", "🚗", "✈️", "🎓", "💍", "💼", "🛟", "📈"];
 
 export function Goals() {
+  const { t } = useTranslation("goals");
   const [goals, setGoals] = useState<Goal[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Goal | null>(null);
@@ -67,13 +69,13 @@ export function Goals() {
     <div className="space-y-4">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Goals</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-[hsl(var(--text-muted))]">
-            Track what you're saving toward. Edit a contribution any time.
+            {t("subtitle")}
           </p>
         </div>
         <Button onClick={() => setCreating(true)}>
-          <Plus className="h-4 w-4" /> Add goal
+          <Plus className="h-4 w-4" /> {t("addGoal")}
         </Button>
       </header>
 
@@ -98,12 +100,12 @@ export function Goals() {
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent-muted">
             <Target className="h-6 w-6 text-accent" />
           </div>
-          <h2 className="text-base font-semibold">No goals yet</h2>
+          <h2 className="text-base font-semibold">{t("noGoals")}</h2>
           <p className="mt-1 max-w-md text-sm text-[hsl(var(--text-muted))]">
-            Set a target — a down payment, an emergency fund, a trip — and we'll track progress.
+            {t("noGoalsDesc")}
           </p>
           <Button className="mt-4" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" /> Create first goal
+            <Plus className="h-4 w-4" /> {t("createFirstGoal")}
           </Button>
         </div>
       )}
@@ -126,6 +128,8 @@ function GoalCard({
   onContribute: (delta: number) => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation("goals");
+  const { t: tCommon } = useTranslation("common");
   const pct = goal.target_amount > 0
     ? Math.min(100, ((goal.current_amount ?? 0) / goal.target_amount) * 100)
     : 0;
@@ -152,9 +156,9 @@ function GoalCard({
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   {daysLeft < 0
-                    ? `${Math.abs(daysLeft)}d past target`
-                    : daysLeft === 0 ? "due today"
-                    : `${daysLeft}d to go`}
+                    ? tCommon("time.daysPastTarget", { days: Math.abs(daysLeft) })
+                    : daysLeft === 0 ? tCommon("time.dueToday")
+                    : tCommon("time.daysToGo", { days: daysLeft })}
                 </span>
               )}
             </p>
@@ -189,8 +193,8 @@ function GoalCard({
           />
         </div>
         <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">
-          {pct.toFixed(0)}% reached
-          {remaining > 0 && ` · ${remaining.toLocaleString(undefined, { maximumFractionDigits: 0 })} to go`}
+          {t("pctReached", { pct: pct.toFixed(0) })}
+          {remaining > 0 && ` · ${t("remainingToGo", { remaining: remaining.toLocaleString(undefined, { maximumFractionDigits: 0 }) })}`}
         </p>
       </div>
 
@@ -239,6 +243,8 @@ function GoalFormModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation("goals");
+  const { t: tCommon } = useTranslation("common");
   const [form, setForm] = useState<GoalForm>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
 
@@ -260,7 +266,7 @@ function GoalFormModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim() || !(form.target_amount > 0)) {
-      toast.error("Title and a positive target amount are required.");
+      toast.error(t("validationError"));
       return;
     }
     setSubmitting(true);
@@ -291,28 +297,28 @@ function GoalFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={editing ? "Edit goal" : "New goal"}
+      title={editing ? t("form.editTitle") : t("form.newTitle")}
       size="sm"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} type="button">Cancel</Button>
+          <Button variant="ghost" onClick={onClose} type="button">{tCommon("cancel")}</Button>
           <Button onClick={handleSubmit} loading={submitting} type="submit">
-            {editing ? "Save changes" : "Create"}
+            {editing ? t("form.saveChanges") : t("form.create")}
           </Button>
         </>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="Title">
+        <Field label={t("form.title")}>
           <TextInput
             autoFocus
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="Emergency fund"
+            placeholder={t("form.titlePlaceholder")}
           />
         </Field>
 
-        <Field label="Icon">
+        <Field label={t("form.icon")}>
           <div className="flex flex-wrap gap-1.5">
             {ICON_CHOICES.map((emoji) => (
               <button
@@ -333,15 +339,15 @@ function GoalFormModal({
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Target amount">
+          <Field label={t("form.targetAmount")}>
             <TextInput
               inputMode="decimal"
               value={form.target_amount || ""}
               onChange={(e) => setForm({ ...form, target_amount: Number(e.target.value) || 0 })}
-              placeholder="10000"
+              placeholder={t("form.targetPlaceholder")}
             />
           </Field>
-          <Field label="Current amount" hint="Optional">
+          <Field label={t("form.currentAmount")} hint={t("form.currentHint")}>
             <TextInput
               inputMode="decimal"
               value={form.current_amount || ""}
@@ -351,7 +357,7 @@ function GoalFormModal({
           </Field>
         </div>
 
-        <Field label="Target date" hint="Optional">
+        <Field label={t("form.targetDate")} hint={t("form.targetDateHint")}>
           <TextInput
             type="date"
             value={form.target_date}
