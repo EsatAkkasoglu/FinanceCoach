@@ -25,6 +25,7 @@ import trDiscover from "./locales/tr/discover.json";
 import trSettings from "./locales/tr/settings.json";
 import trChat from "./locales/tr/chat.json";
 import trOnboarding from "./locales/tr/onboarding.json";
+import { getLanguageFromPath } from "@/lib/routing";
 
 export const defaultNS = "common";
 export const resources = {
@@ -56,12 +57,15 @@ export const resources = {
   },
 } as const;
 
+const initialLanguage = typeof window !== "undefined" ? getLanguageFromPath(window.location.pathname) : null;
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources,
     defaultNS,
+    lng: initialLanguage ?? undefined,
     fallbackLng: "en",
     supportedLngs: ["en", "tr"],
     detection: {

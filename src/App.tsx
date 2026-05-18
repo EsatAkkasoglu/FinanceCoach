@@ -15,6 +15,7 @@ import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { AuthPage } from "@/components/auth/AuthPage";
 import { useAuthStore, useConversationStore, useUserStore } from "@/store";
+import { buildLocalizedPath, getLanguageFromPath, isSupportedLanguage, stripLanguagePrefix } from "@/lib/routing";
 import {
   ping,
   createConversation,
@@ -41,9 +42,11 @@ function ChatRoute() {
   const { t } = useTranslation("chat");
   const { convId } = useParams<{ convId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { conversations, setActive, addConversation } = useConversationStore();
   const conv = conversations.find((c) => c.id === convId) ?? null;
   const [creating, setCreating] = useState(false);
+  const currentLanguage = getLanguageFromPath(location.pathname) ?? "en";
 
   useEffect(() => {
     if (convId) setActive(convId);
@@ -56,11 +59,11 @@ function ChatRoute() {
     createConversation()
       .then((c) => {
         addConversation(c);
-        navigate(`/chat/${c.id}`, { replace: true });
+        navigate(buildLocalizedPath(currentLanguage, `/chat/${c.id}`), { replace: true });
       })
       .catch(() => {})
       .finally(() => setCreating(false));
-  }, [convId, creating, addConversation, navigate]);
+  }, [convId, creating, addConversation, navigate, currentLanguage]);
 
   if (!convId) {
     return (
@@ -82,7 +85,13 @@ function ChatRoute() {
   return <ChatPanel convId={conv.id} threadId={conv.thread_id} />;
 }
 
-const ROUTE_TITLE_KEYS: Record<string, string> = {
+function PrefixedDashboardRedirect({ language }: { language: "en" | "tr" }) {
+  const location = useLocation();
+  const currentLanguage = getLanguageFromPath(location.pathname) ?? language;
+  return <Navigate to={`/${currentLanguage}/dashboard`} replace />;
+}
+
+const ROUTE_TITLE_KEYS = {
   "/dashboard": "nav.dashboard",
   "/portfolio": "nav.portfolio",
   "/budget":    "nav.budget",
@@ -91,7 +100,7 @@ const ROUTE_TITLE_KEYS: Record<string, string> = {
   "/goals":     "nav.goals",
   "/documents": "nav.documents",
   "/settings":  "nav.settings",
-};
+} as const;
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -102,16 +111,23 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const location = useLocation();
+  const currentLanguage = getLanguageFromPath(location.pathname);
+  const appPath = stripLanguagePrefix(location.pathname);
+  const activeLanguage = currentLanguage ?? (isSupportedLanguage(i18n.language) ? i18n.language : "en");
   useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
+
+  useEffect(() => {
+    if (currentLanguage && i18n.language !== currentLanguage) {
+      void i18n.changeLanguage(currentLanguage);
+    }
+  }, [currentLanguage, i18n]);
 
   // Sync browser tab title with current route + language
   useEffect(() => {
-    const key = Object.keys(ROUTE_TITLE_KEYS).find((k) =>
-      location.pathname === k || location.pathname.startsWith(k + "/")
-    );
-    const pageLabel = key ? t(ROUTE_TITLE_KEYS[key]) : t("appName");
+    const key = Object.keys(ROUTE_TITLE_KEYS).find((k) => appPath === k || appPath.startsWith(k + "/"));
+    const pageLabel = key ? t(ROUTE_TITLE_KEYS[key as keyof typeof ROUTE_TITLE_KEYS]) : t("appName");
     document.title = `${pageLabel} — ${t("appName")}`;
-  }, [location.pathname, i18n.language, t]);
+  }, [appPath, i18n.language, t]);
 
   useEffect(() => {
     ping()
@@ -162,7 +178,17 @@ export default function App() {
   }, [user?.id, user?.has_onboarded]);
 
   function handleSelectConversation(conv: Conversation) {
-    navigate(`/chat/${conv.id}`);
+    navigate(buildLocalizedPath(activeLanguage, `/chat/${conv.id}`));
+  }
+
+  function handleLanguageChange(language: "en" | "tr") {
+    void i18n.changeLanguage(language);
+    navigate(buildLocalizedPath(language, location.pathname), { replace: true });
+    setLangOpen(false);
+  }
+
+  if (!currentLanguage) {
+    return <PrefixedDashboardRedirect language={activeLanguage} />;
   }
 
   if (!ready) {
@@ -188,7 +214,7 @@ export default function App() {
             {(["tr", "en"] as const).map((lang) => (
               <button
                 key={lang}
-                onClick={() => { i18n.changeLanguage(lang); setLangOpen(false); }}
+                onClick={() => handleLanguageChange(lang)}
                 className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                   i18n.language === lang
                     ? "bg-accent text-white"
@@ -234,18 +260,20 @@ export default function App() {
         </div>
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/portfolio" element={<Portfolio />} />
-          <Route path="/budget" element={<Budget />} />
-          <Route path="/funds" element={<Funds />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/goals" element={<Goals />} />
-          <Route path="/discover" element={<Discover />} />
-          <Route path="/documents" element={<PlaceholderView name="documents" />} />
-          <Route path="/chat" element={<ChatRoute />} />
-          <Route path="/chat/:convId" element={<ChatRoute />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
+          <Route path="/:lang/dashboard" element={<Dashboard />} />
+          <Route path="/:lang/portfolio" element={<Portfolio />} />
+          <Route path="/:lang/budget" element={<Budget />} />
+          <Route path="/:lang/funds" element={<Funds />} />
+          <Route path="/:lang/settings" element={<Settings />} />
+          <Route path="/:lang/goals" element={<Goals />} />
+          <Route path="/:lang/discover" element={<Discover />} />
+          <Route path="/:lang/documents" element={<PlaceholderView name="documents" />} />
+          <Route path="/:lang/chat" element={<ChatRoute />} />
+          <Route path="/:lang/chat/:convId" element={<ChatRoute />} />
+          <Route path="/:lang" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
+          <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
+          <Route path="*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
         </Routes>
       </main>
       </div>

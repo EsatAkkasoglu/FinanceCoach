@@ -165,6 +165,11 @@ PLANNING RULES:
   • LIST EVERY desk that holds a piece of the answer — do NOT settle for one.
     "Ne önerirsin?" needs budget_coach + risk_profiler + portfolio + market_data
     (and usually news_sentiment for catalyst awareness). They run in parallel.
+  • For advisory questions, default to a genuinely holistic answer: personal
+    financial state + risk appetite + current holdings + market/history
+    context + recent news/catalysts. Unless the user explicitly asks for a
+    narrow answer, include:
+      [budget_coach, risk_profiler, portfolio, market_data, news_sentiment].
   • `requires_advisor=True` whenever the user is asking for a recommendation,
     allocation, plan, or judgment ("should I…", "what do you recommend",
     "is my portfolio balanced", "how to deploy"). The Investment Committee
@@ -273,7 +278,8 @@ def _keyword_fallback_plan(
         for k in (
             "öner", "tavsiye", "ne yap", "ne alm", "ne satayım", "recommend",
             "should i", "what should", "dengeli mi", "tahsis", "allocation",
-            "plan", "strateji",
+            "plan", "strategy", "strateji", "analyze", "analyse", "analysis",
+            "what do you think", "is it good", "suitable", "uygun mu",
         )
     )
     if any(k in text for k in ("portföy", "portfolio", "holding", "elimde", "varlığım")):
@@ -291,7 +297,7 @@ def _keyword_fallback_plan(
         if "market_data" not in chosen:
             chosen.append("market_data")
     if advisory:
-        for needed in ("budget_coach", "risk_profiler", "portfolio"):
+        for needed in ("budget_coach", "risk_profiler", "portfolio", "market_data", "news_sentiment"):
             if needed not in chosen:
                 chosen.append(needed)  # type: ignore[arg-type]
 

@@ -2,21 +2,24 @@ import {
   TrendingUp, Briefcase, Wallet, Newspaper, Shield, Database, FileText, GitBranch,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
-const META: Record<string, { label: string; icon: LucideIcon }> = {
-  supervisor: { label: "Supervisor", icon: GitBranch },
-  market_data: { label: "Market Data", icon: TrendingUp },
-  portfolio: { label: "Portfolio", icon: Briefcase },
-  budget_coach: { label: "Budget Coach", icon: Wallet },
-  news_sentiment: { label: "News & Sentiment", icon: Newspaper },
-  risk_profiler: { label: "Risk Profiler", icon: Shield },
-  memory: { label: "Memory", icon: Database },
-  document_parser: { label: "Documents", icon: FileText },
-};
+const META: Record<string, { labelKey: string; icon: LucideIcon }> = {
+  supervisor: { labelKey: "agents.supervisor", icon: GitBranch },
+  market_data: { labelKey: "agents.marketData", icon: TrendingUp },
+  portfolio: { labelKey: "agents.portfolio", icon: Briefcase },
+  budget_coach: { labelKey: "agents.budgetCoach", icon: Wallet },
+  news_sentiment: { labelKey: "agents.newsSentiment", icon: Newspaper },
+  risk_profiler: { labelKey: "agents.riskProfiler", icon: Shield },
+  memory: { labelKey: "agents.memory", icon: Database },
+  document_parser: { labelKey: "agents.documents", icon: FileText },
+} as const;
 
 export function AgentBadge({ name, className }: { name: string; className?: string }) {
-  const m = META[name] ?? { label: name, icon: GitBranch };
+  const { t } = useTranslation("chat");
+  const known = META[name];
+  const m = known ?? { labelKey: name, icon: GitBranch };
   const Icon = m.icon;
   return (
     <span
@@ -26,7 +29,7 @@ export function AgentBadge({ name, className }: { name: string; className?: stri
       )}
     >
       <Icon className="h-3 w-3" />
-      {m.label}
+      {known ? t(known.labelKey as never) : name}
     </span>
   );
 }

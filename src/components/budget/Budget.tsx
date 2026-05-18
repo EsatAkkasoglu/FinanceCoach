@@ -484,10 +484,13 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
               </Pie>
               <RechartsTooltip
                 contentStyle={{ background: "hsl(var(--surface))", border: "1px solid hsl(var(--border))", fontSize: 12, borderRadius: 8 }}
-                formatter={(v: number, _: unknown, entry: { payload: { name: string } }) => [
-                  fx.rates ? formatCurrency(v, fx.target) : v.toFixed(2),
-                  localizeCategory(entry.payload.name, i18n.language),
-                ]}
+                formatter={(v: number, _: unknown, entry) => {
+                  const name = typeof entry.payload?.name === "string" ? entry.payload.name : "";
+                  return [
+                    fx.rates ? formatCurrency(v, fx.target) : v.toFixed(2),
+                    localizeCategory(name, i18n.language),
+                  ];
+                }}
               />
             </PieChart>
           </ResponsiveContainer>

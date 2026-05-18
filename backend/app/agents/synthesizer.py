@@ -89,30 +89,37 @@ You write the final reply AND propose 2-4 follow-up prompts the user can tap.
      NO allocation tables, NO disclaimers.
 
 2) `advisory` AND `requires_advisor=true` (a NEW plan was produced):
-     Build the reply around the NEW advisor_brief. CRITICAL: always answer
-     the user's ACTUAL question first — if they asked for fund recommendations,
-     show the allocation table and reference instruments BEFORE any caveats.
-       • Lead with the headline.
-       • Render allocation as a tight markdown table.
-       • If findings include TEFAS fund results or market data instruments,
-         reference them by name under the relevant asset class row.
-       • Weave key considerations and next_steps into 2-3 short paragraphs.
-         If emergency-fund or budget caveats exist, put them AFTER the table.
-       • Surface open_questions briefly so the user knows what would sharpen
-         the plan.
+     Build a substantive, integrated answer around the NEW advisor_brief.
+     The user expects the quality of a strong general AI answer PLUS their
+     personal FinCoach data. CRITICAL: answer the ACTUAL question first.
+
+     Required structure, in the user's language:
+       • Start with a direct 2-3 sentence verdict, not a generic disclaimer.
+       • Include a compact markdown allocation/action table when the ask is
+         about what to buy, how to allocate, or what strategy to follow.
+       • Add a short section that connects the user's personal situation:
+         current portfolio, budget/cash-flow, risk appetite, and constraints.
+       • Add a short section that connects external context: recent prices,
+         trend/history/technicals, fundamentals, and recent news/catalysts
+         when findings contain them.
+       • End with concrete next steps and the missing information that would
+         improve the answer.
+
+     Depth rules:
+       • Do not collapse advisory answers into 3 generic bullets. Use the
+         findings. Mention specific numbers/tickers/fund codes/headlines
+         that were fetched this turn.
+       • Do not expose internal agent names or fixed desk labels in the final
+         prose. Avoid phrases like "risk profile:", "market data:", "portfolio
+         desk", or "news_sentiment". Write naturally: "Given your aggressive
+         score of 82/125...", "Recent price momentum...", "Your holdings show...".
+       • If data is missing or a tool failed, say what is missing and how that
+         limits confidence.
        • EXPLAINABILITY: if `advisor_brief.why_summary` is non-empty, append
-         a final short section titled **Neden bu öneri?** (Turkish) or
-         **Why this recommendation?** (English). Use `why_summary` as the
-         opening sentence and list 2-3 entries from `key_drivers` as
-         bullets formatted as `- {source label}: {factor} → {impact}`.
-         Source labels: risk_profiler→"Risk profilin"/"Your risk profile",
-         market_data→"Piyasa verisi"/"Market data",
-         portfolio→"Portföyün"/"Your portfolio",
-         budget→"Bütçen"/"Your budget",
-         news→"Haberler"/"News",
-         memory→"Geçmiş konuşmalar"/"Past conversations",
-         user_input→"Senin tercihin"/"Your stated preference".
-         Keep the whole section under 6 lines.
+         **Why this recommendation?** or **Neden bu öneri?**. Use natural
+         bullets, NOT source-label bullets. Good: "- Your 82/125 risk score
+         supports a higher equity range, but..." Bad: "- Market data: ...".
+         Keep this section concise but meaningful.
 
 3) `follow_up` (USER IS ACTING ON OR REFINING A PRIOR PLAN):
      CONVERSATIONAL CONTINUATION. Critical rules:
@@ -142,6 +149,8 @@ You write the final reply AND propose 2-4 follow-up prompts the user can tap.
 ═══ GENERAL RULES ═══
   • Language: see the LANGUAGE RULE at the top — it is non-negotiable.
   • Single voice. NO "FROM THE PORTFOLIO DESK:" headers. Weave naturally.
+  • Never reveal internal routing names such as market_data, risk_profiler,
+    budget_coach, news_sentiment, advisor, synthesizer, or "specialist".
   • Preserve verbatim: numbers, prices, tickers, fund codes, sentiment tags,
     headline titles, URLs.
   • If a specialist returned an error / no data, say so in one clause.
@@ -350,7 +359,9 @@ async def run(state: AgentState) -> AgentState:
         f"ADVISOR BRIEF:\n{_format_advisor_brief(brief, is_fresh=requires_advisor)}\n\n"
         "Produce the SynthesisOutput now (reply + suggestions). "
         "When crafting suggestions, prefer ones that reference the user's "
-        "actual holdings or risk profile from USER PROFILE above."
+        "actual holdings or risk appetite from USER PROFILE above. In the "
+        "reply itself, use natural prose and do not expose internal routing "
+        "names or fixed source labels."
     )
 
     try:

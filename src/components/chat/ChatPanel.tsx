@@ -3,6 +3,7 @@ import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2, 
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useTranslation } from "react-i18next";
 import { streamChat, sendFeedback, autotitleConversation, type Citation as ApiCitation } from "@/lib/api";
 import { parseToolResult } from "@/lib/parseToolResult";
 import { useChatStore, useAgentVizStore, useConversationStore, type ToolActivity } from "@/store";
@@ -11,12 +12,12 @@ import { AgentBadge } from "./AgentBadge";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 import { CitationChip } from "./CitationChip";
 
-const SUGGESTIONS = [
-  "Summarize my spending this month",
-  "Should I buy more NVDA?",
-  "Altın fonlarından hangileri var?",
-  "What's trending in crypto today?",
-];
+const SUGGESTION_KEYS = [
+  "suggestions.spendingSummary",
+  "suggestions.nvdaDecision",
+  "suggestions.goldFunds",
+  "suggestions.cryptoTrends",
+] as const;
 
 interface ChatPanelProps {
   convId: string;
@@ -24,6 +25,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ convId, threadId }: ChatPanelProps) {
+  const { t } = useTranslation("chat");
   const {
     messagesByConv, streaming,
     appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setMessageSuggestions, setStreaming, resetConv,
@@ -269,7 +271,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   function clearChat() {
     if (streaming) return;
     if (messages.length === 0) return;
-    if (!window.confirm("Clear the entire chat history?")) return;
+    if (!window.confirm(t("confirmClear"))) return;
     resetConv(convId);
     clearAgentEvents();
   }
@@ -287,9 +289,9 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Coach</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{t("coach")}</h1>
             <p className="text-sm text-[hsl(var(--text-muted))]">
-              Ask anything about your finances. Sources are cited under each answer.
+              {t("greeting")}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -301,7 +303,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:border-loss hover:text-loss disabled:opacity-30"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Clear chat
+                {t("clearChat")}
               </button>
             )}
           </div>
@@ -310,17 +312,20 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
         <div className="flex-1 space-y-4 overflow-y-auto pr-2">
           {messages.length === 0 && (
             <div className="card-muted">
-              <p className="mb-3 text-sm text-[hsl(var(--text-muted))]">Try one of these:</p>
+              <p className="mb-3 text-sm text-[hsl(var(--text-muted))]">{t("tryOneOfThese")}</p>
               <div className="flex flex-wrap gap-2">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => send(s)}
-                    className="rounded-full border border-[hsl(var(--border))] px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
-                  >
-                    {s}
-                  </button>
-                ))}
+                {SUGGESTION_KEYS.map((key) => {
+                  const suggestion = t(key);
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => send(suggestion)}
+                      className="rounded-full border border-[hsl(var(--border))] px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
+                    >
+                      {suggestion}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -371,7 +376,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 {isAssistant && m.citations && m.citations.length > 0 && (
                   <div className="mt-3 flex flex-wrap items-start gap-1.5 border-t border-[hsl(var(--border))] pt-3">
                     <span className="mr-1 text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                      Sources
+                      {t("sources")}
                     </span>
                     {m.citations.map((c, i) => (
                       <CitationChip key={`${m.id}-${i}`} citation={c} />
@@ -397,7 +402,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 {isAssistant && m.suggestions && m.suggestions.length > 0 && (
                   <div className="mt-3 flex flex-col gap-1.5 border-t border-[hsl(var(--border))] pt-3">
                     <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                      Try next
+                      {t("tryNext")}
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {m.suggestions.map((s, i) => (
@@ -426,7 +431,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
         {stoppedPrompt && !streaming && (
           <div className="mt-4 flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-xs">
             <span className="text-[hsl(var(--text-muted))]">
-              Yanıt durduruldu. Aynı soruyu yeniden gönder?
+              {t("responseStopped")}
             </span>
             <button
               type="button"
@@ -438,7 +443,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
               className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Devam et
+              {t("continue")}
             </button>
           </div>
         )}
@@ -456,7 +461,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder="Ask your coach… (Shift+Enter for newline)"
+            placeholder={t("placeholder")}
             className="num-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-sm leading-5 outline-none focus:border-accent"
             disabled={streaming}
           />
@@ -464,7 +469,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             <button
               type="button"
               onClick={stop}
-              title="Stop generating"
+              title={t("stopGenerating")}
               className="flex h-11 w-11 items-center justify-center rounded-lg bg-loss/90 text-white shadow-glow"
             >
               <Square className="h-4 w-4 fill-current" />
@@ -473,7 +478,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             <button
               type="submit"
               disabled={!input.trim()}
-              title="Send (Enter)"
+              title={t("send")}
               className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent text-accent-fg shadow-glow disabled:opacity-40"
             >
               <Send className="h-4 w-4" />
@@ -524,6 +529,7 @@ const TOOL_META: Record<string, { label: string; icon: string }> = {
 
 // Render parsed result as a clean table — scalar fields + first-level arrays.
 function ResultView({ data, tool }: { data: unknown; tool?: string }) {
+  const { t } = useTranslation("chat");
   if (data === null || data === undefined) return null;
 
   // ── Specialized inline visualizations for well-known tools ──────────────
@@ -549,7 +555,7 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
   if (Array.isArray(data)) {
     if (data.length === 0) {
       return (
-        <p className="text-[11px] italic text-[hsl(var(--text-muted))]">No results</p>
+        <p className="text-[11px] italic text-[hsl(var(--text-muted))]">{t("noResults")}</p>
       );
     }
     // Array of objects → render as headline-style list (news, search hits, etc.)
@@ -936,6 +942,7 @@ function ArgPills({ args }: { args: Record<string, unknown> }) {
 }
 
 function ToolRow({ activity }: { activity: ToolActivity }) {
+  const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const meta = TOOL_META[activity.tool] ?? { label: activity.tool, icon: "⚙️" };
   const parsed = activity.result ? parseToolResult(activity.result) : null;
@@ -985,7 +992,7 @@ function ToolRow({ activity }: { activity: ToolActivity }) {
           {Object.keys(activity.args).length > 0 && (
             <div>
               <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
-                Input
+                {t("input")}
               </p>
               <ArgPills args={activity.args} />
             </div>
@@ -995,12 +1002,12 @@ function ToolRow({ activity }: { activity: ToolActivity }) {
           {parsed !== null ? (
             <div>
               <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
-                Result
+                {t("result")}
               </p>
               <ResultView data={parsed} tool={activity.tool} />
             </div>
           ) : activity.status === "running" ? (
-            <p className="text-[11px] italic text-[hsl(var(--text-muted))]">Fetching…</p>
+            <p className="text-[11px] italic text-[hsl(var(--text-muted))]">{t("fetching")}</p>
           ) : null}
         </div>
       )}
@@ -1015,6 +1022,7 @@ function AgentActivity({
   agent: string | null;
   activities: ToolActivity[];
 }) {
+  const { t } = useTranslation("chat");
   const runningCount = activities.filter((a) => a.status === "running").length;
   const doneCount = activities.filter((a) => a.status === "done").length;
 
@@ -1024,13 +1032,13 @@ function AgentActivity({
       <div className="flex items-center gap-2">
         <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
         <span className="text-[12px] font-medium text-[hsl(var(--text-primary))]">
-          {agent ?? "Thinking"}
+          {agent ?? t("thinking")}
         </span>
         {activities.length > 0 && (
           <span className="ml-auto text-[10px] text-[hsl(var(--text-muted))]">
             {runningCount > 0
-              ? `${doneCount} / ${activities.length} tools`
-              : `${doneCount} tool${doneCount !== 1 ? "s" : ""} done`}
+              ? t("toolsProgress", { done: doneCount, total: activities.length })
+              : t("toolsDone", { count: doneCount })}
           </span>
         )}
       </div>
@@ -1056,6 +1064,7 @@ function StepsPanel({
   agent?: string | null;
   compact?: boolean;
 }) {
+  const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const doneCount = steps.filter((s) => s.status === "done").length;
   return (
@@ -1082,7 +1091,7 @@ function StepsPanel({
           ) : (
             <ChevronRight className="h-3 w-3" />
           )}
-          <span className="uppercase tracking-wide font-medium">Agent steps</span>
+          <span className="uppercase tracking-wide font-medium">{t("agentSteps")}</span>
         </span>
         {agent && (
           <span className="text-[hsl(var(--text-muted))]">
@@ -1095,7 +1104,7 @@ function StepsPanel({
             compact ? "bg-[hsl(var(--surface))]" : "bg-[hsl(var(--surface-2))]"
           )}
         >
-          {doneCount}/{steps.length} tools
+          {t("toolsProgress", { done: doneCount, total: steps.length })}
         </span>
       </button>
       {open && (
@@ -1124,6 +1133,7 @@ function MessageActions({
   streaming: boolean;
   onRegenerate: () => void;
 }) {
+  const { t } = useTranslation("chat");
   const [rating, setRating] = useState<"up" | "down" | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -1142,10 +1152,10 @@ function MessageActions({
         agent,
         excerpt: excerpt.slice(0, 400),
       });
-      toast.success(value === "up" ? "Thanks — glad it helped" : "Thanks — we'll learn from this");
+      toast.success(value === "up" ? t("feedbackThanksUp") : t("feedbackThanksDown"));
     } catch (err) {
       setRating(rating);
-      toast.error(`Couldn't save feedback: ${(err as Error).message}`);
+      toast.error(t("feedbackSaveError", { message: (err as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -1158,7 +1168,7 @@ function MessageActions({
     <div className="mt-3 flex items-center gap-1 border-t border-[hsl(var(--border))] pt-2 opacity-60 transition-opacity group-hover:opacity-100">
       <button
         type="button"
-        title="Helpful"
+        title={t("helpful")}
         onClick={() => rate("up")}
         disabled={busy || streaming}
         className={cn(btn, rating === "up" && "text-gain bg-[hsl(var(--surface-2))]")}
@@ -1167,7 +1177,7 @@ function MessageActions({
       </button>
       <button
         type="button"
-        title="Not helpful"
+        title={t("notHelpful")}
         onClick={() => rate("down")}
         disabled={busy || streaming}
         className={cn(btn, rating === "down" && "text-loss bg-[hsl(var(--surface-2))]")}
@@ -1176,7 +1186,7 @@ function MessageActions({
       </button>
       <button
         type="button"
-        title="Regenerate response"
+        title={t("regenerate")}
         onClick={onRegenerate}
         disabled={streaming}
         className={btn}
@@ -1189,22 +1199,23 @@ function MessageActions({
 
 
 function CopyButton({ text }: { text: string }) {
+  const { t } = useTranslation("chat");
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.success("Copied to clipboard");
+      toast.success(t("copied"));
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("Couldn't copy — clipboard blocked");
+      toast.error(t("copyError"));
     }
   }
   return (
     <button
       type="button"
       onClick={copy}
-      title="Copy message"
+      title={t("copy")}
       className="absolute right-2 top-2 rounded-md p-1.5 text-[hsl(var(--text-muted))] opacity-0 transition group-hover:opacity-100 hover:bg-[hsl(var(--surface-2))] hover:text-accent"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-gain" /> : <Copy className="h-3.5 w-3.5" />}

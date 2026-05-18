@@ -7,6 +7,7 @@ import {
   Circle, Plus, Trash2, Pencil, Check, X, LogOut, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { buildLocalizedPath, getLanguageFromPath, isSupportedLanguage, stripLanguagePrefix } from "@/lib/routing";
 import {
   listConversations, createConversation, deleteConversation, updateConversationTitle,
   logout as apiLogout, searchMemory,
@@ -35,11 +36,12 @@ interface Props {
 }
 
 export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpen = false, onMobileClose }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { t: tChat } = useTranslation("chat");
   const navigate = useNavigate();
   const location = useLocation();
-  const currentPath = location.pathname;
+  const currentPath = stripLanguagePrefix(location.pathname);
+  const currentLanguage = getLanguageFromPath(location.pathname) ?? (isSupportedLanguage(i18n.language) ? i18n.language : "en");
   const onChatRoute = currentPath.startsWith("/chat");
   const { conversations, setConversations, addConversation, removeConversation, updateTitle } =
     useConversationStore();
@@ -117,7 +119,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
 
   async function handleNavClick(path: string) {
     if (!path.startsWith("/chat")) await pruneEmptyActive();
-    navigate(path);
+    navigate(buildLocalizedPath(currentLanguage, path));
   }
 
   async function handleDelete(e: React.MouseEvent, conv: Conversation) {
