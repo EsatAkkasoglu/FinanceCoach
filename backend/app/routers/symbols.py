@@ -2,14 +2,13 @@
 
 Exposes the `resolve_symbol` tool's underlying search pipeline as a thin REST
 endpoint so the frontend can offer a real-time autocomplete in the "Add
-holding" form. Unlike the LangGraph tool (which returns a single best match)
-this endpoint returns a *list* so the user can pick.
+holding" form.
 
 Sources (in order of priority):
   1. Curated aliases from `app.tools.symbol_resolver._TABLE`
      — covers indices, FX, commodity-ETF proxies.
-  2. Alpha Vantage SYMBOL_SEARCH
-     — covers US equities, ETFs, ADRs.
+  2. yfinance Search
+     — covers US equities, ETFs, ADRs by company name or ticker.
   3. CoinGecko search
      — covers crypto coins by name or symbol.
 
@@ -24,10 +23,10 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.auth import get_current_user_id  # noqa: F401  (kept for future scoping)
-from app.services import alpha_vantage as av
 from app.services import coingecko as cg
-from app.services.alpha_vantage import AlphaVantageError
 from app.services.coingecko import CoinGeckoError
+from app.services import yfinance_service as yf_svc
+from app.services.yfinance_service import YFinanceError
 from app.tools.symbol_resolver import _TABLE
 
 log = logging.getLogger("fincoach.symbols")
@@ -64,20 +63,17 @@ def _curated_hits(q: str, limit: int) -> list[SymbolSuggestion]:
     return out
 
 
-def _av_hits(q: str, limit: int) -> list[SymbolSuggestion]:
+def _yf_hits(q: str, limit: int) -> list[SymbolSuggestion]:
     try:
-        matches = av.symbol_search(q)
-    except AlphaVantageError as exc:
-        log.info("AV SYMBOL_SEARCH failed for %r: %s", q, exc)
+        matches = yf_svc.search(q, max_results=limit * 2)
+    except YFinanceError as exc:
+        log.info("yfinance search failed for %r: %s", q, exc)
         return []
     out: list[SymbolSuggestion] = []
-    # Prefer US listings first, then everything else.
+    # Prefer US listings first
     matches_sorted = sorted(
         matches,
-        key=lambda m: (
-            0 if (m.get("region") or "").lower() == "united states" else 1,
-            -(m.get("match_score") or 0.0),
-        ),
+        key=lambda m: (0 if (m.get("region") or "").lower() == "united states" else 1),
     )
     for m in matches_sorted:
         sym = m.get("symbol")
@@ -87,7 +83,7 @@ def _av_hits(q: str, limit: int) -> list[SymbolSuggestion]:
             ticker=str(sym).upper(),
             description=m.get("name") or str(sym),
             asset_class=(m.get("type") or "stock").lower(),
-            source="alpha_vantage",
+            source="yfinance",
             region=m.get("region"),
         ))
         if len(out) >= limit:
@@ -106,7 +102,6 @@ def _crypto_hits(q: str, limit: int) -> list[SymbolSuggestion]:
         sym = (h.get("symbol") or "").upper()
         name = h.get("name") or sym
         rank = h.get("rank")
-        # Skip rank-less / very-low-cap coins to keep suggestions clean
         if rank is None or rank > 300:
             continue
         out.append(SymbolSuggestion(
@@ -125,7 +120,7 @@ def resolve(q: str = Query(..., min_length=1, max_length=64), limit: int = Query
     """Autocomplete-friendly symbol search.
 
     Returns up to `limit` candidate tickers across curated aliases,
-    Alpha Vantage SYMBOL_SEARCH, and CoinGecko.
+    yfinance, and CoinGecko.
     """
     q = q.strip()
     if not q:
@@ -145,7 +140,7 @@ def resolve(q: str = Query(..., min_length=1, max_length=64), limit: int = Query
 
     _add(_curated_hits(q, limit))
     if len(merged) < limit:
-        _add(_av_hits(q, limit - len(merged)))
+        _add(_yf_hits(q, limit - len(merged)))
     if len(merged) < limit:
         _add(_crypto_hits(q, limit - len(merged)))
 

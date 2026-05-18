@@ -5,7 +5,7 @@
   "topGainers": "En çok kazananlar",
   "topLosers": "En çok kaybedenler",
   "trendingCrypto": "Trend kriptolar",
-  "noTrendData": "Trend verisi yok — Alpha Vantage ve CoinGecko erişilemiyor.",
+  "noTrendData": "Trend verisi yok — CoinGecko erişilemiyor.",
   "rumorMill": "Söylenti değirmeni",
   "noRumors": "Şu an taze M&A veya işlem yapılabilir söylenti yok.",
   "impact": "etki {{score}}/10",

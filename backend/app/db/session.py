@@ -30,6 +30,8 @@ _PENDING_COLUMNS: list[tuple[str, str, str]] = [
     ("transaction", "account_id", "INTEGER"),
     ("transaction", "subscription_id", "INTEGER"),
     ("subscription", "direction", "VARCHAR(8) DEFAULT 'expense'"),
+    ("goal", "currency", "VARCHAR(8) DEFAULT 'TRY'"),
+    ("holding", "currency", "VARCHAR(8) NOT NULL DEFAULT 'USD'"),
 ]
 
 

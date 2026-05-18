@@ -68,7 +68,7 @@ ignore = ["E501"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
-    "network: tests that hit live external APIs (Alpha Vantage, NewsAPI, CoinGecko)",
+    "network: tests that hit live external APIs (yfinance, NewsAPI, CoinGecko)",
     "slow: tests that take >5s to complete",
 ]
 

@@ -1,16 +1,11 @@
-"""yfinance wrapper — unlimited free fallback for market data.
+"""yfinance wrapper — primary market data source.
 
-Used when Alpha Vantage hits its daily rate limit (25 req/day on free tier).
 yfinance has no API key, no rate limit, and covers:
   • US stocks, ETFs, ADRs
   • Crypto  (-USD tickers: BTC-USD, ETH-USD …)
   • Forex   (EURUSD=X, USDTRY=X …)
   • Indices (^GSPC, ^IXIC, ^VIX …)
   • Treasury yields (^TNX, ^TYX …)
-
-Not a full replacement — AV OVERVIEW fundamentals, earnings history, and
-dividend history are richer. yfinance covers the gap for live prices,
-basic fundamentals, and technical indicators.
 """
 from __future__ import annotations
 
@@ -325,3 +320,35 @@ def rsi(symbol: str, period: int = 14) -> list[dict[str, Any]]:
 
     # Return newest first
     return [{"date": d, "rsi": v} for d, v in reversed(rsi_values)]
+
+
+def search(keywords: str, max_results: int = 10) -> list[dict[str, Any]]:
+    """Search for stocks/ETFs by company name or partial ticker via yfinance."""
+    cache_key = f"yf:search:{keywords.lower().strip()}:{max_results}"
+    cached = _cache_get(cache_key, ttl=24 * 3600)
+    if cached:
+        return cached
+
+    try:
+        import yfinance as yf  # noqa: PLC0415
+        result = yf.Search(keywords, news_count=0, max_results=max_results)
+        quotes = result.quotes or []
+    except Exception as exc:  # noqa: BLE001
+        raise YFinanceError(f"yfinance search failed for {keywords!r}: {exc}") from exc
+
+    _US_EXCHANGES = {"NYQ", "NMS", "NGM", "NCM", "ASE", "PCX", "NYSEArca"}
+    out: list[dict[str, Any]] = []
+    for q in quotes:
+        sym = q.get("symbol")
+        if not sym:
+            continue
+        exchange = q.get("exchange") or ""
+        out.append({
+            "symbol": sym,
+            "name": q.get("longname") or q.get("shortname") or sym,
+            "type": (q.get("quoteType") or "EQUITY").lower(),
+            "exchange": exchange,
+            "region": "United States" if exchange in _US_EXCHANGES else None,
+        })
+    _cache_set(cache_key, out)
+    return out

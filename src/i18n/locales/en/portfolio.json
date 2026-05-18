@@ -6,13 +6,13 @@
   "allTimePnl": "All-time P&L",
   "positions": "Positions",
   "table": {
-    "ticker": "Ticker",
+    "ticker": "Symbol",
     "type": "Type",
-    "qty": "Qty",
-    "cost": "Cost",
-    "price": "Price",
-    "value": "Value",
-    "pnl": "P&L"
+    "qty": "Shares",
+    "cost": "Avg Cost",
+    "price": "Curr. Price",
+    "value": "Mkt Value",
+    "pnl": "Gain / Loss"
   },
   "empty": {
     "title": "Add your investments",

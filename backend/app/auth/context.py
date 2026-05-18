@@ -6,6 +6,17 @@ from contextvars import ContextVar
 
 current_user_id_var: ContextVar[int | None] = ContextVar("current_user_id", default=None)
 
+# The currency the UI is currently displaying values in (TRY | USD | EUR).
+# Goal `target_amount` / `current_amount` are stored as bare numbers and are
+# shown to the user in whichever currency they pick in the top bar, so agents
+# must interpret them in the SAME currency or they'll produce mismatched units
+# ("150.000 TL" when the UI is showing "$150,000").
+display_currency_var: ContextVar[str] = ContextVar("display_currency", default="USD")
+
 
 def get_current_user_id_or_none() -> int | None:
     return current_user_id_var.get()
+
+
+def get_display_currency() -> str:
+    return display_currency_var.get()

@@ -16,6 +16,7 @@ Caching strategy:
 from __future__ import annotations
 
 import logging
+import re
 import unicodedata
 from datetime import date as date_cls
 from datetime import timedelta
@@ -23,6 +24,12 @@ from functools import lru_cache
 from typing import Any, Literal
 
 from langchain_core.tools import tool
+
+# Pattern for "looks like a TEFAS fund code": 2-6 ASCII letters/digits,
+# all-caps once normalized. Used to trigger a direct-code fallback when
+# the universe cache doesn't list a fund (TEFAS's returns-based endpoint
+# excludes ~500 funds, e.g. money-market ones without long return history).
+_FUND_CODE_RE = re.compile(r"^[A-Z0-9]{2,6}$")
 
 log = logging.getLogger("fincoach.tools.funds")
 
@@ -327,9 +334,8 @@ def search_fund(query: str, limit: int = 10, kind: Literal["mutual", "pension"] 
     """
     kind_param = "EMK" if kind == "pension" else "YAT"
     universe = _universe_cached(kind_param, today_iso=date_cls.today().isoformat())
-    if not universe:
-        return []
-    q = _fold_tr(query.strip())
+    raw = (query or "").strip()
+    q = _fold_tr(raw)
     if not q:
         return []
     hits: list[tuple[int, dict]] = []
@@ -346,7 +352,49 @@ def search_fund(query: str, limit: int = 10, kind: Literal["mutual", "pension"] 
         if score > 0:
             hits.append((score, f))
     hits.sort(key=lambda x: -x[0])
-    return [h[1] for h in hits[:limit]]
+    if hits:
+        return [h[1] for h in hits[:limit]]
+
+    # Fallback: universe is missing ~500 funds (TEFAS's returns-based listing
+    # filters out money-market and some others). If the query looks like a
+    # fund code, hit tefas-crawler directly — it can resolve any live code.
+    code_candidate = raw.upper()
+    if _FUND_CODE_RE.match(code_candidate):
+        direct = _lookup_by_code(code_candidate)
+        if direct is not None:
+            return [direct]
+    return []
+
+
+def _lookup_by_code(code: str) -> dict | None:
+    """Per-code TEFAS lookup via tefas-crawler. Used to bridge gaps in the
+    bulk universe cache. Returns the same shape as universe rows so the
+    caller doesn't care which path produced the result."""
+    today = date_cls.today()
+    start = today - timedelta(days=7)
+    try:
+        df = _crawler().fetch(start=start.isoformat(), end=today.isoformat(), name=code)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("TEFAS direct-code lookup failed for %s: %s", code, exc)
+        return None
+    if df is None or df.empty:
+        return None
+    row = df.sort_values("date").iloc[-1].to_dict()
+    return {
+        "code": row.get("code") or code,
+        "title": row.get("title") or "",
+        "price": float(row.get("price") or 0) or None,
+        "category": None,
+        "risk": None,
+        "return_1m": None,
+        "return_3m": None,
+        "return_6m": None,
+        "return_1y": None,
+        "return_ytd": None,
+        "category_rank": None,
+        "category_total": None,
+        "date": row["date"].isoformat() if hasattr(row.get("date"), "isoformat") else row.get("date"),
+    }
 
 
 @tool

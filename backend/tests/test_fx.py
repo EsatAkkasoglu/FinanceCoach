@@ -1,4 +1,4 @@
-"""Tests for the /fx/rates endpoint. yfinance is monkeypatched to avoid network."""
+"""Tests for the /fx/rates endpoint. Upstream provider is monkeypatched to avoid network."""
 from __future__ import annotations
 
 import pytest
@@ -13,7 +13,7 @@ def _clear_fx_cache():
     fx_mod._reset_cache_for_tests()
 
 
-def test_fx_rates_uses_yfinance_and_caches(client, monkeypatch):
+def test_fx_rates_uses_api_and_caches(client, monkeypatch):
     calls: list[str] = []
 
     def fake_fetch(base: str) -> dict[str, float]:
@@ -43,30 +43,10 @@ def test_fx_rates_rejects_unknown_base(client):
     assert r.status_code == 400
 
 
-def test_fx_rates_partial_failure_still_returns(client, monkeypatch):
-    def flaky_fetch(base: str) -> dict[str, float]:
-        # EUR fetch fails — simulate by raising from _fetch_from_api so the
-        # fallback (_fetch_via_yfinance_pivot) also needs to be stubbed out.
-        raise RuntimeError("simulated upstream hiccup")
-
-    def partial_yf(base: str) -> dict[str, float]:
-        # yfinance fallback returns only USD, not EUR
-        rates = {"USD": 0.031, "TRY": 1.0}
-        return {k: v / rates[base] for k, v in rates.items()}
-
-    monkeypatch.setattr(fx_mod, "_fetch_from_api", flaky_fetch)
-    monkeypatch.setattr(fx_mod, "_fetch_via_yfinance_pivot", partial_yf)
-    r = client.get("/fx/rates?base=TRY")
-    assert r.status_code == 200
-    body = r.json()
-    assert "USD" in body["rates"]
-
-
-def test_fx_rates_all_fail_returns_502(client, monkeypatch):
+def test_fx_rates_provider_failure_returns_502(client, monkeypatch):
     def always_fail(base: str) -> dict[str, float]:
         raise RuntimeError("nope")
 
     monkeypatch.setattr(fx_mod, "_fetch_from_api", always_fail)
-    monkeypatch.setattr(fx_mod, "_fetch_via_yfinance_pivot", always_fail)
     r = client.get("/fx/rates?base=USD")
     assert r.status_code == 502

@@ -22,8 +22,8 @@ from app.db.session import SessionLocal
 
 log = logging.getLogger("fincoach.portfolio_tools")
 
-AssetClassLit = Literal["stock", "crypto", "cash", "etf", "bond"]
-_VALID_ASSET_CLASSES = {"stock", "crypto", "cash", "etf", "bond"}
+AssetClassLit = Literal["stock", "crypto", "cash", "etf", "bond", "fund"]
+_VALID_ASSET_CLASSES = {"stock", "crypto", "cash", "etf", "bond", "fund"}
 
 
 @tool
@@ -40,6 +40,7 @@ def list_holdings() -> list[dict[str, Any]]:
                 "asset_class": h.asset_class,
                 "quantity": h.quantity,
                 "cost_basis": h.cost_basis,
+                "currency": h.currency,
                 "acquired_at": h.acquired_at.isoformat() if h.acquired_at else None,
             }
             for h in rows
@@ -61,6 +62,7 @@ def add_holding(
     quantity: float,
     cost_basis: float,
     asset_class: AssetClassLit = "stock",
+    currency: str = "USD",
 ) -> dict[str, Any]:
     """Add (or merge into) a holding in the user's portfolio.
 
@@ -96,6 +98,18 @@ def add_holding(
     if not tkr:
         return {"ok": False, "error": "ticker required"}
     ac = _coerce_asset_class(asset_class)
+    # Currency snap rules — protect against agents defaulting to USD on
+    # instruments that are natively priced in another currency:
+    #   • TEFAS funds  → always TRY
+    #   • BIST stocks (.IS suffix) → always TRY
+    # In both cases we override a missing/USD value but respect an
+    # explicit non-USD currency the caller supplied (e.g. EUR for a fund
+    # bought via a euro account — unusual but possible).
+    raw_ccy = (currency or "").strip().upper()
+    if ac == "fund" or tkr.endswith(".IS"):
+        ccy = "TRY" if raw_ccy in {"", "USD"} else raw_ccy
+    else:
+        ccy = raw_ccy or "USD"
 
     with SessionLocal() as db:
         existing = db.execute(
@@ -109,6 +123,7 @@ def add_holding(
                 asset_class=ac,
                 quantity=quantity,
                 cost_basis=cost_basis,
+                currency=ccy,
                 acquired_at=date_cls.today(),
             )
             db.add(h)
@@ -121,12 +136,15 @@ def add_holding(
                 "quantity": h.quantity,
                 "cost_basis": h.cost_basis,
                 "asset_class": h.asset_class,
+                "currency": h.currency,
             }
 
         total_qty = existing.quantity + quantity
         total_cost = (existing.quantity * existing.cost_basis) + (quantity * cost_basis)
         existing.quantity = total_qty
         existing.cost_basis = total_cost / total_qty if total_qty else 0.0
+        if ccy and existing.currency != ccy:
+            existing.currency = ccy
         db.commit()
         db.refresh(existing)
         return {
@@ -136,6 +154,7 @@ def add_holding(
             "quantity": existing.quantity,
             "cost_basis": existing.cost_basis,
             "asset_class": existing.asset_class,
+            "currency": existing.currency,
         }
 
 
@@ -178,32 +197,50 @@ def add_holding_by_value(
     if not tkr:
         return {"ok": False, "error": "ticker required"}
 
-    # Lazy import to keep startup fast and avoid circular imports.
-    from app.tools.market_tools import get_quote
+    ac = _coerce_asset_class(asset_class)
 
-    quote = get_quote.invoke({"ticker": tkr})
-    if not isinstance(quote, dict) or quote.get("error") or not quote.get("price"):
-        return {
-            "ok": False,
-            "error": f"could not fetch price for {tkr}: {quote.get('error') if isinstance(quote, dict) else 'no quote'}",
-        }
+    # TEFAS Turkish funds: 3-letter ALL-CAPS codes priced in TRY, NAV via TEFAS
+    # (yfinance returns no data). Route them through get_fund_quote.
+    quote: dict[str, Any] | None = None
+    if ac == "fund":
+        from app.tools.fund_tools import get_fund_quote
+
+        quote = get_fund_quote.invoke({"code": tkr})
+        if not isinstance(quote, dict) or not quote.get("ok") or not quote.get("price"):
+            err = quote.get("error") if isinstance(quote, dict) else "no quote"
+            return {"ok": False, "error": f"could not fetch TEFAS NAV for {tkr}: {err}"}
+        # TEFAS NAV is always TRY; override caller-supplied currency for safety.
+        quote_ccy = "TRY"
+    else:
+        from app.tools.market_tools import get_quote
+
+        quote = get_quote.invoke({"ticker": tkr})
+        if not isinstance(quote, dict) or quote.get("error") or not quote.get("price"):
+            return {
+                "ok": False,
+                "error": f"could not fetch price for {tkr}: {quote.get('error') if isinstance(quote, dict) else 'no quote'}",
+            }
+        quote_ccy = (quote.get("currency") or currency or "USD").upper()
+
     price = float(quote["price"])
     if price <= 0:
         return {"ok": False, "error": f"invalid price for {tkr}: {price}"}
 
+    final_ccy = (currency or "").upper() or quote_ccy
     qty = value / price
     result = add_holding.invoke(
         {
             "ticker": tkr,
             "quantity": qty,
             "cost_basis": price,
-            "asset_class": _coerce_asset_class(asset_class),
+            "asset_class": ac,
+            "currency": final_ccy,
         }
     )
     if isinstance(result, dict) and result.get("ok"):
         result["price_used"] = price
         result["value_spent"] = value
-        result["currency"] = (currency or "").upper() or quote.get("currency", "USD")
+        result["currency"] = final_ccy
     return result
 
 

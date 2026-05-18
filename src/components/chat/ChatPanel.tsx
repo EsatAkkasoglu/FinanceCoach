@@ -6,18 +6,20 @@ import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { streamChat, sendFeedback, autotitleConversation, type Citation as ApiCitation } from "@/lib/api";
 import { parseToolResult } from "@/lib/parseToolResult";
-import { useChatStore, useAgentVizStore, useConversationStore, type ToolActivity } from "@/store";
+import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity } from "@/store";
 import { cn } from "@/lib/cn";
 import { AgentBadge } from "./AgentBadge";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 import { CitationChip } from "./CitationChip";
 
-const SUGGESTION_KEYS = [
-  "suggestions.spendingSummary",
-  "suggestions.nvdaDecision",
-  "suggestions.goldFunds",
-  "suggestions.cryptoTrends",
-] as const;
+function pickRandom<T>(arr: T[], n: number): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
+}
 
 interface ChatPanelProps {
   convId: string;
@@ -37,9 +39,14 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const clearAgentEvents = useAgentVizStore((s) => s.clear);
   const updateTitle = useConversationStore((s) => s.updateTitle);
   const activeConv = useConversationStore((s) => s.conversations.find((c) => c.id === convId));
+  const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const [input, setInput] = useState("");
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
+  const [suggestions] = useState<string[]>(() => {
+    const raw = t("suggestionPool", { returnObjects: true });
+    return pickRandom(Array.isArray(raw) ? (raw as string[]) : [], 4);
+  });
   const toolActivitiesRef = useRef<ToolActivity[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const [stoppedPrompt, setStoppedPrompt] = useState<string | null>(null);
@@ -96,7 +103,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     abortRef.current = controller;
 
     try {
-      for await (const event of streamChat(text, threadId, convId, controller.signal)) {
+      for await (const event of streamChat(text, threadId, convId, controller.signal, displayCurrency)) {
         switch (event.type) {
           case "token":
             appendToken(convId, lastAsstId.current!, (event.payload.text as string) ?? "");
@@ -314,18 +321,15 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             <div className="card-muted">
               <p className="mb-3 text-sm text-[hsl(var(--text-muted))]">{t("tryOneOfThese")}</p>
               <div className="flex flex-wrap gap-2">
-                {SUGGESTION_KEYS.map((key) => {
-                  const suggestion = t(key);
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => send(suggestion)}
-                      className="rounded-full border border-[hsl(var(--border))] px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
-                    >
-                      {suggestion}
-                    </button>
-                  );
-                })}
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => send(s)}
+                    className="rounded-full border border-[hsl(var(--border))] px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
+                  >
+                    {s}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -336,92 +340,106 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             const isStreamingThis = streaming && lastAsstId.current === m.id && m.content.length > 0;
             const showCopy = isAssistant && !isThinking && m.content.length > 0;
             const hasSteps = Boolean(isAssistant && m.steps && m.steps.length > 0);
+            const timeStr = new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+            const regenHandler = () => {
+              const idx = messages.findIndex((x) => x.id === m.id);
+              if (idx <= 0) return;
+              const prior = messages[idx - 1];
+              if (!prior || prior.role !== "user") return;
+              void send(prior.content);
+            };
             return (
               <div
                 key={m.id}
                 className={cn(
-                  "group relative max-w-3xl rounded-xl border p-4 text-sm",
-                  m.role === "user"
-                    ? "ml-auto border-accent-muted bg-accent-muted/40"
-                    : "border-[hsl(var(--border))] bg-[hsl(var(--surface))]"
+                  "group relative flex w-full",
+                  m.role === "user" ? "justify-end" : "justify-start"
                 )}
               >
-                {isAssistant && (
-                  <div className="mb-2">
-                    {hasSteps ? (
-                      <StepsPanel steps={m.steps ?? []} agent={m.agent ?? null} compact />
-                    ) : (
-                      m.agent && <AgentBadge name={m.agent} />
-                    )}
-                  </div>
+                <div
+                  className={cn(
+                    "flex flex-col gap-2",
+                    m.role === "user"
+                      ? "max-w-[75%] items-end"
+                      : "w-full max-w-3xl items-stretch"
+                  )}
+                >
+                {/* Steps strip — outside the bubble, above it */}
+                {isAssistant && hasSteps && (
+                  <StepsPanel steps={m.steps ?? []} agent={m.agent ?? null} strip />
                 )}
-                {showCopy && <CopyButton text={m.content} />}
-                {isThinking ? (
-                  <AgentActivity agent={activeAgent} activities={toolActivities} />
-                ) : (
-                  <div
-                    className={cn(
-                      "prose prose-invert prose-sm max-w-none whitespace-pre-wrap",
-                      isStreamingThis && "chat-streaming-fade"
-                    )}
-                  >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {m.content || (isAssistant ? "…" : "")}
-                    </ReactMarkdown>
-                    {isStreamingThis && (
-                      <span className="ml-0.5 inline-block h-3 w-1.5 -translate-y-0.5 bg-accent align-middle chat-cursor-blink" />
-                    )}
-                  </div>
-                )}
-                {isAssistant && m.citations && m.citations.length > 0 && (
-                  <div className="mt-3 flex flex-wrap items-start gap-1.5 border-t border-[hsl(var(--border))] pt-3">
-                    <span className="mr-1 text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                      {t("sources")}
-                    </span>
-                    {m.citations.map((c, i) => (
-                      <CitationChip key={`${m.id}-${i}`} citation={c} />
-                    ))}
-                  </div>
-                )}
-                {isAssistant && !isThinking && m.content.length > 0 && (
-                  <MessageActions
-                    messageId={m.id}
-                    threadId={threadId}
-                    agent={m.agent}
-                    excerpt={m.content}
-                    streaming={streaming}
-                    onRegenerate={() => {
-                      const idx = messages.findIndex((x) => x.id === m.id);
-                      if (idx <= 0) return;
-                      const prior = messages[idx - 1];
-                      if (!prior || prior.role !== "user") return;
-                      void send(prior.content);
-                    }}
-                  />
-                )}
-                {isAssistant && m.suggestions && m.suggestions.length > 0 && (
-                  <div className="mt-3 flex flex-col gap-1.5 border-t border-[hsl(var(--border))] pt-3">
-                    <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                      {t("tryNext")}
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {m.suggestions.map((s, i) => (
-                        <button
-                          key={`${m.id}-sug-${i}`}
-                          type="button"
-                          disabled={streaming}
-                          onClick={() => send(s)}
-                          className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-[11px] text-[hsl(var(--text-primary))] hover:border-accent hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {s}
-                        </button>
-                      ))}
+
+                <div
+                  className={cn(
+                    "relative rounded-2xl border p-4 text-sm shadow-sm",
+                    m.role === "user"
+                      ? "rounded-tr-md border-accent/30 bg-accent/15"
+                      : "rounded-tl-md border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]"
+                  )}
+                >
+                  {/* Badge only when there are no steps */}
+                  {isAssistant && !hasSteps && m.agent && (
+                    <div className="mb-2"><AgentBadge name={m.agent} /></div>
+                  )}
+                  {showCopy && <CopyButton text={m.content} />}
+                  {isThinking ? (
+                    <AgentActivity agent={activeAgent} activities={toolActivities} />
+                  ) : (
+                    <div
+                      className={cn(
+                        "prose prose-invert prose-sm max-w-none",
+                        isStreamingThis && "chat-streaming-fade"
+                      )}
+                    >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {m.content || (isAssistant ? "…" : "")}
+                      </ReactMarkdown>
+                      {isStreamingThis && (
+                        <span className="ml-0.5 inline-block h-3 w-1.5 -translate-y-0.5 bg-accent align-middle chat-cursor-blink" />
+                      )}
                     </div>
+                  )}
+                  {isAssistant && m.suggestions && m.suggestions.length > 0 && (
+                    <div className="mt-3 flex flex-col gap-1.5 border-t border-[hsl(var(--border))] pt-3">
+                      <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                        {t("tryNext")}
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {m.suggestions.map((s, i) => (
+                          <button
+                            key={`${m.id}-sug-${i}`}
+                            type="button"
+                            disabled={streaming}
+                            onClick={() => send(s)}
+                            className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-[11px] text-[hsl(var(--text-primary))] hover:border-accent hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bottom bar: actions (assistant only) + timestamp */}
+                  <div className="mt-2 flex items-center justify-between">
+                    {isAssistant && !isThinking && m.content.length > 0 ? (
+                      <MessageActions
+                        messageId={m.id}
+                        threadId={threadId}
+                        agent={m.agent}
+                        excerpt={m.content}
+                        streaming={streaming}
+                        onRegenerate={regenHandler}
+                      />
+                    ) : (
+                      <span />
+                    )}
+                    <p className="text-[10px] text-[hsl(var(--text-muted))]/50 select-none">
+                      {timeStr}
+                    </p>
                   </div>
-                )}
-                <p className="mt-2 text-right text-[10px] text-[hsl(var(--text-muted))]/50 select-none">
-                  {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
-                </p>
+                </div>
+                </div>
               </div>
             );
           })}
@@ -505,26 +523,26 @@ function stableKey(obj: unknown): string {
 // ─── AgentActivity ────────────────────────────────────────────────────────────
 
 const TOOL_META: Record<string, { label: string; icon: string }> = {
-  get_quote:           { label: "Quote",         icon: "📈" },
-  resolve_symbol:      { label: "Resolve",        icon: "🔎" },
-  analyze_ticker_8dim: { label: "8-dim Analysis", icon: "🔍" },
-  get_dividend_metrics:{ label: "Dividends",      icon: "💰" },
-  scan_hot_trends:     { label: "Hot Scanner",    icon: "🔥" },
-  scan_rumors:         { label: "Rumor Scanner",  icon: "👂" },
-  search_fund:         { label: "Fund Search",    icon: "🏦" },
-  get_fund_quote:      { label: "Fund Quote",     icon: "🏦" },
-  get_fund_history:    { label: "Fund History",   icon: "📊" },
-  list_top_funds:      { label: "Top Funds",      icon: "🏆" },
-  list_holdings:       { label: "Holdings",       icon: "📋" },
-  list_transactions:   { label: "Transactions",   icon: "📋" },
-  add_holding:           { label: "Add Holding",    icon: "➕" },
-  add_holding_by_value:  { label: "Buy by Value",   icon: "💸" },
-  set_cash_balance:      { label: "Set Cash",       icon: "💵" },
-  remove_holding:        { label: "Close Position", icon: "🗑️" },
-  search_news:         { label: "News",           icon: "📰" },
-  get_user_profile:    { label: "Profile",        icon: "👤" },
-  update_risk_score:   { label: "Update Risk",    icon: "⚖️" },
-  query_memory:        { label: "Memory",         icon: "🧠" },
+  get_quote:           { label: "Fiyat",          icon: "📈" },
+  resolve_symbol:      { label: "Sembol",          icon: "🔎" },
+  analyze_ticker_8dim: { label: "8-Boyutlu Analiz",icon: "🔍" },
+  get_dividend_metrics:{ label: "Temettü",         icon: "💰" },
+  scan_hot_trends:     { label: "Trend Tarama",    icon: "🔥" },
+  scan_rumors:         { label: "Söylenti Tarama", icon: "👂" },
+  search_fund:         { label: "Fon Arama",       icon: "🏦" },
+  get_fund_quote:      { label: "Fon Fiyatı",      icon: "🏦" },
+  get_fund_history:    { label: "Fon Geçmişi",     icon: "📊" },
+  list_top_funds:      { label: "En İyi Fonlar",   icon: "🏆" },
+  list_holdings:       { label: "Pozisyonlar",     icon: "📋" },
+  list_transactions:   { label: "İşlemler",        icon: "📋" },
+  add_holding:         { label: "Pozisyon Ekle",   icon: "➕" },
+  add_holding_by_value:{ label: "Değere Göre Al",  icon: "💸" },
+  set_cash_balance:    { label: "Nakit Ayarla",    icon: "💵" },
+  remove_holding:      { label: "Pozisyon Kapat",  icon: "🗑️" },
+  search_news:         { label: "Haberler",        icon: "📰" },
+  get_user_profile:    { label: "Profil",          icon: "👤" },
+  update_risk_score:   { label: "Risk Güncelle",   icon: "⚖️" },
+  query_memory:        { label: "Bellek",          icon: "🧠" },
 };
 
 // Render parsed result as a clean table — scalar fields + first-level arrays.
@@ -1059,14 +1077,40 @@ function StepsPanel({
   steps,
   agent,
   compact = false,
+  strip = false,
 }: {
   steps: ToolActivity[];
   agent?: string | null;
   compact?: boolean;
+  strip?: boolean;
 }) {
   const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const doneCount = steps.filter((s) => s.status === "done").length;
+
+  if (strip) {
+    return (
+      <div className={cn(open && "mb-1")}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text-primary))] transition-colors py-0.5"
+        >
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {agent && <AgentBadge name={agent} className="scale-90 origin-left" />}
+          <span className="tabular-nums">{t("toolsProgress", { done: doneCount, total: steps.length })}</span>
+        </button>
+        {open && (
+          <div className="mt-2 w-full space-y-1 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/40 p-2 overflow-x-auto">
+            {steps.map((a) => (
+              <ToolRow key={a.runId} activity={a} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -1093,11 +1137,7 @@ function StepsPanel({
           )}
           <span className="uppercase tracking-wide font-medium">{t("agentSteps")}</span>
         </span>
-        {agent && (
-          <span className="text-[hsl(var(--text-muted))]">
-            <span className="font-medium text-accent">{agent}</span>
-          </span>
-        )}
+        {agent && <AgentBadge name={agent} />}
         <span
           className={cn(
             "rounded-full px-1.5 py-0.5",
@@ -1108,7 +1148,7 @@ function StepsPanel({
         </span>
       </button>
       {open && (
-        <div className={cn("space-y-1", compact ? "border-t border-[hsl(var(--border))] p-2" : "mt-2 pl-1") }>
+        <div className={cn("space-y-1", compact ? "border-t border-[hsl(var(--border))] p-2" : "mt-2 pl-1")}>
           {steps.map((a) => (
             <ToolRow key={a.runId} activity={a} />
           ))}
@@ -1165,7 +1205,7 @@ function MessageActions({
     "flex h-7 w-7 items-center justify-center rounded-md text-[hsl(var(--text-muted))] transition-colors hover:bg-[hsl(var(--surface-2))] disabled:opacity-30 disabled:cursor-not-allowed";
 
   return (
-    <div className="mt-3 flex items-center gap-1 border-t border-[hsl(var(--border))] pt-2 opacity-60 transition-opacity group-hover:opacity-100">
+    <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
       <button
         type="button"
         title={t("helpful")}

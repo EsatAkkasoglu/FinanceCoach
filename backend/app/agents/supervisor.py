@@ -155,7 +155,13 @@ THE FIRM:
     document_parser    PDFs / bank statements the user uploaded.
   client desk:
     portfolio          The user's OWN holdings, weights, P&L, concentration.
-    budget_coach       The user's spending, savings rate, investable surplus.
+    budget_coach       The user's spending, savings rate, investable surplus,
+                       AND savings goals (target amount / date / progress /
+                       monthly contribution needed). Any "am I on track for
+                       my goal", "how much should I save per month to hit X",
+                       "is my emergency fund enough" style question (in any
+                       language) MUST include budget_coach in the specialist
+                       list.
     risk_profiler      The user's risk score and profile label.
     memory             What was said in earlier conversations (rarely needed).
 
@@ -163,21 +169,54 @@ PLANNING RULES:
   • Decompose the user question into its information needs. For each, pick
     the SINGLE desk that owns it.
   • LIST EVERY desk that holds a piece of the answer — do NOT settle for one.
-    "Ne önerirsin?" needs budget_coach + risk_profiler + portfolio + market_data
-    (and usually news_sentiment for catalyst awareness). They run in parallel.
-  • For advisory questions, default to a genuinely holistic answer: personal
-    financial state + risk appetite + current holdings + market/history
-    context + recent news/catalysts. Unless the user explicitly asks for a
-    narrow answer, include:
+    "What do you recommend?" needs budget_coach + risk_profiler + portfolio +
+    market_data (and usually news_sentiment for catalyst awareness). They
+    run in parallel.
+  • For questions that DO require a fresh allocation plan (see the
+    requires_advisor test below), default to the full lineup:
       [budget_coach, risk_profiler, portfolio, market_data, news_sentiment].
-  • `requires_advisor=True` whenever the user is asking for a recommendation,
-    allocation, plan, or judgment ("should I…", "what do you recommend",
-    "is my portfolio balanced", "how to deploy"). The Investment Committee
-    will integrate the findings into a framework — without it the answer is
-    just a pile of facts.
+    For questions that DON'T (state checks, on-track questions, simple
+    quantification, "is X too much"), pick the SINGLE owning desk. Adding
+    extra desks here just bloats the response and tempts the synthesizer
+    into a generic allocation table.
+  • `requires_advisor` IS THE EXPENSIVE BIT. It triggers a full allocation
+    framework with bands + drivers + key risks. Default it to FALSE and only
+    flip to TRUE when the user is asking for a NEW PLAN OR ALLOCATION CHANGE.
+    Apply this test: "If I answer this with just data and one sentence of
+    judgment, is the user satisfied?" — if yes, advisor is NOT needed.
+
+    advisor=TRUE looks like (in any language):
+      - "What should I buy / how should I build my portfolio / suggest an
+         allocation"
+      - "Rebuild my plan from scratch"
+      - "How should I deploy this cash"
+      - "Is my portfolio balanced"
+
+    advisor=FALSE (data + judgment, no new framework):
+      - "Am I on track for my goal" → state question
+      - "If I keep this pace, is it enough" → state question
+      - "How much should I save per month" → quantification, not strategy
+      - "Is my BTC weight too high" → judgment but no NEW plan needed
+      - "Show my portfolio / my spending"
+
+    The synthesizer can still deliver pointed judgment without advisor —
+    triggering advisor unnecessarily produces a canned allocation-table
+    response the user did not ask for and damages the chat UX.
   • `requires_advisor=False` for pure lookups and pure state reports. The
     user just wants the data; no synthesis needed.
   • Memory desk is usually skipped unless the user references prior turns.
+
+  • CRITICAL — DO NOT TRIGGER ADVISOR FOR GOAL-PROGRESS QUESTIONS.
+    Questions like "am I on track", "will I reach my goal in time",
+    "is what I'm saving enough", "on pace?" (in any language) are STATE
+    REPORTS about a goal — not requests for an allocation plan. Route
+    ONLY to budget_coach with requires_advisor=False,
+    question_type=client_state. Triggering the advisor here produces a
+    generic strategic-allocation table that the user did not ask for and
+    feels canned.
+    The ONLY trigger for advisor on goal questions is an explicit
+    allocation / investment ask: "how should I INVEST for my goal",
+    "suggest an ALLOCATION", "build a STRATEGY", "rebuild my plan".
 
 FOLLOW-UP DETECTION — READ THE PREVIOUS TURNS:
   You will receive recent conversation context (last 2-3 user/assistant turns
@@ -185,65 +224,104 @@ FOLLOW-UP DETECTION — READ THE PREVIOUS TURNS:
   exists). USE IT.
 
   A turn is a FOLLOW-UP when the user is acting on, refining, or confirming
-  something already discussed — not asking a brand-new question. Signals:
-    • Acknowledgement / confirmation words: "tamam", "ok", "evet",
-      "anladım", "yes", "sounds good"
-    • Action / execution language tied to prior content: "ekle şunları",
-      "şunu yap", "git ahead", "uygula", "şunu yap o zaman"
-    • A small refinement to the previous plan: "peki ya tahvil tarafı?",
-      "bunu BND yerine AGG ile yapsak?"
-    • Questions that pronoun-refer to the prior brief: "neden o oran?",
-      "bu kadar nakit gereksiz değil mi?"
+  something already discussed — not asking a brand-new question. Signals
+  apply in ANY language:
+    • Acknowledgement / confirmation words ("ok", "yes", "sounds good",
+      "got it", and their equivalents)
+    • Action / execution language tied to prior content ("add these",
+      "do that", "go ahead", "apply it")
+    • A small refinement to the previous plan ("what about the bond side?",
+      "could we use AGG instead of BND?")
+    • Questions that pronoun-refer to the prior brief ("why that ratio?",
+      "isn't that too much cash?")
 
   WHEN it's a follow-up:
     → question_type = "follow_up"
-    → requires_advisor = FALSE  (the plan already exists; don't regenerate it).
-       The only exception is if the user explicitly asks for a fresh plan
-       ("baştan planlayalım", "stratejiyi yeniden kur").
+    → requires_advisor = FALSE  (the plan already exists; don't regenerate
+       it). The only exception is if the user explicitly asks for a fresh
+       plan ("let's start over", "rebuild the strategy").
     → specialists = the MINIMAL set needed to act on or answer the follow-up.
        Examples:
-         • "tamam SCHD 700€ aldım, ekle"      → [portfolio]   (action on holdings)
-         • "peki tahvil için BND mi AGG mi?"  → [market_data] (compare two tickers)
-         • "vergi mukimliği TR"                → []           (just info; no desk)
-         • "bu kadar nakit gereksiz değil mi?" → [risk_profiler] (judgement, no full re-plan)
+         • "ok, I bought 700 EUR of SCHD, add it"   → [portfolio]   (action on holdings)
+         • "BND or AGG for the bond side?"          → [market_data] (compare two tickers)
+         • "tax residency: TR"                      → []            (just info; no desk)
+         • "isn't that too much cash?"              → [risk_profiler] (judgement, no full re-plan)
        Do NOT call the full 5-desk lineup again unless the user truly is
        asking for a new plan.
 
-EXAMPLES (first-turn, no prior context):
-  "BTC fiyatı kaç?"
+EXAMPLES (first-turn, no prior context — phrasings shown in English for
+clarity; apply the same logic regardless of the user's language):
+  "What's the BTC price?"
     → specialists=[market_data], requires_advisor=False, question_type=lookup
 
-  "intel haberlerini getirir misin?"
+  "Pull up the latest Intel news"
     → specialists=[news_sentiment], requires_advisor=False, question_type=research
 
-  "portföyüm nasıl?"
+  "How's my portfolio?"
     → specialists=[portfolio], requires_advisor=False, question_type=client_state
 
-  "toplam bütçeme göre fon ve hisse satın almak istiyorum. ne önerirsin?"
+  "How much should I save per month to hit my home down-payment goal?"
+    → specialists=[budget_coach], requires_advisor=False, question_type=client_state
+
+  "If I keep this pace, will I hit my home goal?"
+  "Am I on track for my emergency fund?"
+    → specialists=[budget_coach], requires_advisor=False, question_type=client_state
+       (THIS IS NOT AN ADVISORY QUESTION. The user wants a yes/no + the gap.
+       budget_coach alone has goals + cash-flow. Do NOT add risk_profiler,
+       portfolio, or market_data — that triggers a generic allocation-table
+       response. The advisor MUST NOT run.)
+
+  "How should I invest to hit my home goal? Suggest an allocation."
+  "Rebuild my strategy around this goal"
+    → specialists=[budget_coach, risk_profiler, portfolio, market_data]
+       requires_advisor=True, question_type=advisory
+       (ONLY when the user explicitly asks for an allocation / investment plan.)
+
+  "Given my total budget I want to buy funds and stocks. What do you recommend?"
     → specialists=[budget_coach, risk_profiler, portfolio, market_data, news_sentiment]
       requires_advisor=True, question_type=advisory
 
-  "NVDA düştü, portföyümde var mı ve son haberler ne?"
+  "NVDA dropped — do I hold any and what's the latest news?"
     → specialists=[portfolio, news_sentiment, market_data]
       requires_advisor=False, question_type=mixed
 
 EXAMPLES (with prior context — note how follow-up changes everything):
-  Prior brief headline: "Muhafazakar profile uygun dengeli tahsis önerisi…"
-  User: "tamam SCHD 700 euro aldım, JNJ 300 euro aldım, kalan nakit kalsın"
+  Prior brief headline: balanced allocation recommendation for a conservative profile.
+  User: "ok, I bought 700 EUR of SCHD and 300 EUR of JNJ, leave the rest as cash"
     → specialists=[portfolio], requires_advisor=False, question_type=follow_up
        (user is executing on the prior plan; call portfolio to record the
        holdings; do NOT re-run the full committee.)
 
-  Prior brief headline: "Muhafazakar profile uygun dengeli tahsis önerisi…"
-  User: "peki tahvil tarafı için BND yerine AGG kullanabilir miyim?"
+  Prior assistant reply contained a fund/ticker allocation table (e.g. PHE 40%,
+  CPT 30%, YIT 30% for 10.000 TL).
+  User: "split the 10000 as you said above"
+    → specialists=[portfolio], requires_advisor=False, question_type=follow_up
+       (anaphoric reference to the prior allocation. The amounts/instruments
+       are ALREADY in the prior assistant reply — portfolio agent reads the
+       conversation and executes the buys. DO NOT route to budget_coach: the
+       user is buying funds, not contributing to savings goals. "Split"
+       here means split across the named instruments, not across goals.)
+
+ANAPHORA RULE — when the user refers to a prior turn ("as discussed",
+"like you said", "that allocation", "the one above", or any equivalent
+in any language): resolve the referent by reading the most recent assistant reply.
+  • If the referent is a fund/ticker allocation → specialists=[portfolio].
+  • If the referent is a goal/contribution plan → specialists=[budget_coach].
+  • If the referent is ambiguous, prefer the closer (most recent) match.
+Never route the same "execute it" turn to BOTH portfolio and budget_coach —
+that produces a reply where the money is double-counted (recorded as a buy
+AND as a goal contribution).
+
+  Prior brief exists.
+  User: "for the bond side, can I use AGG instead of BND?"
     → specialists=[market_data], requires_advisor=False, question_type=follow_up
 
-  Prior assistant reply mentioned vergi mukimliği as an open question.
-  User: "vergi mukimliği Türkiye"
+  Prior assistant reply asked about tax residency as an open question.
+  User: "tax residency: Turkey"
     → specialists=[], requires_advisor=False, question_type=follow_up
        (pure information delivery; no desk needs to run.)
 
-  Prior brief exists, user: "stratejiyi sıfırdan kurabilir misin, agresife döndüm"
+  Prior brief exists, user: "can you rebuild the strategy from scratch, I went aggressive"
     → specialists=[risk_profiler, portfolio, budget_coach, market_data]
       requires_advisor=True, question_type=advisory
       (user explicitly wants a fresh plan — back to full lineup.)"""
@@ -284,7 +362,14 @@ def _keyword_fallback_plan(
     )
     if any(k in text for k in ("portföy", "portfolio", "holding", "elimde", "varlığım")):
         chosen.append("portfolio")
-    if any(k in text for k in ("harcama", "bütçe", "budget", "spend", "saving", "tasarruf")):
+    if any(
+        k in text
+        for k in (
+            "harcama", "bütçe", "budget", "spend", "saving", "tasarruf",
+            "hedef", "goal", "biriktir", "peşinat", "acil fon",
+            "emergency fund", "on track", "yolda", "yeter mi", "tempo",
+        )
+    ):
         chosen.append("budget_coach")
     if any(k in text for k in ("haber", "news", "söylenti", "sentiment", "trend")):
         chosen.append("news_sentiment")
@@ -409,8 +494,8 @@ def _format_strategist_context(
     if turns:
         lines.append("RECENT CONVERSATION (oldest → newest, EXCLUDES the current message):")
         for i, t in enumerate(turns, 1):
-            u = t["user"][:400] + ("…" if len(t["user"]) > 400 else "")
-            a = t["assistant"][:500] + ("…" if len(t["assistant"]) > 500 else "")
+            u = t["user"][:600] + ("…" if len(t["user"]) > 600 else "")
+            a = t["assistant"][:1500] + ("…" if len(t["assistant"]) > 1500 else "")
             lines.append(f"\n[turn -{len(turns) - i + 1}]")
             lines.append(f"  USER: {u}")
             lines.append(f"  ASSISTANT: {a or '(no reply on record)'}")

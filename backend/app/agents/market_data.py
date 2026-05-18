@@ -1,10 +1,8 @@
 """Market Data agent — live prices, technicals, fundamentals, 8-dim analysis.
 
 Covers: US stocks, crypto, ETFs, indices, commodities (via ETF proxies),
-forex, Treasury yields, futures. Backed by Alpha Vantage (TIME_SERIES,
-GLOBAL_QUOTE, OVERVIEW, EARNINGS, DIVIDENDS, SMA, RSI, NEWS_SENTIMENT,
-TOP_GAINERS_LOSERS, TREASURY_YIELD, CURRENCY_EXCHANGE_RATE) with CoinGecko
-as a crypto-trending fallback.
+forex, Treasury yields, futures. Backed by yfinance (no key, no rate limits)
+with CoinGecko for crypto trending.
 
 For named assets the agent resolves the ticker first via ``resolve_symbol``.
 """
@@ -24,6 +22,8 @@ from app.tools.market_tools import (
     get_quote,
     analyze_ticker_8dim,
     get_dividend_metrics,
+    get_bist_dividend_leaders,
+    get_bist_movers,
     scan_hot_trends,
     scan_rumors,
     get_company_overview,
@@ -75,15 +75,15 @@ CRITICAL — STAY IN YOUR LANE:
 You can fetch live prices for ANY of these asset classes — never refuse a
 query because of asset class alone:
 
-GLOBAL (via Alpha Vantage):
-- US stocks & ADRs            (AAPL, NVDA, BABA, …)              → GLOBAL_QUOTE / OVERVIEW
-- Crypto                      (-USD suffix: BTC-USD, ETH-USD)    → DIGITAL_CURRENCY_DAILY
-- ETFs / index funds          (SPY, QQQ, VTI, BND, VOO, ARKK)    → GLOBAL_QUOTE
-- Stock indices               (^GSPC, ^IXIC, ^VIX, ^DJI; BIST=XU100.IS) → TIME_SERIES_DAILY (SPX/COMP/VIX/DJI)
+GLOBAL (via yfinance + CoinGecko):
+- US stocks & ADRs            (AAPL, NVDA, BABA, …)
+- Crypto                      (-USD suffix: BTC-USD, ETH-USD) — CoinGecko primary
+- ETFs / index funds          (SPY, QQQ, VTI, BND, VOO, ARKK)
+- Stock indices               (^GSPC, ^IXIC, ^VIX, ^DJI; BIST=XU100.IS)
 - Commodities (via ETFs)      (GLD=gold, SLV=silver, USO=oil, UNG=nat gas, CPER=copper)
 - Commodity futures           (GC=F→GLD, CL=F→USO, SI=F→SLV — auto-proxied)
-- Forex                       (EURUSD=X, USDTRY=X, GBPUSD=X)     → CURRENCY_EXCHANGE_RATE
-- Treasury yields             (^TNX=10Y, ^TYX=30Y, ^IRX=3M)      → TREASURY_YIELD endpoint
+- Forex                       (EURUSD=X, USDTRY=X, GBPUSD=X)
+- Treasury yields             (^TNX=10Y, ^TYX=30Y, ^IRX=3M)
 
 TURKISH MUTUAL & PENSION FUNDS (via TEFAS):
 - 3-letter fund codes         (AFA, IIH, TI2, NVT, AU1, …)
@@ -105,14 +105,19 @@ WORKFLOW (decision tree):
 6. ``get_technical_indicators`` — SMA + RSI snapshot (overbought / oversold
    / above-SMA / below-SMA signals). Use whenever momentum/trend matters.
 7. ``analyze_ticker_8dim`` — only for US stocks / ETFs (NOT crypto / indices
-   / forex / futures / Turkish funds). Each dimension is an AV call, so
-   prefer ``fast=True`` unless the user explicitly asked for deep analysis.
-8. ``get_dividend_metrics`` — US stocks and ETFs only.
-9. ``scan_hot_trends`` — top gainers / losers / most-active US tickers
-   (AV TOP_GAINERS_LOSERS) plus CoinGecko trending crypto.
-10. ``scan_rumors`` — M&A chatter + breaking financial-markets news with
-    AV sentiment scores. (Insider transactions are NOT available — AV doesn't
-    expose that data; say so if asked.)
+   / forex / futures / Turkish funds). Prefer ``fast=True`` unless the user
+   explicitly asks for deep analysis.
+8. ``get_dividend_metrics`` — any ticker; backed by yfinance.
+8b. ``get_bist_dividend_leaders`` — use THIS (not get_dividend_metrics) when
+   the user asks for the top high-dividend Turkish stocks or a BIST dividend
+   ranking. Scans a curated BIST universe and returns the top N by yield.
+8c. ``get_bist_movers`` — use THIS when the user asks for BIST top gainers,
+   top losers, "en çok yükselenler", "en çok düşenler", or today's movers
+   on Borsa Istanbul. Returns a ranked list of gainers and losers with % change.
+9. ``scan_hot_trends`` — CoinGecko trending crypto + global market stats.
+   US stock movers are no longer available.
+10. ``scan_rumors`` — not available (data source removed). Direct users to
+    the news/sentiment agent for current headlines.
 11. ``list_top_funds`` — Turkish fund leaderboard by category rank.
 12. ``list_supported_categories`` — meta-question 'what can you look up?'
 
@@ -123,7 +128,7 @@ DISAMBIGUATION:
 - If ``resolve_symbol`` returns ``ticker: null`` AND ``search_fund`` returns
   empty, tell the user it's not supported.
 
-CITATIONS: every numeric claim is tagged with its source (alpha_vantage,
+CITATIONS: every numeric claim is tagged with its source (yfinance, coingecko,
 TEFAS, 8-dim analysis, NewsAPI).
 
 OUTPUT DEPTH:
@@ -212,6 +217,8 @@ _TOOLS = [
     get_technical_indicators,
     analyze_ticker_8dim,
     get_dividend_metrics,
+    get_bist_dividend_leaders,
+    get_bist_movers,
     scan_hot_trends,
     scan_rumors,
     # TEFAS Turkish funds

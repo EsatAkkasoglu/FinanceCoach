@@ -9,10 +9,10 @@
     "ticker": "Sembol",
     "type": "Tür",
     "qty": "Adet",
-    "cost": "Maliyet",
-    "price": "Fiyat",
-    "value": "Değer",
-    "pnl": "K/Z"
+    "cost": "Ort. Maliyet",
+    "price": "Güncel Fiyat",
+    "value": "Piyasa Değeri",
+    "pnl": "Kar / Zarar"
   },
   "empty": {
     "title": "Yatırımlarınızı ekleyin",

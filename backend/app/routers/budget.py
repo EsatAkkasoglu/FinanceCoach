@@ -91,6 +91,7 @@ class GoalCreate(BaseModel):
     current_amount: float = Field(default=0.0, ge=0)
     target_date: date | None = None
     icon: str = "target"
+    currency: str = "TRY"
 
 
 class GoalUpdate(BaseModel):
@@ -99,6 +100,7 @@ class GoalUpdate(BaseModel):
     current_amount: float | None = Field(default=None, ge=0)
     target_date: date | None = None
     icon: str | None = None
+    currency: str | None = None
 
 
 class SubscriptionUpdate(BaseModel):
@@ -397,6 +399,7 @@ def _goal_dict(g: Goal) -> dict:
         "current_amount": g.current_amount,
         "target_date": g.target_date.isoformat() if g.target_date else None,
         "icon": g.icon,
+        "currency": g.currency or "TRY",
     }
 
 

@@ -66,6 +66,76 @@ def latest_human_turn(messages: list) -> list:
     return []
 
 
+def recent_conversation_turns(
+    messages: list, k: int = 2, max_assistant_chars: int = 2000
+) -> list:
+    """Return the last ``k`` completed user/assistant pairs plus the current
+    user turn, with tool-call noise stripped.
+
+    Built for specialists that need ANAPHORA RESOLUTION ("bu fonları ekle",
+    "as you said above") — they must see the prior synthesizer reply to
+    extract referenced tickers/amounts. We keep ONLY the final user-facing
+    assistant message per past turn (the synthesizer output) and drop all
+    intermediate ReAct scratchpad / tool messages, which keeps token use
+    bounded.
+
+    Shape returned (oldest → newest):
+        [HumanMessage(turn-k), AIMessage(reply-k),
+         ...,
+         HumanMessage(turn-1), AIMessage(reply-1),
+         HumanMessage(current)]
+    """
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    if not messages:
+        return []
+
+    human_idxs = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
+    if not human_idxs:
+        return []
+
+    # Walk completed turns (every human idx except the last, which is the
+    # in-flight turn). For each, find the LAST AIMessage with non-empty text
+    # content before the next human — that is the synthesizer reply.
+    pairs: list[tuple[Any, Any]] = []
+    for i in range(len(human_idxs) - 1):
+        start = human_idxs[i]
+        end = human_idxs[i + 1]
+        user_msg = messages[start]
+        reply_msg = None
+        for j in range(end - 1, start, -1):
+            m = messages[j]
+            if not isinstance(m, AIMessage):
+                continue
+            # Skip tool-only AIMessages (no text content). Tool-call planning
+            # messages have empty content + a tool_calls list; the synthesizer
+            # output is the one with actual prose.
+            text = normalize_content(getattr(m, "content", "")).strip()
+            if not text:
+                continue
+            reply_msg = m
+            break
+        if reply_msg is not None:
+            # Truncate the prior reply so a long allocation table doesn't
+            # balloon the next prompt. The anaphora targets (ticker codes,
+            # amounts) sit in the first ~1-2k chars of any normal reply.
+            text = normalize_content(getattr(reply_msg, "content", ""))
+            if len(text) > max_assistant_chars:
+                text = text[:max_assistant_chars] + "…"
+                reply_msg = AIMessage(content=text)
+            pairs.append((user_msg, reply_msg))
+
+    pairs = pairs[-k:]
+
+    out: list = []
+    for u, a in pairs:
+        out.append(u)
+        out.append(a)
+    # Append the current (in-flight) human message.
+    out.append(messages[human_idxs[-1]])
+    return out
+
+
 def _summarize_tool_output(output: Any, max_len: int = 600) -> Any:
     """Best-effort: keep dicts/lists structured; truncate strings."""
     if output is None:

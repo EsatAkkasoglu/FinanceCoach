@@ -519,6 +519,7 @@ export interface Goal {
   current_amount: number;
   target_date: string | null;
   icon: string;
+  currency: string;
 }
 
 export async function listGoals() {
@@ -695,12 +696,18 @@ export async function* streamChat(
   message: string,
   threadId: string,
   convId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  displayCurrency?: string,
 ): AsyncGenerator<ChatEvent> {
   const resp = await apiFetch(`/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ message, thread_id: threadId, conv_id: convId }),
+    body: JSON.stringify({
+      message,
+      thread_id: threadId,
+      conv_id: convId,
+      display_currency: displayCurrency,
+    }),
     signal,
   });
   if (!resp.body) throw new Error("no stream body");

@@ -57,9 +57,6 @@ _GOOGLE_API_KEY_RE = re.compile(r"AIza[0-9A-Za-z_-]{20,}")
 def _safe_error_message(exc: Exception) -> str:
     """Return a client-safe error without leaking provider API keys."""
     message = _GOOGLE_API_KEY_RE.sub("[REDACTED_GOOGLE_API_KEY]", str(exc))
-    av_key = settings.alphavantage_api_key
-    if av_key and av_key in message:
-        message = message.replace(av_key, "[REDACTED_ALPHAVANTAGE_API_KEY]")
     if "CONSUMER_SUSPENDED" in message or "has been suspended" in message:
         return (
             "Gemini API key is suspended. Create or rotate to a restricted Gemini API key "
@@ -314,6 +311,9 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
     user_message: str = payload.get("message", "").strip()
     thread_id: str = payload.get("thread_id", "").strip()
     conv_id: str = payload.get("conv_id", "").strip()
+    display_currency: str = (payload.get("display_currency") or "USD").strip().upper()
+    if display_currency not in {"TRY", "USD", "EUR"}:
+        display_currency = "USD"
     if not user_message:
         return {"error": "empty message"}
     if not thread_id:
@@ -331,8 +331,11 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
             if owns is None or owns != thread_id:
                 raise HTTPException(403, "conversation not found")
 
-    # Make user_id visible to deeply-nested LangGraph tools via ContextVar.
+    # Make user_id + UI display currency visible to deeply-nested LangGraph
+    # tools / synthesizer via ContextVars.
     current_user_id_var.set(user_id)
+    from app.auth import display_currency_var
+    display_currency_var.set(display_currency)
 
     supervisor = app.state.supervisor
     initial_state = {"messages": [HumanMessage(content=user_message)], "user_id": user_id}
@@ -569,23 +572,15 @@ def _touch_conversation(conv_id: str, first_message: str) -> None:
         db.commit()
 
 
-_AV_RATELIMIT_RE = re.compile(
-    r"(AV info[^\"\\}]*|We have detected your API key[^\"\\}]*?premium endpoints\.?"
-    r"|.*?\b25 requests per day\b[^\"\\}]*?premium endpoints\.?"
-    r"|Thank you for using Alpha Vantage[^\"\\}]*?premium plans[^\"\\}]*?)",
-    re.IGNORECASE,
-)
-
 # Keys whose values are diagnostic-only (raw provider error text) and should
 # NEVER reach the UI. They stay in backend logs but are stripped from any
 # tool output that gets serialized into a citation chip.
-_SCRUBBED_KEYS = {"av_error", "cg_error", "cg_trending_error"}
+_SCRUBBED_KEYS = {"cg_error", "cg_trending_error"}
 
 
 def _scrub_for_ui(obj: object) -> object:
-    """Recursively redact provider error strings and drop diagnostic-only keys
-    so they never appear in the citations panel. Logs whatever it strips so
-    the information remains visible to operators in stdout.
+    """Recursively drop diagnostic-only keys so they never appear in the
+    citations panel. Logs whatever it strips so operators can see it.
     """
     if isinstance(obj, dict):
         cleaned: dict = {}
@@ -593,19 +588,10 @@ def _scrub_for_ui(obj: object) -> object:
             if k in _SCRUBBED_KEYS:
                 log.info("scrubbed tool-output key for UI: %s=%r", k, v)
                 continue
-            # Keep the existence of an error, but replace the noisy provider
-            # blurb with a short user-safe phrase.
-            if k == "error" and isinstance(v, str) and _AV_RATELIMIT_RE.search(v):
-                log.info("scrubbed AV rate-limit blurb from tool-output 'error': %s", v)
-                cleaned[k] = "data provider rate-limited; using fallback"
-                continue
             cleaned[k] = _scrub_for_ui(v)
         return cleaned
     if isinstance(obj, list):
         return [_scrub_for_ui(x) for x in obj]
-    if isinstance(obj, str) and _AV_RATELIMIT_RE.search(obj):
-        log.info("scrubbed AV rate-limit blurb from tool-output string")
-        return _AV_RATELIMIT_RE.sub("data provider rate-limited", obj)
     return obj
 
 
@@ -759,9 +745,20 @@ async def onboarding(payload: OnboardingIn, user_id: int = Depends(get_current_u
 # --- Portfolio + Briefing -----------------------------------------------
 
 
-def _quote_or_none(ticker: str) -> dict | None:
-    """Wrap get_quote tool with safe error handling (briefing must never 500)."""
+def _quote_or_none(ticker: str, asset_class: str | None = None) -> dict | None:
+    """Wrap get_quote tool with safe error handling (briefing must never 500).
+
+    Routes TEFAS funds (asset_class='fund') through ``get_fund_quote`` since
+    those codes aren't on yfinance and would otherwise log spurious
+    "possibly delisted" errors.
+    """
     try:
+        if asset_class == "fund":
+            from app.tools.fund_tools import get_fund_quote
+            result = get_fund_quote.invoke({"code": ticker})
+            if not isinstance(result, dict) or not result.get("ok") or not result.get("price"):
+                return None
+            return {"price": result["price"], "currency": result.get("currency", "TRY")}
         from app.tools.market_tools import get_quote
         result = get_quote.invoke({"ticker": ticker})
         if "error" in result:
@@ -790,7 +787,10 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor(max_workers=min(len(non_cash) or 1, 10)) as pool:
         quotes = await asyncio.gather(
-            *[loop.run_in_executor(pool, _quote_or_none, h.ticker) for h in non_cash],
+            *[
+                loop.run_in_executor(pool, _quote_or_none, h.ticker, h.asset_class)
+                for h in non_cash
+            ],
             return_exceptions=True,
         )
     quote_map = {
@@ -807,11 +807,11 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
         if h.asset_class == "cash":
             current_price = 1.0
             current_value = h.quantity
-            currency = "USD"
+            currency = h.currency or "USD"
         else:
             quote = quote_map.get(h.ticker)
             current_price = quote["price"] if quote else h.cost_basis
-            currency = (quote or {}).get("currency", "USD")
+            currency = (quote or {}).get("currency") or h.currency or "USD"
             current_value = h.quantity * current_price
 
         pnl = current_value - cost_total
@@ -1041,7 +1041,10 @@ async def daily_briefing(user_id: int = Depends(get_current_user_id)):
     div_candidates = [h for h in non_cash if h.asset_class in ("stock", "etf")][:1]
     div_ticker = div_candidates[0].ticker if div_candidates else None
 
-    tickers_to_fetch = ["^GSPC", "^VIX"] + [h.ticker for h in non_cash]
+    # (ticker, asset_class) — indices flow through yfinance; fund holdings via TEFAS.
+    quote_specs: list[tuple[str, str | None]] = [("^GSPC", None), ("^VIX", None)]
+    quote_specs.extend((h.ticker, h.asset_class) for h in non_cash)
+    tickers_to_fetch = [t for t, _ in quote_specs]
     aux_jobs: list = []  # (name, callable, *args)
     aux_jobs.append(("trends", _trends_or_none))
     if main_holding:
@@ -1052,7 +1055,7 @@ async def daily_briefing(user_id: int = Depends(get_current_user_id)):
     loop = asyncio.get_event_loop()
     pool_size = min(len(tickers_to_fetch) + len(aux_jobs), 12)
     with ThreadPoolExecutor(max_workers=pool_size) as pool:
-        quote_futs = [loop.run_in_executor(pool, _quote_or_none, t) for t in tickers_to_fetch]
+        quote_futs = [loop.run_in_executor(pool, _quote_or_none, t, ac) for t, ac in quote_specs]
         aux_futs = [loop.run_in_executor(pool, j[1], *j[2:]) for j in aux_jobs]
         results = await asyncio.gather(*quote_futs, *aux_futs, return_exceptions=True)
 

@@ -33,6 +33,7 @@ class AssetClass(str, Enum):
     CASH = "cash"
     BOND = "bond"
     ETF = "etf"
+    FUND = "fund"
 
 
 class TransactionType(str, Enum):
@@ -91,6 +92,7 @@ class Holding(Base):
     asset_class = Column(String(16), default=AssetClass.STOCK.value)
     quantity = Column(Float, nullable=False)
     cost_basis = Column(Float, nullable=False)            # avg per-unit cost
+    currency = Column(String(8), nullable=False, default="USD")  # currency of cost_basis / quote
     acquired_at = Column(Date, default=datetime.utcnow)
 
     user = relationship("User", back_populates="holdings")
@@ -171,6 +173,7 @@ class Goal(Base):
     target_date = Column(Date, nullable=True)
     current_amount = Column(Float, default=0.0)
     icon = Column(String(32), default="target")
+    currency = Column(String(8), default="TRY")
 
     user = relationship("User", back_populates="goals")
 
