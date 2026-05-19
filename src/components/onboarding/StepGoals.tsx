@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import {
@@ -23,11 +24,8 @@ interface Props {
   }) => void;
 }
 
-export function StepGoals({
-  goal,
-  financialChallenges,
-  onChange,
-}: Props) {
+export function StepGoals({ goal, financialChallenges, onChange }: Props) {
+  const { t } = useTranslation("onboarding");
   const selected = GOAL_TYPES.find((g) => g.id === goal.type);
 
   function toggleChallenge(id: FinancialChallengeId) {
@@ -40,10 +38,8 @@ export function StepGoals({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">What are you saving for?</h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-          Pick a primary goal — you can add more later.
-        </p>
+        <h2 className="text-2xl font-semibold tracking-tight">{t("goals.title")}</h2>
+        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{t("goals.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -51,7 +47,14 @@ export function StepGoals({
           <button
             key={g.id}
             type="button"
-            onClick={() => onChange({ goal: { type: g.id, title: g.label } })}
+            onClick={() =>
+              onChange({
+                goal: {
+                  type: g.id,
+                  title: t(`goals.types.${g.id}`),
+                },
+              })
+            }
             className={cn(
               "flex flex-col items-center gap-1 rounded-lg border p-4 transition",
               goal.type === g.id
@@ -60,7 +63,7 @@ export function StepGoals({
             )}
           >
             <span className="text-3xl">{g.emoji}</span>
-            <span className="text-xs">{g.label}</span>
+            <span className="text-xs">{t(`goals.types.${g.id}`)}</span>
           </button>
         ))}
       </div>
@@ -69,7 +72,7 @@ export function StepGoals({
         <div className="space-y-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4">
           <label className="block">
             <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Target amount
+              {t("goals.targetAmount")}
             </span>
             <input
               type="number"
@@ -81,13 +84,13 @@ export function StepGoals({
               className="num mt-2 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-base outline-none focus:border-accent"
             />
             <span className="mt-1 block text-xs text-[hsl(var(--text-muted))]">
-              {goal.amount > 0 ? formatCurrency(goal.amount) : "Numbers only"}
+              {goal.amount > 0 ? formatCurrency(goal.amount) : t("goals.numbersOnly")}
             </span>
           </label>
 
           <label className="block">
             <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              By when?
+              {t("goals.byWhen")}
             </span>
             <input
               type="date"
@@ -99,11 +102,12 @@ export function StepGoals({
         </div>
       )}
 
-      {/* Financial challenges section */}
       <div className="space-y-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Any of these feel familiar?</p>
-          <p className="mt-0.5 text-sm text-[hsl(var(--text-muted))]">Select all that apply — no judgment here.</p>
+          <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            {t("goals.familiar")}
+          </p>
+          <p className="mt-0.5 text-sm text-[hsl(var(--text-muted))]">{t("goals.familiarHint")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {FINANCIAL_CHALLENGES.map((ch) => {
@@ -121,7 +125,7 @@ export function StepGoals({
                 )}
               >
                 <span>{ch.emoji}</span>
-                {ch.label}
+                {t(`goals.challenges.${ch.id}`)}
               </button>
             );
           })}

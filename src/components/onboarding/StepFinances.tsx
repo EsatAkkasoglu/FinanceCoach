@@ -14,6 +14,7 @@ import {
   Pencil, Upload, MessageSquare, Plus, Trash2, Loader2,
   CheckCircle2, AlertCircle, TrendingUp, Building2, DollarSign, Briefcase, Home,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { parseDocument, type ProfileExtraction } from "@/lib/api";
 import type { AccountKind } from "@/lib/api";
@@ -50,19 +51,6 @@ interface Props {
 
 type Mode = "manual" | "upload" | "describe";
 
-const MODES: { key: Mode; icon: typeof Pencil; label: string; desc: string }[] = [
-  { key: "manual",   icon: Pencil,        label: "Enter manually",    desc: "Add income sources and accounts" },
-  { key: "upload",   icon: Upload,        label: "Upload a document", desc: "Bank statement, payslip or invoice" },
-  { key: "describe", icon: MessageSquare, label: "Describe it",       desc: "Plain language — AI understands" },
-];
-
-const KIND_LABELS: Record<AccountKind, string> = {
-  cash: "Cash / Wallet",
-  checking: "Checking",
-  savings: "Savings",
-  credit_card: "Credit card",
-};
-
 const CURRENCIES = ["TRY", "USD", "EUR", "GBP"];
 
 // Group income by currency and sum within each group
@@ -98,7 +86,21 @@ function sumIncome(sources: IncomeDraft[]): number {
 // ── Root component ────────────────────────────────────────────────────────────
 
 export function StepFinances({ value, onChange }: Props) {
+  const { t } = useTranslation("onboarding");
   const [mode, setMode] = useState<Mode>("manual");
+
+  const MODES: { key: Mode; icon: typeof Pencil; label: string; desc: string }[] = [
+    { key: "manual",   icon: Pencil,        label: t("finances.modes.manual"),   desc: t("finances.modes.manualDesc") },
+    { key: "upload",   icon: Upload,        label: t("finances.modes.upload"),   desc: t("finances.modes.uploadDesc") },
+    { key: "describe", icon: MessageSquare, label: t("finances.modes.describe"), desc: t("finances.modes.describeDesc") },
+  ];
+
+  const KIND_LABELS: Record<AccountKind, string> = {
+    cash: t("finances.kinds.cash"),
+    checking: t("finances.kinds.checking"),
+    savings: t("finances.kinds.savings"),
+    credit_card: t("finances.kinds.credit_card"),
+  };
   const [extraction, setExtraction] = useState<ProfileExtraction | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -130,10 +132,8 @@ export function StepFinances({ value, onChange }: Props) {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Your finances</h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-          Tell me about your accounts and income — I'll set up your budget automatically.
-        </p>
+        <h2 className="text-2xl font-semibold tracking-tight">{t("finances.title")}</h2>
+        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{t("finances.subtitle")}</p>
       </div>
 
       {/* Mode switcher */}
@@ -213,7 +213,7 @@ export function StepFinances({ value, onChange }: Props) {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Income sources
+              {t("finances.incomeSection")}
             </p>
             <span className="num text-xs font-semibold text-gain">
               {formatIncomeSummary(value.incomeSources)} / month
@@ -249,7 +249,7 @@ export function StepFinances({ value, onChange }: Props) {
       {value.accounts.length > 0 && (
         <div>
           <p className="mb-2 text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Accounts ({value.accounts.length})
+            {t("finances.accountSection")} ({value.accounts.length})
           </p>
           <ul className="space-y-1.5">
             {value.accounts.map((acc, i) => (
@@ -291,6 +291,13 @@ function ManualPanel({
   onAddIncome: (src: IncomeDraft) => void;
   onAddAccount: (acc: AccountDraft) => void;
 }) {
+  const { t } = useTranslation("onboarding");
+  const KIND_LABELS: Record<AccountKind, string> = {
+    cash: t("finances.kinds.cash"),
+    checking: t("finances.kinds.checking"),
+    savings: t("finances.kinds.savings"),
+    credit_card: t("finances.kinds.credit_card"),
+  };
   const [incomeForm, setIncomeForm] = useState<{ open: boolean; label: string; amount: number; currency: string }>({
     open: false, label: "", amount: 0, currency: "TRY",
   });
@@ -315,10 +322,10 @@ function ManualPanel({
       {/* Income source form */}
       <div>
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Income sources</span>
+          <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.incomeSection")}</span>
           <button type="button" onClick={() => setIncomeForm((f) => ({ ...f, open: !f.open }))}
             className="flex items-center gap-1 text-xs text-accent hover:underline">
-            <Plus className="h-3 w-3" /> Add income
+            <Plus className="h-3 w-3" /> {t("finances.addIncome")}
           </button>
         </div>
         <AnimatePresence>
@@ -330,19 +337,19 @@ function ManualPanel({
               className="mt-2 overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4 space-y-3"
             >
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Source name</span>
+                <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.sourceName")}</span>
                 <input
                   autoFocus
                   value={incomeForm.label}
                   onChange={(e) => setIncomeForm((f) => ({ ...f, label: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && submitIncome()}
-                  placeholder="Salary, freelance, rent income…"
+                  placeholder={t("finances.sourcePlaceholder")}
                   className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Monthly amount</span>
+                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.monthlyAmount")}</span>
                   <input
                     type="number" min={0} step={100}
                     value={incomeForm.amount || ""}
@@ -353,7 +360,7 @@ function ManualPanel({
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Currency</span>
+                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.currency")}</span>
                   <select value={incomeForm.currency} onChange={(e) => setIncomeForm((f) => ({ ...f, currency: e.target.value }))}
                     className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent">
                     {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
@@ -362,10 +369,10 @@ function ManualPanel({
               </div>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setIncomeForm((f) => ({ ...f, open: false }))}
-                  className="rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]">Cancel</button>
+                  className="rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]">{t("finances.cancel")}</button>
                 <button type="button" onClick={submitIncome}
                   disabled={!incomeForm.label.trim() || incomeForm.amount <= 0}
-                  className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-fg disabled:opacity-40">Add</button>
+                  className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-fg disabled:opacity-40">{t("finances.add")}</button>
               </div>
             </motion.div>
           )}
@@ -375,10 +382,10 @@ function ManualPanel({
       {/* Account form */}
       <div>
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Accounts</span>
+          <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.accountSection")}</span>
           <button type="button" onClick={() => setAccountForm((f) => ({ ...f, open: !f.open }))}
             className="flex items-center gap-1 text-xs text-accent hover:underline">
-            <Plus className="h-3 w-3" /> Add account
+            <Plus className="h-3 w-3" /> {t("finances.addAccount")}
           </button>
         </div>
         <AnimatePresence>
@@ -390,32 +397,32 @@ function ManualPanel({
               className="mt-2 overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4 space-y-3"
             >
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Account name</span>
+                <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.accountName")}</span>
                 <input
                   autoFocus
                   value={accountForm.name}
                   onChange={(e) => setAccountForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Ziraat maaş hesabı"
+                  placeholder={t("finances.accountPlaceholder")}
                   className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Type</span>
+                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.type")}</span>
                   <select value={accountForm.kind} onChange={(e) => setAccountForm((f) => ({ ...f, kind: e.target.value as AccountKind }))}
                     className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent">
                     {Object.entries(KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Institution</span>
+                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.institution")}</span>
                   <input value={accountForm.institution}
                     onChange={(e) => setAccountForm((f) => ({ ...f, institution: e.target.value }))}
                     placeholder="Garanti, Ziraat…"
                     className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent" />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Balance</span>
+                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.balance")}</span>
                   <input type="number" min={0} value={accountForm.balance || ""}
                     onChange={(e) => setAccountForm((f) => ({ ...f, balance: Number(e.target.value) }))}
                     placeholder="50 000"
@@ -431,10 +438,10 @@ function ManualPanel({
               </div>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setAccountForm((f) => ({ ...f, open: false }))}
-                  className="rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]">Cancel</button>
+                  className="rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]">{t("finances.cancel")}</button>
                 <button type="button" onClick={submitAccount}
                   disabled={!accountForm.name.trim()}
-                  className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-fg disabled:opacity-40">Add</button>
+                  className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-fg disabled:opacity-40">{t("finances.add")}</button>
               </div>
             </motion.div>
           )}
@@ -454,6 +461,7 @@ interface ExtractPanelProps {
 }
 
 function UploadPanel({ extracting, setExtracting, setExtraction, setExtractError }: ExtractPanelProps) {
+  const { t } = useTranslation("onboarding");
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -497,10 +505,10 @@ function UploadPanel({ extracting, setExtracting, setExtraction, setExtractError
             <Upload className="h-5 w-5 text-[hsl(var(--text-muted))]" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium">Drop a file or click to browse</p>
-            <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">PDF · PNG · JPG · CSV</p>
+            <p className="text-sm font-medium">{t("finances.dropFile")}</p>
+            <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{t("finances.dropFormats")}</p>
           </div>
-          {fileName && <span className="text-xs text-gain">✓ {fileName} processed — check results below</span>}
+          {fileName && <span className="text-xs text-gain">{t("finances.processed", { name: fileName })}</span>}
         </>
       )}
     </div>
@@ -510,6 +518,7 @@ function UploadPanel({ extracting, setExtracting, setExtraction, setExtractError
 // ── Describe panel ────────────────────────────────────────────────────────────
 
 function DescribePanel({ extracting, setExtracting, setExtraction, setExtractError }: ExtractPanelProps) {
+  const { t } = useTranslation("onboarding");
   const [text, setText] = useState("");
 
   async function handleExtract() {
@@ -535,14 +544,14 @@ function DescribePanel({ extracting, setExtracting, setExtraction, setExtractErr
         <li>"Ziraat maaş hesabı 50.000 TL, kira geliri 5.000 TL/ay"</li>
       </ul>
       <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)}
-        placeholder="Describe your accounts, income sources and balances…"
+        placeholder={t("finances.aiPlaceholder")}
         rows={4}
         className="w-full resize-none rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-sm outline-none focus:border-accent" />
       <button type="button" onClick={handleExtract} disabled={!text.trim() || extracting}
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent py-2.5 text-sm font-medium text-accent-fg disabled:opacity-40">
         {extracting
-          ? <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing…</>
-          : <><MessageSquare className="h-4 w-4" /> Let AI read this</>}
+          ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("finances.analyzing", { name: "…" })}</>
+          : <><MessageSquare className="h-4 w-4" /> {t("finances.aiButton")}</>}
       </button>
     </div>
   );
@@ -559,6 +568,7 @@ function ExtractionPreview({
   onAccept: (selected: IncomeDraft[]) => void;
   onDiscard: () => void;
 }) {
+  const { t } = useTranslation("onboarding");
   const profile = extraction.suggested_profile;
 
   // Build candidate income items from transactions (with detailed descriptions)
@@ -597,9 +607,13 @@ function ExtractionPreview({
   const [checked, setChecked] = useState<boolean[]>(() => unique.map(() => true));
 
   const docLabel: Record<string, string> = {
-    bank_statement: "Bank statement", salary_slip: "Payslip",
-    invoice: "Invoice", receipt: "Receipt", broker_statement: "Broker statement",
-    portfolio_screenshot: "Portfolio screenshot", other: "Document",
+    bank_statement: t("finances.docTypes.bank_statement"),
+    salary_slip: t("finances.docTypes.salary_slip"),
+    invoice: t("finances.docTypes.invoice"),
+    receipt: t("finances.docTypes.receipt"),
+    broker_statement: t("finances.docTypes.broker_statement"),
+    portfolio_screenshot: t("finances.docTypes.portfolio_screenshot"),
+    other: t("finances.docTypes.other"),
   };
 
   const selectedItems = unique.filter((_, i) => checked[i]);
@@ -685,7 +699,7 @@ function ExtractionPreview({
         </div>
       ) : (
         <p className="text-xs text-[hsl(var(--text-muted))]">
-          No income found — add income manually using the form above.
+          {t("finances.noIncomeFound")}
         </p>
       )}
 
@@ -698,12 +712,12 @@ function ExtractionPreview({
           disabled={unique.length > 0 && selectedItems.length === 0}
           className="flex-1 rounded-lg bg-accent py-2 text-xs font-medium text-accent-fg disabled:opacity-40">
           {selectedItems.length > 0
-            ? `Add ${selectedItems.length} income source${selectedItems.length > 1 ? "s" : ""} to my profile`
-            : "Apply without income"}
+            ? t("finances.addIncomeSources", { count: selectedItems.length })
+            : t("finances.applyWithout")}
         </button>
         <button type="button" onClick={onDiscard}
           className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]">
-          Discard
+          {t("finances.discard")}
         </button>
       </div>
     </motion.div>

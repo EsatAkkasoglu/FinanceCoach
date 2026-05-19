@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
-import { useUserStore } from "@/store";
+import { useUserStore, useSettingsStore } from "@/store";
 import { submitOnboarding, createAccount, createSubscription, fetchMe } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { cn } from "@/lib/cn";
@@ -15,11 +16,12 @@ import { StepRiskQuiz } from "./StepRiskQuiz";
 import { StepPortfolio, type HoldingDraft } from "./StepPortfolio";
 import { RISK_QUIZ, scoreToLabel, type AvatarId, type FinancialChallengeId } from "./data";
 
-const STEPS = ["Welcome", "Goals", "Finances", "Risk", "Portfolio"] as const;
+const STEP_KEYS = ["welcome", "goals", "finances", "risk", "portfolio"] as const;
 
 interface FormState {
   name: string;
   avatar: AvatarId;
+  currency: "TRY" | "USD" | "EUR";
   goal: GoalDraft;
   financialChallenges: FinancialChallengeId[];
   finances: FinancesDraft;
@@ -30,6 +32,7 @@ interface FormState {
 const INITIAL: FormState = {
   name: "",
   avatar: "fox",
+  currency: "TRY",
   goal: { type: "home", title: "Buy a home", amount: 0, targetDate: "" },
   financialChallenges: [],
   finances: { monthlyIncome: 0, accounts: [], incomeSources: [] },
@@ -38,10 +41,12 @@ const INITIAL: FormState = {
 };
 
 export function OnboardingWizard() {
+  const { t } = useTranslation("onboarding");
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(INITIAL);
   const { setProfile, completeOnboarding } = useUserStore();
+  const setDisplayCurrency = useSettingsStore((s) => s.setDisplayCurrency);
 
   const riskScore = useMemo(
     () => Object.values(form.quizAnswers).reduce((a, b) => a + b, 0),
@@ -52,7 +57,6 @@ export function OnboardingWizard() {
     switch (step) {
       case 0: return form.name.trim().length > 0;
       case 1: return form.goal.amount > 0 && form.goal.targetDate.length > 0;
-      // Finances (step 3) is optional: allow advancing without entering data
       case 2: return true;
       case 3: return Object.keys(form.quizAnswers).length === RISK_QUIZ.length;
       case 4: return true;
@@ -64,9 +68,8 @@ export function OnboardingWizard() {
     setSubmitting(true);
     try {
       const profile = scoreToLabel(riskScore);
-      const incomeCurrency = form.finances.incomeSources[0]?.currency ?? "TRY";
+      const incomeCurrency = form.finances.incomeSources[0]?.currency ?? form.currency;
 
-      // 1. Core onboarding
       await submitOnboarding({
         name: form.name.trim(),
         avatar: form.avatar,
@@ -90,7 +93,6 @@ export function OnboardingWizard() {
           })),
       });
 
-      // 2. Create accounts in parallel (best-effort — don't block onboarding)
       if (form.finances.accounts.length > 0) {
         await Promise.allSettled(
           form.finances.accounts.map((acc: AccountDraft) =>
@@ -105,7 +107,6 @@ export function OnboardingWizard() {
         );
       }
 
-      // 3. Create income subscription if monthly income provided
       if (form.finances.monthlyIncome > 0) {
         const incomeLabel =
           form.finances.incomeSources[0]?.label ?? `${form.name.trim()}'s income`;
@@ -116,8 +117,11 @@ export function OnboardingWizard() {
           cycle: "monthly",
           direction: "income",
           category: "income",
-        }).catch(() => {}); // best-effort
+        }).catch(() => {});
       }
+
+      // Persist the chosen display currency
+      setDisplayCurrency(form.currency);
 
       setProfile({
         name: form.name.trim(),
@@ -127,10 +131,9 @@ export function OnboardingWizard() {
         riskProfile: profile,
       });
       completeOnboarding();
-      // Refresh /auth/me so the App route guard sees has_onboarded = true.
       const me = await fetchMe();
       if (me) useAuthStore.getState().setUser(me);
-      toast.success(`Welcome aboard, ${form.name.trim()} — you're all set!`);
+      toast.success(t("welcomeBack", { name: form.name.trim() }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       toast.error(`Could not save profile: ${msg}`);
@@ -138,15 +141,15 @@ export function OnboardingWizard() {
     }
   }
 
-  const isLast = step === STEPS.length - 1;
+  const isLast = step === STEP_KEYS.length - 1;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[hsl(var(--bg))] p-6">
       <div className="w-full max-w-xl">
         {/* Progress dots */}
         <div className="mb-8 flex items-center justify-center gap-2">
-          {STEPS.map((label, i) => (
-            <div key={label} className="flex items-center gap-2">
+          {STEP_KEYS.map((key, i) => (
+            <div key={key} className="flex items-center gap-2">
               <div
                 className={cn(
                   "flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium transition",
@@ -157,7 +160,7 @@ export function OnboardingWizard() {
               >
                 {i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}
               </div>
-              {i < STEPS.length - 1 && (
+              {i < STEP_KEYS.length - 1 && (
                 <div
                   className={cn(
                     "h-px w-6 transition",
@@ -172,55 +175,56 @@ export function OnboardingWizard() {
         {/* Step body */}
         <div className="card min-h-[420px]">
           <motion.div
-              key={step}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              {step === 0 && (
-                <StepWelcome
-                  name={form.name}
-                  avatar={form.avatar}
-                  onChange={(p) => setForm((s) => ({ ...s, ...p }))}
-                />
-              )}
-              {step === 1 && (
-                <StepGoals
-                  goal={form.goal}
-                  financialChallenges={form.financialChallenges}
-                  onChange={(patch) =>
-                    setForm((s) => ({
-                      ...s,
-                      ...(patch.goal && { goal: { ...s.goal, ...patch.goal } }),
-                      ...(patch.financialChallenges !== undefined && { financialChallenges: patch.financialChallenges }),
-                    }))
-                  }
-                />
-              )}
-              {step === 2 && (
-                <StepFinances
-                  value={form.finances}
-                  onChange={(p) => setForm((s) => ({ ...s, finances: { ...s.finances, ...p } }))}
-                />
-              )}
-              {step === 3 && (
-                <StepRiskQuiz
-                  answers={form.quizAnswers}
-                  onChange={(qid, pts) =>
-                    setForm((s) => ({
-                      ...s,
-                      quizAnswers: { ...s.quizAnswers, [qid]: pts },
-                    }))
-                  }
-                />
-              )}
-              {step === 4 && (
-                <StepPortfolio
-                  holdings={form.holdings}
-                  onChange={(h) => setForm((s) => ({ ...s, holdings: h }))}
-                />
-              )}
-            </motion.div>
+            key={step}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {step === 0 && (
+              <StepWelcome
+                name={form.name}
+                avatar={form.avatar}
+                currency={form.currency}
+                onChange={(p) => setForm((s) => ({ ...s, ...p }))}
+              />
+            )}
+            {step === 1 && (
+              <StepGoals
+                goal={form.goal}
+                financialChallenges={form.financialChallenges}
+                onChange={(patch) =>
+                  setForm((s) => ({
+                    ...s,
+                    ...(patch.goal && { goal: { ...s.goal, ...patch.goal } }),
+                    ...(patch.financialChallenges !== undefined && { financialChallenges: patch.financialChallenges }),
+                  }))
+                }
+              />
+            )}
+            {step === 2 && (
+              <StepFinances
+                value={form.finances}
+                onChange={(p) => setForm((s) => ({ ...s, finances: { ...s.finances, ...p } }))}
+              />
+            )}
+            {step === 3 && (
+              <StepRiskQuiz
+                answers={form.quizAnswers}
+                onChange={(qid, pts) =>
+                  setForm((s) => ({
+                    ...s,
+                    quizAnswers: { ...s.quizAnswers, [qid]: pts },
+                  }))
+                }
+              />
+            )}
+            {step === 4 && (
+              <StepPortfolio
+                holdings={form.holdings}
+                onChange={(h) => setForm((s) => ({ ...s, holdings: h }))}
+              />
+            )}
+          </motion.div>
         </div>
 
         {/* Navigation */}
@@ -232,13 +236,12 @@ export function OnboardingWizard() {
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[hsl(var(--text-muted))] disabled:opacity-30 hover:text-[hsl(var(--text))]"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            {t("back")}
           </button>
 
-          {/* Step hint for finances (now optional) */}
           {step === 2 && (
             <span className="text-xs text-[hsl(var(--text-muted))]">
-              This step is optional — you can skip it and continue without entering finances.
+              {t("stepOptional")}
             </span>
           )}
 
@@ -249,7 +252,7 @@ export function OnboardingWizard() {
               disabled={!canAdvance}
               className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-glow disabled:opacity-40"
             >
-              Next
+              {t("next")}
               <ArrowRight className="h-4 w-4" />
             </button>
           ) : (
@@ -260,7 +263,7 @@ export function OnboardingWizard() {
               className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-glow disabled:opacity-40"
             >
               <Sparkles className="h-4 w-4" />
-              {submitting ? "Setting up…" : "Complete"}
+              {submitting ? t("settingUp") : t("complete")}
             </button>
           )}
         </div>

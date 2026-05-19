@@ -1,4 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatCurrency } from "@/lib/format";
 
 export interface HoldingDraft {
@@ -16,6 +17,7 @@ interface Props {
 const EMPTY: HoldingDraft = { ticker: "", quantity: 0, costBasis: 0, assetClass: "stock" };
 
 export function StepPortfolio({ holdings, onChange }: Props) {
+  const { t } = useTranslation("onboarding");
   const update = (i: number, patch: Partial<HoldingDraft>) =>
     onChange(holdings.map((h, idx) => (idx === i ? { ...h, ...patch } : h)));
   const remove = (i: number) => onChange(holdings.filter((_, idx) => idx !== i));
@@ -26,15 +28,13 @@ export function StepPortfolio({ holdings, onChange }: Props) {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Starting portfolio</h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-          Add what you already hold, or skip and add later from the Portfolio tab.
-        </p>
+        <h2 className="text-2xl font-semibold tracking-tight">{t("portfolio.title")}</h2>
+        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{t("portfolio.subtitle")}</p>
       </div>
 
       {holdings.length === 0 && (
         <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-8 text-center text-sm text-[hsl(var(--text-muted))]">
-          No holdings yet. You can always come back to this.
+          {t("portfolio.empty")}
         </div>
       )}
 
@@ -47,7 +47,7 @@ export function StepPortfolio({ holdings, onChange }: Props) {
             <input
               value={h.ticker}
               onChange={(e) => update(i, { ticker: e.target.value.toUpperCase() })}
-              placeholder="NVDA"
+              placeholder={t("portfolio.ticker")}
               className="num w-0 min-w-0 flex-1 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1.5 text-sm outline-none focus:border-accent"
             />
             <input
@@ -55,7 +55,7 @@ export function StepPortfolio({ holdings, onChange }: Props) {
               step="any"
               value={h.quantity || ""}
               onChange={(e) => update(i, { quantity: Number(e.target.value) })}
-              placeholder="qty"
+              placeholder={t("portfolio.quantity")}
               className="num w-20 shrink-0 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1.5 text-sm outline-none focus:border-accent"
             />
             <input
@@ -63,7 +63,7 @@ export function StepPortfolio({ holdings, onChange }: Props) {
               step="any"
               value={h.costBasis || ""}
               onChange={(e) => update(i, { costBasis: Number(e.target.value) })}
-              placeholder="cost"
+              placeholder={t("portfolio.costBasis")}
               className="num w-24 shrink-0 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1.5 text-sm outline-none focus:border-accent"
             />
             <select
@@ -71,10 +71,11 @@ export function StepPortfolio({ holdings, onChange }: Props) {
               onChange={(e) => update(i, { assetClass: e.target.value as HoldingDraft["assetClass"] })}
               className="w-24 shrink-0 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1.5 text-sm outline-none"
             >
-              <option value="stock">Stock</option>
-              <option value="crypto">Crypto</option>
-              <option value="etf">ETF</option>
-              <option value="cash">Cash</option>
+              {(["stock", "crypto", "etf", "cash"] as const).map((cls) => (
+                <option key={cls} value={cls}>
+                  {t(`portfolio.classes.${cls}`)}
+                </option>
+              ))}
             </select>
             <button
               type="button"
@@ -94,12 +95,13 @@ export function StepPortfolio({ holdings, onChange }: Props) {
         className="flex items-center gap-2 rounded-md border border-dashed border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--text-muted))] hover:border-accent hover:text-accent"
       >
         <Plus className="h-4 w-4" />
-        Add holding
+        {t("portfolio.addRow")}
       </button>
 
       {total > 0 && (
         <div className="text-right text-sm text-[hsl(var(--text-muted))]">
-          Estimated total cost: <span className="num text-[hsl(var(--text))]">{formatCurrency(total)}</span>
+          {t("portfolio.totalCost")}:{" "}
+          <span className="num text-[hsl(var(--text))]">{formatCurrency(total)}</span>
         </div>
       )}
     </div>

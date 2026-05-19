@@ -6,10 +6,11 @@
     "risk": "Risk",
     "portfolio": "Portföy"
   },
-  "stepOptional": "Bu adım isteğe bağlıdır — finanslarınızı girmeden atlayabilirsiniz.",
+  "back": "Geri",
   "next": "İleri",
   "settingUp": "Ayarlanıyor…",
   "complete": "Tamamla",
+  "stepOptional": "Bu adım isteğe bağlıdır — finanslarınızı girmeden atlayabilirsiniz.",
   "welcomeBack": "Hoş geldiniz, {{name}} — hazırsınız!",
   "welcome": {
     "title": "FinCoach'a Hoş Geldiniz",
@@ -19,7 +20,9 @@
     "whatToCall": "Size nasıl hitap edeyim?",
     "namePlaceholder": "Ahmet",
     "niceMeet": "Tanıştığımıza memnun oldum, {{name}} 👋",
-    "pickAnimal": "Ruh hayvanınızı seçin"
+    "pickAnimal": "Ruh hayvanınızı seçin",
+    "currency": "Görüntüleme para birimi",
+    "currencyHint": "İşlemler ve grafikler bu para biriminde gösterilir"
   },
   "goals": {
     "title": "Ne için biriktiriyorsunuz?",
@@ -28,6 +31,146 @@
     "byWhen": "Ne zamana kadar?",
     "familiar": "Bunlardan tanıdık gelenler var mı?",
     "familiarHint": "Uygunalanları seçin — yargılamıyorum.",
-    "numbersOnly": "Yalnızca sayı"
+    "numbersOnly": "Yalnızca sayı",
+    "types": {
+      "home": "Ev satın al",
+      "retirement": "Erken emeklilik",
+      "travel": "Tatil fonu",
+      "freedom": "Finansal özgürlük",
+      "education": "Eğitim",
+      "emergency": "Acil durum fonu"
+    },
+    "challenges": {
+      "too_much_debt": "Çok fazla borç",
+      "inconsistent_income": "Düzensiz gelir",
+      "dont_know_where_start": "Nereden başlayacağımı bilmiyorum",
+      "overspending": "Aşırı harcama",
+      "want_to_invest": "Yatırım yapmak istiyorum, nasıl bilmiyorum",
+      "no_emergency_fund": "Acil durum fonun yok"
+    }
+  },
+  "finances": {
+    "title": "Finanslarınız",
+    "subtitle": "Hesaplarınız ve geliriniz hakkında bilgi verin — bütçenizi otomatik kuracağım.",
+    "modes": {
+      "manual": "Manuel giriş",
+      "manualDesc": "Gelir kaynakları ve hesapları tek tek ekle",
+      "upload": "Belge yükle",
+      "uploadDesc": "Banka ekstresi, maaş bordrosu veya fatura",
+      "describe": "Anlat",
+      "describeDesc": "Serbest metin — yapay zeka anlar"
+    },
+    "incomeSection": "Gelir kaynakları",
+    "addIncome": "Gelir ekle",
+    "accountSection": "Hesaplar",
+    "addAccount": "Hesap ekle",
+    "sourceName": "Kaynak adı",
+    "sourcePlaceholder": "Maaş, serbest çalışma, kira geliri…",
+    "monthlyAmount": "Aylık tutar",
+    "currency": "Para birimi",
+    "cancel": "İptal",
+    "add": "Ekle",
+    "accountName": "Hesap adı",
+    "accountPlaceholder": "Ziraat maaş hesabı",
+    "type": "Tür",
+    "institution": "Banka",
+    "balance": "Bakiye",
+    "kinds": {
+      "cash": "Nakit / Cüzdan",
+      "checking": "Vadesiz",
+      "savings": "Vadeli",
+      "credit_card": "Kredi kartı"
+    },
+    "perMonth": "/ ay",
+    "incomeCount": "{{count}} gelir kaynağı",
+    "accountCount": "{{count}} hesap",
+    "dropFile": "Dosyayı buraya bırakın veya tıklayın",
+    "dropFormats": "PDF · PNG · JPG · CSV",
+    "analyzing": "{{name}} analiz ediliyor…",
+    "processed": "✓ {{name}} işlendi — sonuçları aşağıda kontrol edin",
+    "aiPlaceholder": "Hesaplarınızı, gelir kaynaklarınızı ve bakiyelerinizi anlatın…",
+    "aiButton": "Yapay zeka okusun",
+    "noIncomeFound": "Gelir bulunamadı — yukarıdaki formu kullanarak manuel ekleyin.",
+    "docTypes": {
+      "bank_statement": "Banka ekstresi",
+      "salary_slip": "Maaş bordrosu",
+      "invoice": "Fatura",
+      "receipt": "Makbuz",
+      "broker_statement": "Broker ekstresi",
+      "portfolio_screenshot": "Portföy ekranı",
+      "other": "Belge"
+    },
+    "addIncomeSources": "{{count}} gelir kaynağını profilime ekle",
+    "applyWithout": "Gelir olmadan uygula",
+    "discard": "Vazgeç"
+  },
+  "risk": {
+    "title": "Risk profili",
+    "subtitle": "5 hızlı soru. Yanıtlarınız her tavsiyeyi şekillendirir.",
+    "progress": "{{completed}}/{{total}} yanıtlandı",
+    "inProgress": "devam ediyor",
+    "questions": {
+      "drawdown": {
+        "prompt": "10.000 TL'lik yatırımınız bir haftada 7.000 TL'ye düşüyor. Ne yaparsınız?",
+        "options": [
+          "Kanamayı durdurmak için her şeyi satarım",
+          "Bir kısmını satar, kalanını tutarım",
+          "Bekler ve sabredim",
+          "İndirimden daha fazla alırım"
+        ]
+      },
+      "horizon": {
+        "prompt": "Bu paraya ne zaman ihtiyacınız olacak?",
+        "options": [
+          "1 yıl içinde",
+          "1-3 yıl",
+          "3-7 yıl",
+          "7+ yıl"
+        ]
+      },
+      "allocation": {
+        "prompt": "En rahat hissedeceğiniz portföyü seçin.",
+        "options": [
+          "%100 tahvil, tam istikrar",
+          "%60/%40 hisse/tahvil, klasik",
+          "%70/%30 hisse/tahvil, büyüme odaklı",
+          "%100 hisse, tam potansiyel"
+        ]
+      },
+      "hot_tip": {
+        "prompt": "Bir arkadaşınız sıcak bir kripto bahsediyor. Siz…",
+        "options": [
+          "Görmezden gelirim — spekülasyon benim işim değil",
+          "Önce birkaç gün araştırırım",
+          "Küçük bir deneme pozisyonu alırım",
+          "Tüm varlığımı yatırırım — anı kaçırmamak gerek"
+        ]
+      },
+      "long_drawdown": {
+        "prompt": "Ayı piyasası portföyünüzü %30 düşürdü. Bir yıl sonra hâlâ düşükte. Siz…",
+        "options": [
+          "Her şeyi çekerim",
+          "Yeni katkıları dururum",
+          "Dollar-cost averaging yapmaya devam ederim"
+        ]
+      }
+    }
+  },
+  "portfolio": {
+    "title": "Başlangıç portföyü",
+    "subtitle": "Mevcut varlıklarınızı ekleyin veya atlayıp Portföy sekmesinden sonra girin.",
+    "empty": "Henüz varlık yok. İstediğiniz zaman geri dönebilirsiniz.",
+    "ticker": "Sembol",
+    "quantity": "Adet",
+    "costBasis": "Maliyet",
+    "assetClass": "Tür",
+    "totalCost": "Toplam maliyet",
+    "addRow": "Satır ekle",
+    "classes": {
+      "stock": "Hisse",
+      "crypto": "Kripto",
+      "cash": "Nakit",
+      "etf": "ETF"
+    }
   }
 }

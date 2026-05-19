@@ -1,19 +1,30 @@
 import { useRef } from "react";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { AVATARS, type AvatarId } from "./data";
 import { cn } from "@/lib/cn";
+
+type Currency = "TRY" | "USD" | "EUR";
 
 interface Props {
   name: string;
   avatar: AvatarId;
-  onChange: (patch: { name?: string; avatar?: AvatarId }) => void;
+  currency: Currency;
+  onChange: (patch: { name?: string; avatar?: AvatarId; currency?: Currency }) => void;
 }
 
-export function StepWelcome({ name, avatar, onChange }: Props) {
+const CURRENCIES: { id: Currency; symbol: string; label: string }[] = [
+  { id: "TRY", symbol: "₺", label: "TRY" },
+  { id: "USD", symbol: "$", label: "USD" },
+  { id: "EUR", symbol: "€", label: "EUR" },
+];
+
+export function StepWelcome({ name, avatar, currency, onChange }: Props) {
+  const { t } = useTranslation("onboarding");
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedMeta = AVATARS.find((a) => a.id === avatar) ?? AVATARS[0];
-  const displayName = name.trim() || "You";
+  const displayName = name.trim() || "—";
 
   return (
     <div className="space-y-6">
@@ -22,14 +33,14 @@ export function StepWelcome({ name, avatar, onChange }: Props) {
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="h-4 w-4 text-accent" />
           <span className="text-xs uppercase tracking-widest text-[hsl(var(--text-muted))]">
-            Welcome to FinCoach
+            {t("welcome.title")}
           </span>
         </div>
         <h2 className="text-2xl font-semibold tracking-tight">
-          Let's set up your profile
+          {t("welcome.setupProfile")}
         </h2>
         <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-          Takes under a minute — I'll personalize everything for you.
+          {t("welcome.subtitle")}
         </p>
       </div>
 
@@ -58,7 +69,7 @@ export function StepWelcome({ name, avatar, onChange }: Props) {
             {displayName}
           </motion.p>
           <p className="text-xs text-[hsl(var(--text-muted))]">
-            {selectedMeta.label} · FinCoach member
+            {selectedMeta.label} · {t("welcome.memberSince")}
           </p>
         </div>
       </motion.div>
@@ -66,28 +77,56 @@ export function StepWelcome({ name, avatar, onChange }: Props) {
       {/* Name input */}
       <label className="block">
         <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
-          What should I call you?
+          {t("welcome.whatToCall")}
         </span>
         <input
           ref={inputRef}
           autoFocus
           value={name}
           onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="Alex"
+          placeholder={t("welcome.namePlaceholder")}
           maxLength={40}
           className="mt-2 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-base outline-none transition focus:border-accent focus:ring-1 focus:ring-accent/30"
         />
         {name.trim().length > 0 && (
           <span className="mt-1 block text-xs text-gain">
-            Nice to meet you, {name.trim()} 👋
+            {t("welcome.niceMeet", { name: name.trim() })}
           </span>
         )}
       </label>
 
+      {/* Currency picker */}
+      <div>
+        <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          {t("welcome.currency")}
+        </span>
+        <div className="mt-2 flex gap-2">
+          {CURRENCIES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onChange({ currency: c.id })}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2.5 text-sm font-medium transition",
+                currency === c.id
+                  ? "border-accent bg-accent/10 text-accent shadow-glow"
+                  : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:border-accent/50 hover:bg-[hsl(var(--surface-2))]"
+              )}
+            >
+              <span className="text-base leading-none">{c.symbol}</span>
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[10px] text-[hsl(var(--text-muted))]">
+          {t("welcome.currencyHint")}
+        </p>
+      </div>
+
       {/* Avatar picker */}
       <div>
         <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
-          Pick your spirit animal
+          {t("welcome.pickAnimal")}
         </span>
         <div className="mt-3 grid grid-cols-4 gap-2">
           {AVATARS.map((a) => {
