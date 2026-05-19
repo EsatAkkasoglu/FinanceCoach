@@ -1,0 +1,29 @@
+{
+  "title": "Documents",
+  "subtitle": "Drop a bank statement or portfolio screenshot — the Coach reads it for you.",
+  "dropPrompt": "Drop a file or click to upload",
+  "parsing": "AI is reading the document…",
+  "fileHint": "PDF, image, DOCX, CSV · up to 50 MB · nothing is stored",
+  "fileTooLarge": "File exceeds 50 MB limit",
+  "parseFailed": "Parse failed",
+  "questionCopied": "Question copied — paste it into chat",
+  "thisSession": "This session",
+  "coachWantsToKnow": "Coach wants to know",
+  "askCoach": "Ask Coach",
+  "riskSignals": "Risk signals",
+  "unclear": "Unclear",
+  "holdings": "Holdings",
+  "transactions": "Transactions",
+  "profileHints": "Profile hints",
+  "disclaimer": "AI-generated suggestions, not financial advice. Consult a licensed advisor.",
+  "docTypes": {
+    "bank_statement": "Bank statement",
+    "broker_statement": "Broker statement",
+    "portfolio_screenshot": "Portfolio screenshot",
+    "invoice": "Invoice",
+    "receipt": "Receipt",
+    "id_document": "ID document",
+    "salary_slip": "Salary slip",
+    "other": "Document"
+  }
+}

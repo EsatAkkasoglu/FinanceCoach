@@ -1,0 +1,29 @@
+{
+  "title": "Belgeler",
+  "subtitle": "Banka ekstrenizi veya portföy ekran görüntünüzü bırakın — Koç sizin için okusun.",
+  "dropPrompt": "Dosya bırakın veya yüklemek için tıklayın",
+  "parsing": "Yapay zeka belgeyi okuyor…",
+  "fileHint": "PDF, görsel, DOCX, CSV · 50 MB'a kadar · hiçbir şey saklanmaz",
+  "fileTooLarge": "Dosya 50 MB sınırını aşıyor",
+  "parseFailed": "Ayrıştırma başarısız",
+  "questionCopied": "Soru kopyalandı — sohbete yapıştırın",
+  "thisSession": "Bu oturum",
+  "coachWantsToKnow": "Koç şunu merak ediyor",
+  "askCoach": "Koça Sor",
+  "riskSignals": "Risk sinyalleri",
+  "unclear": "Belirsiz",
+  "holdings": "Varlıklar",
+  "transactions": "İşlemler",
+  "profileHints": "Profil ipuçları",
+  "disclaimer": "Yapay zeka tarafından üretilmiş önerilerdir, finansal tavsiye değildir. Lisanslı bir danışmana başvurun.",
+  "docTypes": {
+    "bank_statement": "Banka ekstresi",
+    "broker_statement": "Aracı kurum ekstresi",
+    "portfolio_screenshot": "Portföy ekran görüntüsü",
+    "invoice": "Fatura",
+    "receipt": "Makbuz",
+    "id_document": "Kimlik belgesi",
+    "salary_slip": "Maaş bordrosu",
+    "other": "Belge"
+  }
+}

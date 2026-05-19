@@ -14,6 +14,7 @@ import {
   Shield, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { parseDocument, type ProfileExtraction } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
@@ -22,17 +23,6 @@ import { buildLocalizedPath, getLanguageFromPath } from "@/lib/routing";
 const ACCEPTED = ".pdf,.png,.jpg,.jpeg,.webp,.docx,.txt,.csv";
 const MAX_BYTES = 50 * 1024 * 1024;
 
-const DOC_TYPE_LABELS: Record<ProfileExtraction["doc_type"], string> = {
-  bank_statement: "Bank statement",
-  broker_statement: "Broker statement",
-  portfolio_screenshot: "Portfolio screenshot",
-  invoice: "Invoice",
-  receipt: "Receipt",
-  id_document: "ID document",
-  salary_slip: "Salary slip",
-  other: "Document",
-};
-
 interface ParsedDoc {
   filename: string;
   size: number;
@@ -40,6 +30,7 @@ interface ParsedDoc {
 }
 
 export function Documents() {
+  const { t } = useTranslation("documents");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -53,7 +44,7 @@ export function Documents() {
     if (!files || files.length === 0) return;
     const f = files[0];
     if (f.size > MAX_BYTES) {
-      toast.error("File exceeds 50 MB limit");
+      toast.error(t("fileTooLarge"));
       return;
     }
     setParsing(true);
@@ -61,7 +52,7 @@ export function Documents() {
       const result = await parseDocument(f);
       setParsed((prev) => [{ filename: f.name, size: f.size, result }, ...prev]);
     } catch (e) {
-      toast.error((e as Error).message || "Parse failed");
+      toast.error((e as Error).message || t("parseFailed"));
     } finally {
       setParsing(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -77,7 +68,7 @@ export function Documents() {
   async function askCoach(question: string) {
     try {
       await navigator.clipboard.writeText(question);
-      toast.success("Question copied — paste it into chat");
+      toast.success(t("questionCopied"));
     } catch {
       // ignore — clipboard may be unavailable in some webviews
     }
@@ -88,9 +79,9 @@ export function Documents() {
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Documents</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-[hsl(var(--text-muted))]">
-            Drop a bank statement or portfolio screenshot — the Coach reads it for you.
+            {t("subtitle")}
           </p>
         </div>
       </header>
@@ -118,10 +109,10 @@ export function Documents() {
         </div>
         <div>
           <p className="text-sm font-semibold">
-            {parsing ? "AI is reading the document…" : "Drop a file or click to upload"}
+            {parsing ? t("parsing") : t("dropPrompt")}
           </p>
           <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-            PDF, image, DOCX, CSV · up to 50 MB · nothing is stored
+            {t("fileHint")}
           </p>
         </div>
       </label>
@@ -130,7 +121,7 @@ export function Documents() {
       {parsed.length > 0 && (
         <section className="space-y-4">
           <p className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-            This session
+            {t("thisSession")}
           </p>
           {parsed.map((doc, idx) => (
             <ParsedDocCard
@@ -144,7 +135,7 @@ export function Documents() {
       )}
 
       <p className="pt-2 text-[10px] text-[hsl(var(--text-muted))]">
-        AI-generated suggestions, not financial advice. Consult a licensed advisor.
+        {t("disclaimer")}
       </p>
     </div>
   );
@@ -159,9 +150,11 @@ function ParsedDocCard({
   onAskCoach: (q: string) => void;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation("documents");
   const r = doc.result;
   const confidencePct = Math.round(r.doc_type_confidence * 100);
   const sizeKb = (doc.size / 1024).toFixed(0);
+  const docTypeLabel = t(`docTypes.${r.doc_type}`, { defaultValue: t("docTypes.other") });
 
   return (
     <article className="card space-y-4">
@@ -175,7 +168,7 @@ function ParsedDocCard({
             <div className="flex items-center gap-2">
               <h2 className="truncate text-sm font-semibold">{doc.filename}</h2>
               <span className="rounded-full bg-[hsl(var(--surface-2))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]">
-                {DOC_TYPE_LABELS[r.doc_type]} · {confidencePct}%
+                {docTypeLabel} · {confidencePct}%
               </span>
             </div>
             <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{sizeKb} KB</p>
@@ -205,10 +198,10 @@ function ParsedDocCard({
 
       {/* Extracted counts */}
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="Holdings" value={r.suggested_holdings.length} />
-        <Stat label="Transactions" value={r.suggested_transactions.length} />
+        <Stat label={t("holdings")} value={r.suggested_holdings.length} />
+        <Stat label={t("transactions")} value={r.suggested_transactions.length} />
         <Stat
-          label="Profile hints"
+          label={t("profileHints")}
           value={r.suggested_profile?.monthly_income ? 1 : 0}
         />
       </div>
@@ -218,7 +211,7 @@ function ParsedDocCard({
         <div className="space-y-2">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
             <Sparkles className="h-3.5 w-3.5 text-accent" />
-            Coach wants to know
+            {t("coachWantsToKnow")}
           </p>
           <ul className="space-y-2">
             {r.follow_up_questions.map((q, i) => (
@@ -229,7 +222,7 @@ function ParsedDocCard({
                 <span className="text-sm">{q}</span>
                 <Button size="sm" variant="ghost" onClick={() => onAskCoach(q)}>
                   <MessageSquare className="h-3.5 w-3.5" />
-                  Ask Coach
+                  {t("askCoach")}
                 </Button>
               </li>
             ))}
@@ -242,7 +235,7 @@ function ParsedDocCard({
         <div className="space-y-2">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
             <Shield className="h-3.5 w-3.5 text-accent" />
-            Risk signals
+            {t("riskSignals")}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {r.suggested_profile.risk_signals.map((s, i) => (
@@ -262,7 +255,7 @@ function ParsedDocCard({
         <div className="space-y-2">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
             <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-            Unclear
+            {t("unclear")}
           </p>
           <ul className="space-y-1 text-xs text-[hsl(var(--text-muted))]">
             {r.missing_or_unclear.map((m, i) => (
