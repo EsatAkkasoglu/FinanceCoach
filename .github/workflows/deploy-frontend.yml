@@ -22,14 +22,13 @@ on:
   workflow_dispatch:
     inputs:
       api_base:
-        description: "Override VITE_API_BASE (leave empty to use secret)"
+        description: "Override VITE_API_BASE (leave empty to auto-resolve)"
         required: false
 
 jobs:
   deploy:
     name: Build & Deploy to Firebase Hosting
     runs-on: ubuntu-latest
-    # If triggered by backend workflow, only run when it succeeded
     if: >
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
@@ -38,9 +37,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Resolve the backend API URL ──────────────────────────────────────
-      # Priority: manual input > VITE_API_BASE secret > auto-fetch from Cloud Run
-      - name: Auth to GCP (for reading Cloud Run URL)
+      # ── Resolve backend API URL ──────────────────────────────────────────
+      - name: Auth to GCP
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -64,31 +62,21 @@ jobs:
           fi
 
       # ── Setup Node + pnpm ────────────────────────────────────────────────
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        run: echo "store=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          path: ${{ steps.pnpm-cache.outputs.store }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-pnpm-
+          node-version: "20"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # ── Build React app ──────────────────────────────────────────────────
+      # ── Build ────────────────────────────────────────────────────────────
       - name: Build
         env:
           VITE_API_BASE: ${{ steps.api_url.outputs.url }}
@@ -104,4 +92,4 @@ jobs:
           projectId: fincoach-esat
 
       - name: Show hosting URL
-        run: echo "Frontend deployed → https://fincoach-esat.web.app"
+        run: echo "✓ Frontend deployed → https://fincoach-esat.web.app"
