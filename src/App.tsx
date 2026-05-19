@@ -16,7 +16,8 @@ import { Settings } from "@/components/settings/Settings";
 import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { AuthPage } from "@/components/auth/AuthPage";
-import { useAuthStore, useConversationStore, useUserStore } from "@/store";
+import { DemoTour, TourReplayButton } from "@/components/tour/DemoTour";
+import { useAuthStore, useConversationStore, useUserStore, useTourStore } from "@/store";
 import { buildLocalizedPath, getLanguageFromPath, isSupportedLanguage, stripLanguagePrefix } from "@/lib/routing";
 import {
   ping,
@@ -25,6 +26,7 @@ import {
   handleGoogleRedirectResult,
   getProfile,
   onUnauthorized,
+  DEMO_TOKEN_KEY,
   type Conversation,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -113,6 +115,7 @@ export default function App() {
   const { activeConversationId } = useConversationStore();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const { seen: tourSeen, active: tourActive, start: startTour } = useTourStore();
   const location = useLocation();
   const currentLanguage = getLanguageFromPath(location.pathname);
   const appPath = stripLanguagePrefix(location.pathname);
@@ -157,6 +160,15 @@ export default function App() {
       if (firebaseUser) {
         const u = await fetchMe();
         setUser(u);
+      } else if (localStorage.getItem(DEMO_TOKEN_KEY)) {
+        // Demo login: no Firebase user but we have a backend JWT
+        const u = await fetchMe();
+        if (u) {
+          setUser(u);
+        } else {
+          localStorage.removeItem(DEMO_TOKEN_KEY);
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
@@ -193,6 +205,14 @@ export default function App() {
       .catch(() => {});
   }, [user?.id, user?.has_onboarded]);
 
+  // Auto-start tour for first-time visitors (once per browser)
+  useEffect(() => {
+    if (user && user.has_onboarded && !tourSeen && !tourActive) {
+      const timer = setTimeout(startTour, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [user?.id, user?.has_onboarded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleSelectConversation(conv: Conversation) {
     navigate(buildLocalizedPath(activeLanguage, `/chat/${conv.id}`));
   }
@@ -223,7 +243,9 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
-      {/* Floating language switcher */}
+      <DemoTour />
+
+      {/* Floating language switcher + tour replay */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
         {langOpen && (
           <div className="flex flex-col gap-1.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2 shadow-xl">
@@ -243,6 +265,7 @@ export default function App() {
             ))}
           </div>
         )}
+        <TourReplayButton />
         <button
           onClick={() => setLangOpen((v) => !v)}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:bg-accent/90 active:scale-95"

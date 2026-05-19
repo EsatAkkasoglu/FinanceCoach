@@ -18,13 +18,15 @@ import { auth, googleProvider } from "./firebase";
 const PORT = (import.meta.env.TAURI_FINCOACH_PORT as string | undefined) ?? "8765";
 export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? `http://localhost:${PORT}`;
 
-// ── Auth token (Firebase ID token, fetched dynamically) ───────────────────
+// ── Auth token ────────────────────────────────────────────────────────────
+export const DEMO_TOKEN_KEY = "fincoach-demo-token";
+
 async function getBearerToken(forceRefresh = false): Promise<string | null> {
   try {
-    return (await auth.currentUser?.getIdToken(forceRefresh)) ?? null;
-  } catch {
-    return null;
-  }
+    const firebaseToken = (await auth.currentUser?.getIdToken(forceRefresh)) ?? null;
+    if (firebaseToken) return firebaseToken;
+  } catch { /* fall through to demo token */ }
+  return localStorage.getItem(DEMO_TOKEN_KEY);
 }
 
 /** @deprecated No-op — tokens are managed by Firebase. */
@@ -123,7 +125,19 @@ export async function fetchMe(): Promise<AuthUser | null> {
 }
 
 export async function logout(): Promise<void> {
+  localStorage.removeItem(DEMO_TOKEN_KEY);
   await signOut(auth);
+}
+
+export async function loginDemo(): Promise<AuthUser> {
+  const r = await fetch(`${API_BASE}/auth/demo`, { method: "POST" });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error((d as { detail?: string }).detail || "Demo login failed");
+  }
+  const data = (await r.json()) as { token: string; user: AuthUser };
+  localStorage.setItem(DEMO_TOKEN_KEY, data.token);
+  return data.user;
 }
 
 export interface Holding {

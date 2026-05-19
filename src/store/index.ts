@@ -324,6 +324,82 @@ export const useConversationStore = create<ConversationStore>((set) => ({
   setActive: (id) => set({ activeConversationId: id }),
 }));
 
+// ----- Tour -----
+interface TourState {
+  seen: boolean;
+  active: boolean;
+  step: number;
+  start: () => void;
+  next: () => void;
+  prev: () => void;
+  skip: () => void;
+}
+
+export const TOUR_STEPS = [
+  {
+    title: "FinCoach'a Hoş Geldiniz! 👋",
+    body: "Yapay zeka destekli kişisel finansal koçunuz. 7 uzman ajan gelirinizi, harcamalarınızı ve yatırımlarınızı analiz eder.",
+    path: "/dashboard",
+    navKey: "dashboard",
+  },
+  {
+    title: "Koç — Finansal Yapay Zekanız",
+    body: "Her şeyi sorabilirsiniz: \"Bu ay nereye para harcadım?\", \"50.000 TL hedefime ne zaman ulaşırım?\", \"Portföyümü nasıl çeşitlendireyim?\"",
+    path: "/chat",
+    navKey: "chat",
+  },
+  {
+    title: "Dashboard",
+    body: "Tüm hesaplarınızın bakiyesi, bu ayki gelir/gider dengesi ve günlük AI brifingini tek ekranda görün.",
+    path: "/dashboard",
+    navKey: "dashboard",
+  },
+  {
+    title: "Bütçe",
+    body: "İşlemlerinizi kategorilere göre takip edin, aboneliklerinizi yönetin ve aylık harcama trendlerinizi görün.",
+    path: "/budget",
+    navKey: "budget",
+  },
+  {
+    title: "Hedefler",
+    body: "Acil durum fonu, tatil veya ev gibi tasarruf hedefleri oluşturun. Koç, hedeflerinize göre aylık birikim planı yapar.",
+    path: "/goals",
+    navKey: "goals",
+  },
+  {
+    title: "Portföy",
+    body: "Hisse senetleri ve diğer yatırımlarınızı takip edin. Güncel fiyatlar ve kâr/zarar analizi otomatik hesaplanır.",
+    path: "/portfolio",
+    navKey: "portfolio",
+  },
+  {
+    title: "Keşfet",
+    body: "Piyasa haberleri, korku/açgözlülük endeksi ve hisse analizi. Yatırım kararlarınızı destekleyen gerçek zamanlı veriler.",
+    path: "/discover",
+    navKey: "discover",
+  },
+] as const;
+
+export const useTourStore = create<TourState>()(
+  persist(
+    (set) => ({
+      seen: false,
+      active: false,
+      step: 0,
+      start: () => set({ active: true, step: 0 }),
+      next: () =>
+        set((s) => {
+          const nextStep = s.step + 1;
+          if (nextStep >= TOUR_STEPS.length) return { active: false, seen: true, step: 0 };
+          return { step: nextStep };
+        }),
+      prev: () => set((s) => ({ step: Math.max(0, s.step - 1) })),
+      skip: () => set({ active: false, seen: true, step: 0 }),
+    }),
+    { name: "fincoach-tour" }
+  )
+);
+
 export const useAgentVizStore = create<AgentVizState>((set) => ({
   events: {},
   setEvent: (e) => set((s) => ({ events: { ...s.events, [e.agent]: { ...s.events[e.agent], ...e } } })),

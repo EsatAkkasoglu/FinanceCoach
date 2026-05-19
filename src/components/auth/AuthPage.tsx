@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { login, register, loginWithGoogle } from "@/lib/api";
+import { login, register, loginWithGoogle, loginDemo } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { toast } from "sonner";
+import { Sparkles } from "lucide-react";
 
 type Mode = "login" | "register";
 
@@ -13,6 +14,7 @@ export function AuthPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const setUser = useAuthStore((s) => s.setUser);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -44,6 +46,21 @@ export function AuthPage() {
       toast.error(msg);
     } finally {
       setGoogleLoading(false);
+    }
+  }
+
+  async function handleDemo() {
+    if (demoLoading) return;
+    setDemoLoading(true);
+    try {
+      const user = await loginDemo();
+      setUser(user);
+      toast.success("Demo hesabına giriş yapıldı. İyi keşifler!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Demo girişi başarısız";
+      toast.error(msg);
+    } finally {
+      setDemoLoading(false);
     }
   }
 
@@ -129,6 +146,24 @@ export function AuthPage() {
         >
           {isRegister ? t("alreadyHaveAccount") : t("needAccount")}
         </button>
+
+        <div className="mt-6 border-t border-[hsl(var(--border))] pt-5">
+          <p className="mb-3 text-center text-[11px] text-[hsl(var(--text-muted))]">
+            Jüri veya demo için
+          </p>
+          <button
+            type="button"
+            onClick={handleDemo}
+            disabled={demoLoading || submitting || googleLoading}
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4" />
+            {demoLoading ? "Yükleniyor…" : "Demo ile Giriş Yap"}
+          </button>
+          <p className="mt-2 text-center text-[10px] text-[hsl(var(--text-muted))]">
+            Hazır verilerle dolu örnek hesap açar
+          </p>
+        </div>
       </div>
     </div>
   );
