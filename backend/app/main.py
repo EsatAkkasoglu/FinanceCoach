@@ -76,7 +76,18 @@ async def lifespan(app: FastAPI):
 
     if settings.using_postgres:
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        async with AsyncPostgresSaver.from_conn_string(settings.checkpointer_url) as checkpointer:
+        # Neon (serverless Postgres) aggressively closes idle connections.
+        # min_size=0 avoids holding connections between requests; the low
+        # max_inactive_connection_lifetime forces asyncpg to drop stale
+        # connections rather than reusing them after the server closed them.
+        # This prevents "the connection is closed" errors after Cloud Run
+        # instances sit idle.
+        async with AsyncPostgresSaver.from_conn_string(
+            settings.checkpointer_url,
+            min_size=0,
+            max_size=5,
+            max_inactive_connection_lifetime=60,
+        ) as checkpointer:
             await checkpointer.setup()
             app.state.supervisor = build_supervisor(checkpointer=checkpointer)
             log.info("Supervisor built with AsyncPostgresSaver (Neon); port %d", settings.port)
@@ -567,7 +578,9 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                 _touch_conversation(conv_id, user_message)
             yield _evt("done", {})
 
-    return EventSourceResponse(event_stream())
+    # ping=20: sse_starlette sends a ": ping" comment every 20 s to keep
+    # Cloud Run's load balancer from closing idle SSE connections (~60 s timeout).
+    return EventSourceResponse(event_stream(), ping=20)
 
 
 def _touch_conversation(conv_id: str, first_message: str) -> None:
