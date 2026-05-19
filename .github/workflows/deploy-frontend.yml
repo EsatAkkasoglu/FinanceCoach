@@ -1,0 +1,107 @@
+name: Deploy Frontend → Firebase Hosting
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "vite.config.*"
+      - "tailwind.config.*"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-frontend.yml"
+
+  # Run after backend deploys (so URL is always fresh)
+  workflow_run:
+    workflows: ["Deploy Backend → Cloud Run"]
+    types: [completed]
+    branches: [main]
+
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "Override VITE_API_BASE (leave empty to use secret)"
+        required: false
+
+jobs:
+  deploy:
+    name: Build & Deploy to Firebase Hosting
+    runs-on: ubuntu-latest
+    # If triggered by backend workflow, only run when it succeeded
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Resolve the backend API URL ──────────────────────────────────────
+      # Priority: manual input > VITE_API_BASE secret > auto-fetch from Cloud Run
+      - name: Auth to GCP (for reading Cloud Run URL)
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve API base URL
+        id: api_url
+        run: |
+          if [ -n "${{ github.event.inputs.api_base }}" ]; then
+            echo "url=${{ github.event.inputs.api_base }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ secrets.VITE_API_BASE }}" ]; then
+            echo "url=${{ secrets.VITE_API_BASE }}" >> $GITHUB_OUTPUT
+          else
+            URL=$(gcloud run services describe fincoach-backend \
+              --region europe-west1 \
+              --project fincoach-esat \
+              --format "value(status.url)" 2>/dev/null || echo "")
+            echo "url=${URL}" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Setup Node + pnpm ────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Build React app ──────────────────────────────────────────────────
+      - name: Build
+        env:
+          VITE_API_BASE: ${{ steps.api_url.outputs.url }}
+        run: pnpm build
+
+      # ── Deploy to Firebase Hosting ───────────────────────────────────────
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: fincoach-esat
+
+      - name: Show hosting URL
+        run: echo "Frontend deployed → https://fincoach-esat.web.app"

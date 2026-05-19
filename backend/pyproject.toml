@@ -38,6 +38,7 @@ dependencies = [
     # Auth
     "bcrypt>=4.2.0",
     "pyjwt>=2.9.0",
+    "firebase-admin>=6.5.0",
     "yfinance>=1.3.0",
 ]
 

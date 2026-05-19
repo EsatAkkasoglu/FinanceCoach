@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+fincoach.db*
+chroma_db/
+.venv/
+tests/

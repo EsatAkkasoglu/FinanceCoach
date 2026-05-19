@@ -1,32 +1,34 @@
 /**
  * FastAPI sidecar client.
  *
- * Backend URL: localhost:PORT — Tauri sets `TAURI_FINCOACH_PORT` at spawn.
- * Falls back to 8765 for `pnpm dev` outside Tauri.
+ * In dev, points to localhost:8765. In production (Firebase Hosting + Cloud Run)
+ * set VITE_API_BASE to the Cloud Run service URL or use Firebase rewrites.
  */
 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+} from "firebase/auth";
+import { auth, googleProvider } from "./firebase";
+
 const PORT = (import.meta.env.TAURI_FINCOACH_PORT as string | undefined) ?? "8765";
-export const API_BASE = `http://localhost:${PORT}`;
+export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? `http://localhost:${PORT}`;
 
-// ── Auth token storage ─────────────────────────────────────────────────────
-const TOKEN_KEY = "fincoach-auth-token";
-
-export function getAuthToken(): string | null {
+// ── Auth token (Firebase ID token, fetched dynamically) ───────────────────
+async function getBearerToken(): Promise<string | null> {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    return (await auth.currentUser?.getIdToken()) ?? null;
   } catch {
     return null;
   }
 }
 
-export function setAuthToken(token: string | null) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* ignore */
-  }
-}
+/** @deprecated No-op — tokens are managed by Firebase. */
+export function getAuthToken(): string | null { return null; }
+/** @deprecated No-op — tokens are managed by Firebase. */
+export function setAuthToken(_token: string | null) {}
 
 /** Subscribers notified on 401 so the app can redirect to /login. */
 type UnauthorizedHandler = () => void;
@@ -36,14 +38,13 @@ export function onUnauthorized(handler: UnauthorizedHandler): () => void {
   return () => unauthorizedHandlers.delete(handler);
 }
 
-/** Fetch wrapper that attaches the bearer token and globally handles 401. */
+/** Fetch wrapper that attaches a fresh Firebase ID token and handles 401. */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = getAuthToken();
+  const token = await getBearerToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const resp = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (resp.status === 401) {
-    setAuthToken(null);
     unauthorizedHandlers.forEach((h) => h());
   }
   return resp;
@@ -58,51 +59,40 @@ export interface AuthUser {
   has_onboarded: boolean;
 }
 
-export interface AuthResponse {
-  token: string;
-  user: AuthUser;
+/** Sync the current Firebase user with the backend and return the local profile. */
+async function syncWithBackend(): Promise<AuthUser> {
+  const r = await apiFetch("/auth/firebase", { method: "POST" });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(d.detail || `sync failed ${r.status}`);
+  }
+  return r.json() as Promise<AuthUser>;
 }
 
-export async function register(username: string, password: string): Promise<AuthResponse> {
-  const r = await apiFetch(`/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!r.ok) {
-    const detail = await r.json().catch(() => ({ detail: r.statusText }));
-    throw new Error(detail.detail || `register ${r.status}`);
-  }
-  const data = (await r.json()) as AuthResponse;
-  setAuthToken(data.token);
-  return data;
+export async function login(email: string, password: string): Promise<AuthUser> {
+  await signInWithEmailAndPassword(auth, email, password);
+  return syncWithBackend();
 }
 
-export async function login(username: string, password: string): Promise<AuthResponse> {
-  const r = await apiFetch(`/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!r.ok) {
-    const detail = await r.json().catch(() => ({ detail: r.statusText }));
-    throw new Error(detail.detail || `login ${r.status}`);
-  }
-  const data = (await r.json()) as AuthResponse;
-  setAuthToken(data.token);
-  return data;
+export async function register(email: string, password: string): Promise<AuthUser> {
+  await createUserWithEmailAndPassword(auth, email, password);
+  return syncWithBackend();
+}
+
+export async function loginWithGoogle(): Promise<AuthUser> {
+  await signInWithPopup(auth, googleProvider);
+  return syncWithBackend();
 }
 
 export async function fetchMe(): Promise<AuthUser | null> {
-  const token = getAuthToken();
-  if (!token) return null;
-  const r = await apiFetch(`/auth/me`);
+  if (!auth.currentUser) return null;
+  const r = await apiFetch("/auth/firebase", { method: "POST" });
   if (!r.ok) return null;
   return r.json() as Promise<AuthUser>;
 }
 
-export function logout() {
-  setAuthToken(null);
+export async function logout(): Promise<void> {
+  await signOut(auth);
 }
 
 export interface Holding {

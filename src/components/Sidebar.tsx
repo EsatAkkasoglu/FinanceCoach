@@ -50,8 +50,8 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
   const authUser = useAuthStore((s) => s.user);
   const setAuthUser = useAuthStore((s) => s.setUser);
 
-  function handleLogout() {
-    apiLogout();
+  async function handleLogout() {
+    await apiLogout();
     setAuthUser(null);
   }
   const [creating, setCreating] = useState(false);

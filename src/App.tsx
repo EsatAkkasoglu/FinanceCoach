@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu, Globe } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Dashboard } from "@/components/dashboard/Dashboard";
@@ -141,11 +143,17 @@ export default function App() {
       });
   }, []);
 
-  // Restore session from stored token on first mount.
+  // Restore session via Firebase auth state — fires immediately on mount.
   useEffect(() => {
-    fetchMe()
-      .then((u) => setUser(u))
-      .finally(() => setReady(true));
+    return onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const u = await fetchMe();
+        setUser(u);
+      } else {
+        setUser(null);
+      }
+      setReady(true);
+    });
   }, [setUser, setReady]);
 
   // If any API call returns 401, drop the user back to the login screen.
