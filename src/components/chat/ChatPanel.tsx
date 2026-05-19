@@ -540,6 +540,8 @@ const TOOL_ICONS: Record<string, string> = {
   analyze_ticker_8dim: "🔍",
   get_dividend_metrics: "💰",
   scan_hot_trends: "🔥",
+  get_us_movers: "🇺🇸",
+  get_bist_movers: "🇹🇷",
   scan_rumors: "👂",
   search_fund: "🏦",
   get_fund_quote: "🏦",

@@ -24,6 +24,7 @@ from app.tools.market_tools import (
     get_dividend_metrics,
     get_bist_dividend_leaders,
     get_bist_movers,
+    get_us_movers,
     scan_hot_trends,
     scan_rumors,
     get_company_overview,
@@ -114,8 +115,13 @@ WORKFLOW (decision tree):
 8c. ``get_bist_movers`` — use THIS when the user asks for BIST top gainers,
    top losers, "en çok yükselenler", "en çok düşenler", or today's movers
    on Borsa Istanbul. Returns a ranked list of gainers and losers with % change.
-9. ``scan_hot_trends`` — CoinGecko trending crypto + global market stats.
-   US stock movers are no longer available.
+8d. ``get_us_movers`` — use THIS when the user asks for US/American "top
+   gainers", "top losers", "biggest movers", "what's up today on the US
+   market", "S&P leaders today", etc. Ranks a curated ~100-name US
+   large-cap + ETF universe via yfinance. DO NOT route stock-mover
+   questions to ``scan_hot_trends`` — that tool is crypto-only.
+9. ``scan_hot_trends`` — CRYPTO ONLY (CoinGecko trending coins + global
+   crypto stats). Never call this for US or Turkish stock movers.
 10. ``scan_rumors`` — not available (data source removed). Direct users to
     the news/sentiment agent for current headlines.
 11. ``list_top_funds`` — Turkish fund leaderboard by category rank.
@@ -219,6 +225,7 @@ _TOOLS = [
     get_dividend_metrics,
     get_bist_dividend_leaders,
     get_bist_movers,
+    get_us_movers,
     scan_hot_trends,
     scan_rumors,
     # TEFAS Turkish funds

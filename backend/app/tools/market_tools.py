@@ -954,20 +954,125 @@ def get_bist_movers(top_n: int = 10) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Hot trends — CoinGecko (crypto); US stock movers not available
+# US large-cap movers — yfinance scan of a curated S&P leaders universe
+# ---------------------------------------------------------------------------
+
+
+_US_LARGECAP_UNIVERSE = [
+    # Mega-cap tech
+    "AAPL", "MSFT", "NVDA", "GOOGL", "GOOG", "AMZN", "META", "TSLA", "AVGO", "ORCL",
+    "ADBE", "CRM", "AMD", "INTC", "QCOM", "TXN", "CSCO", "IBM", "NOW", "INTU",
+    # Communication & media
+    "NFLX", "DIS", "CMCSA", "T", "VZ", "TMUS",
+    # Financials
+    "JPM", "BAC", "WFC", "GS", "MS", "C", "BLK", "AXP", "V", "MA", "PYPL",
+    # Healthcare
+    "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "TMO", "ABT", "DHR", "BMY", "AMGN",
+    # Consumer discretionary / staples
+    "WMT", "COST", "HD", "LOW", "MCD", "SBUX", "NKE", "TGT", "PG", "KO", "PEP", "PM",
+    # Energy
+    "XOM", "CVX", "COP", "SLB", "OXY",
+    # Industrials & defense
+    "BA", "CAT", "GE", "HON", "LMT", "RTX", "DE", "UNP", "UPS", "FDX",
+    # Semis & growth darlings
+    "ASML", "TSM", "ARM", "MU", "PLTR", "SMCI", "COIN", "UBER", "ABNB", "SHOP",
+    # ETFs (broad market + sector leaders) — useful as a movers reference too
+    "SPY", "QQQ", "DIA", "IWM", "VOO", "VTI",
+]
+
+
+@tool
+def get_us_movers(top_n: int = 10) -> dict[str, Any]:
+    """Find today's top gainers and losers among US large-cap stocks.
+
+    Scans a curated ~100-name universe of S&P leaders + popular tickers via
+    yfinance and ranks by intraday % change. Use THIS tool when the user
+    asks about US/American "top gainers", "top losers", "biggest movers",
+    "what's up today on the US market", etc. Do NOT use scan_hot_trends
+    for stock movers — that tool only returns crypto trending.
+
+    Args:
+        top_n: How many gainers and losers to return (default 10, max 20).
+    """
+    import concurrent.futures  # noqa: PLC0415
+
+    top_n = min(int(top_n), 20)
+    cache_key = f"us_movers:{top_n}"
+    cached = cache_get(cache_key)
+    if isinstance(cached, dict):
+        return cached
+
+    results: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    def _fetch_one(sym: str) -> dict[str, Any] | None:
+        try:
+            q = yf_svc.quote(sym)
+            price = q.get("price")
+            prev = q.get("previous_close")
+            if price is None or not prev:
+                return None
+            chg = (price - prev) / prev * 100.0
+            return {
+                "ticker": sym,
+                "price": round(float(price), 2),
+                "previous_close": round(float(prev), 2),
+                "change_pct": round(chg, 2),
+                "currency": q.get("currency", "USD"),
+                "source": "yfinance",
+            }
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{sym}: {exc}")
+            return None
+
+    universe = list(dict.fromkeys(_US_LARGECAP_UNIVERSE))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+        futures = {pool.submit(_fetch_one, sym): sym for sym in universe}
+        for fut in concurrent.futures.as_completed(futures):
+            row = fut.result()
+            if row:
+                results.append(row)
+
+    results.sort(key=lambda x: x["change_pct"], reverse=True)
+    gainers = results[:top_n]
+    losers = list(reversed(results))[:top_n]
+
+    out: dict[str, Any] = {
+        "gainers": gainers,
+        "losers": losers,
+        "universe_size": len(universe),
+        "fetched": len(results),
+        "as_of": _now_iso(),
+        "source": "yfinance",
+        "note": (
+            "Ranked from a curated US large-cap universe (S&P leaders + "
+            "popular ETFs), not the full market. yfinance prices may lag "
+            "~15 min during market hours."
+        ),
+    }
+    if errors:
+        out["fetch_errors"] = errors[:5]
+    cache_set(cache_key, out)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Hot trends — CoinGecko (CRYPTO ONLY)
 # ---------------------------------------------------------------------------
 
 
 @tool
 def scan_hot_trends(no_social: bool = False) -> dict[str, Any]:
-    """Find trending tickers across markets.
+    """CRYPTO ONLY — trending coins and global crypto stats from CoinGecko.
 
     Returns:
       • crypto_trending  — top trending coins from CoinGecko
       • crypto_global    — total market cap, BTC dominance, 24h change
 
-    Note: US stock movers (top gainers/losers) are not available — the
-    previous data source (Alpha Vantage) was removed due to rate limits.
+    DO NOT call this for US or Turkish stock movers — it returns ONLY
+    cryptocurrencies. For US stock gainers/losers use ``get_us_movers``;
+    for BIST stock movers use ``get_bist_movers``.
 
     ``no_social`` is retained for backward compatibility but ignored.
     """
