@@ -139,6 +139,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
       const conv = await createConversation();
       addConversation(conv);
       onSelectConversation(conv);
+      onMobileClose?.();
     } finally {
       setCreating(false);
     }
@@ -147,7 +148,19 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
   async function handleNavClick(path: string) {
     if (!path.startsWith("/chat")) await pruneEmptyActive();
     navigate(buildLocalizedPath(currentLanguage, path));
+    onMobileClose?.();
   }
+
+  function handleConvSelect(conv: Conversation) {
+    onSelectConversation(conv);
+    onMobileClose?.();
+  }
+
+  const searchQuery = search.trim().toLowerCase();
+  const matchedConvs =
+    searchQuery.length >= 2
+      ? conversations.filter((c) => (c.title ?? "").toLowerCase().includes(searchQuery)).slice(0, 6)
+      : [];
 
   async function handleDelete(e: React.MouseEvent, conv: Conversation) {
     e.stopPropagation();
@@ -197,7 +210,15 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
           <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-accent shadow-glow">
             <BrandMark size={18} />
           </div>
-          <div className="text-[15px] font-bold leading-none tracking-tight">{t("appName")}</div>
+          <div className="flex-1 text-[15px] font-bold leading-none tracking-tight">{t("appName")}</div>
+          <button
+            type="button"
+            onClick={onMobileClose}
+            className="rounded-md p-1 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))] md:hidden"
+            aria-label="Close menu"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Search row — semantic memory search disguised as a chats search */}
@@ -214,13 +235,37 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
               ⌘K
             </span>
           </div>
-          {searchResults && (
-            <div className="mt-1.5 max-h-44 overflow-y-auto rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-1.5 text-[10px]">
+          {(searchResults || matchedConvs.length > 0) && (
+            <div className="mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-1.5 text-[10px]">
+              {matchedConvs.length > 0 && (
+                <>
+                  <div className="px-1 py-0.5 uppercase tracking-wide text-[9px] text-[hsl(var(--text-muted))]">
+                    {t("recent")}
+                  </div>
+                  {matchedConvs.map((conv) => (
+                    <button
+                      key={conv.id}
+                      onClick={() => handleConvSelect(conv)}
+                      className="flex w-full items-start gap-1.5 rounded px-1 py-1 text-left hover:bg-[hsl(var(--surface-2))]"
+                    >
+                      <MessageSquare className="mt-0.5 h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
+                      <span className="min-w-0 flex-1 truncate text-[hsl(var(--text))]">
+                        {conv.title ?? "Untitled"}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+              {searchResults && searchResults.length > 0 && (
+                <div className="mt-1 px-1 py-0.5 uppercase tracking-wide text-[9px] text-[hsl(var(--text-muted))]">
+                  Memory
+                </div>
+              )}
               {searching && <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("loading")}</div>}
-              {!searching && searchResults.length === 0 && (
+              {!searching && searchResults && searchResults.length === 0 && matchedConvs.length === 0 && (
                 <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("noResults")}</div>
               )}
-              {!searching && searchResults.map((h, i) => (
+              {!searching && searchResults?.map((h, i) => (
                 <div key={i} className="flex items-start gap-1.5 rounded px-1 py-1 hover:bg-[hsl(var(--surface-2))]">
                   <Brain className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
                   <div className="min-w-0 flex-1">
@@ -283,7 +328,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
             {visibleConvs.map((conv) => (
               <div
                 key={conv.id}
-                onClick={() => onSelectConversation(conv)}
+                onClick={() => handleConvSelect(conv)}
                 className={cn(
                   "group flex cursor-pointer items-center gap-2 rounded-[10px] px-3 py-2 text-xs transition",
                   onChatRoute && activeConvId === conv.id

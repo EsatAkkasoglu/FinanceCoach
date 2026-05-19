@@ -491,6 +491,26 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     }
   }
 
+  function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+    const files: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.kind !== "file") continue;
+      const f = item.getAsFile();
+      if (!f) continue;
+      // Clipboard screenshots arrive as nameless "image.png" — give them a useful name.
+      const named = f.name && f.name !== "image.png"
+        ? f
+        : new File([f], `pasted-${Date.now()}.${(f.type.split("/")[1] || "png")}`, { type: f.type });
+      files.push(named);
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      addFiles(files);
+    }
+  }
+
   function clearChat() {
     if (streaming) return;
     if (messages.length === 0) return;
@@ -730,6 +750,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKeyDown}
+                onPaste={onPaste}
                 rows={1}
                 placeholder={t("placeholder")}
                 className="num-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] py-3 pl-11 pr-4 text-sm leading-5 outline-none focus:border-accent"

@@ -216,6 +216,37 @@ export default function App() {
     return <PrefixedDashboardRedirect language={activeLanguage} />;
   }
 
+  const languageSwitcher = (
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+      {langOpen && (
+        <div className="flex flex-col gap-1.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2 shadow-xl">
+          {(["tr", "en"] as const).map((lang) => (
+            <button
+              key={lang}
+              onClick={() => handleLanguageChange(lang)}
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                i18n.language === lang
+                  ? "bg-accent text-white"
+                  : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+              }`}
+            >
+              <span className="text-base leading-none">{lang === "tr" ? "🇹🇷" : "🇬🇧"}</span>
+              {t(lang === "tr" ? "languageTr" : "languageEn")}
+            </button>
+          ))}
+        </div>
+      )}
+      {user && user.has_onboarded && <TourReplayButton />}
+      <button
+        onClick={() => setLangOpen((v) => !v)}
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:bg-accent/90 active:scale-95"
+        title={t("language")}
+      >
+        <Globe className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
   if (!ready) {
     return (
       <div className="flex h-screen items-center justify-center bg-[hsl(var(--bg))] text-sm text-[hsl(var(--text-muted))]">
@@ -224,45 +255,27 @@ export default function App() {
     );
   }
   if (!user) {
-    return <AuthPage />;
+    return (
+      <>
+        <AuthPage />
+        {languageSwitcher}
+      </>
+    );
   }
   if (!user.has_onboarded) {
-    return <OnboardingWizard />;
+    return (
+      <>
+        <OnboardingWizard />
+        {languageSwitcher}
+      </>
+    );
   }
 
   return (
     <div className="flex h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
       <DemoTour />
 
-      {/* Floating language switcher + tour replay */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
-        {langOpen && (
-          <div className="flex flex-col gap-1.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2 shadow-xl">
-            {(["tr", "en"] as const).map((lang) => (
-              <button
-                key={lang}
-                onClick={() => handleLanguageChange(lang)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                  i18n.language === lang
-                    ? "bg-accent text-white"
-                    : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
-                }`}
-              >
-                <span className="text-base leading-none">{lang === "tr" ? "🇹🇷" : "🇬🇧"}</span>
-                {t(lang === "tr" ? "languageTr" : "languageEn")}
-              </button>
-            ))}
-          </div>
-        )}
-        <TourReplayButton />
-        <button
-          onClick={() => setLangOpen((v) => !v)}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:bg-accent/90 active:scale-95"
-          title={t("language")}
-        >
-          <Globe className="h-4 w-4" />
-        </button>
-      </div>
+      {languageSwitcher}
 
       <Sidebar
         healthy={healthy}
