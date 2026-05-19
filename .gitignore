@@ -51,3 +51,8 @@ logs/
 # Build outputs
 *.tsbuildinfo
 .eslintcache
+
+# GCP/Firebase key files (never commit these)
+gcp-sa-key.json
+firebase-sa-key.json
+*.credentials.json
