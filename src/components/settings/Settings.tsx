@@ -167,7 +167,6 @@ function AIPanel() {
   const {
     geminiApiKey, setGeminiApiKey,
     newsApiKey, setNewsApiKey,
-    model, setModel,
     temperature, setTemperature,
   } = useSettingsStore();
 
