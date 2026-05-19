@@ -1,15 +1,34 @@
 {
   "title": "Keşfet",
-  "subtitle": "Günün hareketleri, trend kriptolar ve M&A fısıltıları.",
+  "subtitle": "Günün hareketleri, trend kriptolar ve kişiselleştirilmiş piyasa görünümü.",
+  "personalizedFor": "{{name}} için keşfet",
   "hotToday": "Bugün popüler",
   "topGainers": "En çok kazananlar",
   "topLosers": "En çok kaybedenler",
   "trendingCrypto": "Trend kriptolar",
+  "rankHint": "CoinGecko sıralaması",
   "noTrendData": "Trend verisi yok — CoinGecko erişilemiyor.",
+  "globalMarketCap": "Global Piyasa Değeri",
+  "btcDominance": "BTC Dominansı",
+  "marketChange24h": "24s Değişim",
+  "updatedAt": "Güncellendi: {{time}}",
+  "portfolioSpotlight": "Portföyünüzde Bugün",
+  "noPortfolioOverlap": "Portföyünüzdeki varlıklar bugün kazanan/kaybeden listesinde değil.",
+  "latestNews": "Son Haberler",
   "rumorMill": "Söylenti değirmeni",
   "noRumors": "Şu an taze M&A veya işlem yapılabilir söylenti yok.",
   "impact": "etki {{score}}/10",
   "categories": {
     "ma": "M&A"
+  },
+  "risk": {
+    "conservative": "Temkinli",
+    "balanced": "Dengeli",
+    "aggressive": "Agresif"
+  },
+  "riskTip": {
+    "conservative": "Piyasa volatil görünüyor. Risk profilinize göre sabit getirili ve düşük oynaklıklı varlıkları değerlendirin.",
+    "balanced": "Bugün kazanan ve kaybeden hisseler dengeli dağılmış. Çeşitlendirme fırsatlarına göz atın.",
+    "aggressive": "Yüksek momentum'lu hisseler ve trend kriptolar öne çıkıyor. Risk iştahınıza göre fırsatları değerlendirin."
   }
 }

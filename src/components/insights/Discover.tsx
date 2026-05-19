@@ -164,11 +164,12 @@ function GlobalCryptoBar({
   const isUp = (change ?? 0) >= 0;
 
   const stats = [
-    { label: t("globalMarketCap"), value: fmtB(global.market_cap_usd), icon: Globe },
+    { label: t("globalMarketCap"), value: fmtB(global.market_cap_usd), icon: Globe, color: undefined as string | undefined },
     {
       label: t("btcDominance"),
       value: global.btc_dominance != null ? `${global.btc_dominance.toFixed(1)}%` : "—",
       icon: Flame,
+      color: undefined as string | undefined,
     },
     {
       label: t("marketChange24h"),
@@ -192,7 +193,7 @@ function GlobalCryptoBar({
         ))}
         {asOf && (
           <span className="ml-auto text-[10px] text-[hsl(var(--text-muted))]">
-            {useTranslation("discover").t("updatedAt", { time: asOf })}
+            {t("updatedAt", { time: asOf })}
           </span>
         )}
       </div>

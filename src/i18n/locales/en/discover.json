@@ -1,15 +1,34 @@
 {
   "title": "Discover",
-  "subtitle": "Today's movers, trending crypto, and M&A whispers.",
+  "subtitle": "Today's movers, trending crypto, and your personalized market view.",
+  "personalizedFor": "Discover for {{name}}",
   "hotToday": "Hot today",
   "topGainers": "Top gainers",
   "topLosers": "Top losers",
   "trendingCrypto": "Trending crypto",
+  "rankHint": "CoinGecko ranking",
   "noTrendData": "No trend data — CoinGecko unavailable.",
+  "globalMarketCap": "Global Market Cap",
+  "btcDominance": "BTC Dominance",
+  "marketChange24h": "24h Change",
+  "updatedAt": "Updated: {{time}}",
+  "portfolioSpotlight": "Your Portfolio Today",
+  "noPortfolioOverlap": "None of your holdings appear in today's movers list.",
+  "latestNews": "Latest News",
   "rumorMill": "Rumor mill",
   "noRumors": "No fresh M&A or actionable rumors right now.",
   "impact": "impact {{score}}/10",
   "categories": {
     "ma": "M&A"
+  },
+  "risk": {
+    "conservative": "Conservative",
+    "balanced": "Balanced",
+    "aggressive": "Aggressive"
+  },
+  "riskTip": {
+    "conservative": "Markets look volatile. Consider low-volatility and fixed-income assets that match your risk profile.",
+    "balanced": "Today's winners and losers are fairly distributed. Look for diversification opportunities.",
+    "aggressive": "High-momentum stocks and trending crypto are standing out. Evaluate opportunities that match your risk appetite."
   }
 }
