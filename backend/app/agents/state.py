@@ -46,6 +46,16 @@ def append_list(left: list | None, right: list | None) -> list:
     return [*left, *right]
 
 
+def last_write_wins(left: Any, right: Any) -> Any:
+    """Reducer that takes the latest non-None value.
+
+    Used for scalar state fields that multiple parallel branches may write to
+    (e.g. ``error``). The last branch to execute wins; None is treated as
+    'no update' so a successful branch doesn't clear a prior error.
+    """
+    return right if right is not None else left
+
+
 class AgentState(TypedDict, total=False):
     """State carried through the supervisor graph.
 
@@ -67,14 +77,14 @@ class AgentState(TypedDict, total=False):
     """
     messages: Annotated[list, add_messages]
     user_id: int
-    risk_profile: str
-    plan: dict[str, Any]
-    memory_hints: list[dict[str, Any]]
+    risk_profile: Annotated[str, last_write_wins]
+    plan: Annotated[dict[str, Any], last_write_wins]
+    memory_hints: Annotated[list[dict[str, Any]], last_write_wins]
     findings: Annotated[dict[str, Any], merge_findings]
-    advisor_brief: dict[str, Any] | None
-    next_action: str
+    advisor_brief: Annotated[dict[str, Any] | None, last_write_wins]
+    next_action: Annotated[str, last_write_wins]
     agents_consulted: Annotated[list[str], append_list]
-    scratchpad: dict[str, Any]
+    scratchpad: Annotated[dict[str, Any], last_write_wins]
     citations: Annotated[list[dict[str, Any]], append_list]
-    suggestions: list[str]
-    error: dict[str, Any] | None
+    suggestions: Annotated[list[str], last_write_wins]
+    error: Annotated[dict[str, Any] | None, last_write_wins]
