@@ -376,6 +376,30 @@ def ohlcv(coin_id: str, vs_currency: str = "usd", days: int = 7) -> list[dict[st
     return rows
 
 
+def coin_history(symbol: str, days: int = 365, vs_currency: str = "usd") -> list[dict[str, Any]]:
+    """Daily close history for a coin via CoinGecko ``market_chart``.
+
+    Returns newest-first list of ``{date, close}`` dicts. ``days`` >=90 yields
+    daily granularity; values up to 365 are supported on the free tier.
+    """
+    coin_id = _symbol_to_id(symbol)
+    data = _request(
+        f"coins/{coin_id}/market_chart",
+        {"vs_currency": vs_currency, "days": str(days), "interval": "daily"},
+    )
+    from datetime import datetime, timezone  # noqa: PLC0415
+    prices: list[list] = data.get("prices") or []
+    rows: list[dict[str, Any]] = []
+    for ts_ms, price in prices:
+        try:
+            dt = datetime.fromtimestamp(int(ts_ms) / 1000, tz=timezone.utc)
+            rows.append({"date": dt.strftime("%Y-%m-%d"), "close": float(price)})
+        except (TypeError, ValueError):
+            continue
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return rows
+
+
 def search_coins(query: str) -> list[dict[str, Any]]:
     """Search CoinGecko for coins matching ``query``. Returns up to 10 hits."""
     data = _request("search", {"query": query})

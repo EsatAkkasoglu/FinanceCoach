@@ -6,6 +6,7 @@
  * tab (trending / rumored ticker rows).
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { X, Loader2, ExternalLink } from "lucide-react";
 import {
   analyzeEightDim, getTechnicals, getDividend, searchNews,
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function TickerDrawer({ ticker, onClose }: Props) {
+  const { t } = useTranslation("discover");
   const [eight, setEight] = useState<EightDimResult | null>(null);
   const [tech, setTech] = useState<TechnicalsResult | null>(null);
   const [dividend, setDividend] = useState<DividendResult | null>(null);
@@ -51,10 +53,10 @@ export function TickerDrawer({ ticker, onClose }: Props) {
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-5 shadow-2xl animate-in slide-in-from-right">
         <header className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))]">Ticker analysis</p>
+            <p className="text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))]">{t("drawer.tickerAnalysis")}</p>
             <h2 className="font-mono text-3xl font-semibold text-emerald-300">{ticker}</h2>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]" aria-label="Close">
+          <button onClick={onClose} className="rounded-lg p-2 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]" aria-label={t("drawer.close")}>
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -62,7 +64,7 @@ export function TickerDrawer({ ticker, onClose }: Props) {
         {loading && (
           <div className="flex h-32 items-center justify-center text-[hsl(var(--text-muted))]">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="ml-2 text-sm">Analyzing {ticker}…</span>
+            <span className="ml-2 text-sm">{t("drawer.analyzing", { ticker })}</span>
           </div>
         )}
 
@@ -76,11 +78,12 @@ export function TickerDrawer({ ticker, onClose }: Props) {
 }
 
 function EightDimSection({ result }: { result: EightDimResult }) {
+  const { t } = useTranslation("discover");
   if (result.error || result.degraded) {
     return (
       <section className="card mb-3">
-        <h3 className="text-sm font-semibold">8-dimension analysis</h3>
-        <p className="mt-2 text-xs text-warning">{result.error ?? "Analysis degraded — data unavailable."}</p>
+        <h3 className="text-sm font-semibold">{t("drawer.eightDimTitle")}</h3>
+        <p className="mt-2 text-xs text-warning">{result.error ?? t("drawer.eightDimDegraded")}</p>
       </section>
     );
   }
@@ -96,11 +99,11 @@ function EightDimSection({ result }: { result: EightDimResult }) {
   return (
     <section className="card mb-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">8-dimension analysis</h3>
+        <h3 className="text-sm font-semibold">{t("drawer.eightDimTitle")}</h3>
         <div className="text-right">
           <p className={cn("text-lg font-semibold", recTone)}>{rec}</p>
           {result.final_score != null && (
-            <p className="text-[10px] text-[hsl(var(--text-muted))]">score {(result.final_score * 100).toFixed(0)}/100</p>
+            <p className="text-[10px] text-[hsl(var(--text-muted))]">{t("drawer.score", { value: (result.final_score * 100).toFixed(0) })}</p>
           )}
         </div>
       </div>
@@ -108,7 +111,7 @@ function EightDimSection({ result }: { result: EightDimResult }) {
         {dims.map((d) => (
           <li key={d.key} className="flex items-center gap-2 text-xs">
             <span className="w-32 uppercase text-[10px] tracking-wide text-[hsl(var(--text-muted))]">
-              {d.key.replace(/_/g, " ")}
+              {t(`drawer.dimensions.${d.key}`, { defaultValue: d.key.replace(/_/g, " ") })}
             </span>
             <div className="flex-1 h-1.5 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
               <div
@@ -132,42 +135,47 @@ function EightDimSection({ result }: { result: EightDimResult }) {
 }
 
 function TechnicalsSection({ result }: { result: TechnicalsResult }) {
+  const { t } = useTranslation("discover");
   if (result.error || (!result.sma && !result.rsi)) {
     return (
       <section className="card mb-3">
-        <h3 className="text-sm font-semibold">Technicals</h3>
-        <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">{result.error ?? "No technical data."}</p>
+        <h3 className="text-sm font-semibold">{t("drawer.technicalsTitle")}</h3>
+        <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">{result.error ?? t("drawer.noTechnicals")}</p>
       </section>
     );
   }
   return (
     <section className="card mb-3">
-      <h3 className="text-sm font-semibold">Technicals</h3>
+      <h3 className="text-sm font-semibold">{t("drawer.technicalsTitle")}</h3>
       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
         {result.rsi && (
           <div>
-            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">RSI ({result.rsi.period}d)</p>
+            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.rsiPeriod", { period: result.rsi.period })}</p>
             <p className="num text-xl font-semibold">{result.rsi.value?.toFixed(1) ?? "—"}</p>
             <p className={cn(
-              "text-[10px] capitalize",
+              "text-[10px]",
               result.rsi.signal === "overbought" && "text-warning",
               result.rsi.signal === "oversold" && "text-gain",
               result.rsi.signal === "neutral" && "text-[hsl(var(--text-muted))]",
             )}>
-              {result.rsi.signal}
+              {result.rsi.signal && result.rsi.signal !== "n/a"
+                ? t(`drawer.rsiSignal.${result.rsi.signal}`, { defaultValue: result.rsi.signal })
+                : "—"}
             </p>
           </div>
         )}
         {result.sma && (
           <div>
-            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">SMA ({result.sma.period}d)</p>
+            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.smaPeriod", { period: result.sma.period })}</p>
             <p className="num text-xl font-semibold">{result.sma.value?.toFixed(2) ?? "—"}</p>
             <p className={cn(
               "text-[10px]",
               result.sma.signal === "above_sma" && "text-gain",
               result.sma.signal === "below_sma" && "text-loss",
             )}>
-              price {result.sma.signal?.replace("_", " ") ?? "—"}
+              {result.sma.signal && result.sma.signal !== "n/a"
+                ? t(`drawer.smaSignal.${result.sma.signal}`, { defaultValue: result.sma.signal })
+                : "—"}
             </p>
           </div>
         )}
@@ -177,34 +185,37 @@ function TechnicalsSection({ result }: { result: TechnicalsResult }) {
 }
 
 function DividendSection({ result }: { result: DividendResult }) {
+  const { t } = useTranslation("discover");
   if (result.error || !result.yield) {
     return null; // Many tickers don't pay dividends — silent skip.
   }
   const yld = (result.yield ?? 0) * (result.yield && result.yield < 1 ? 100 : 1);
   return (
     <section className="card mb-3">
-      <h3 className="text-sm font-semibold">Dividend</h3>
+      <h3 className="text-sm font-semibold">{t("drawer.dividendTitle")}</h3>
       <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
         <div>
-          <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">Yield</p>
+          <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.dividendYield")}</p>
           <p className="num text-xl font-semibold text-gain">{yld.toFixed(2)}%</p>
         </div>
         {result.safety_score != null && (
           <div>
-            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">Safety</p>
+            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.dividendSafety")}</p>
             <p className="num text-xl font-semibold">{Math.round(result.safety_score)}/100</p>
           </div>
         )}
         {result.income_rating && (
           <div>
-            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">Rating</p>
-            <p className="text-xl font-semibold capitalize">{result.income_rating}</p>
+            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.dividendRating")}</p>
+            <p className="text-xl font-semibold">
+              {t(`drawer.dividendRatingValue.${result.income_rating}`, { defaultValue: result.income_rating })}
+            </p>
           </div>
         )}
       </div>
       {result.consecutive_increases != null && result.consecutive_increases > 0 && (
         <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
-          {result.consecutive_increases} consecutive years of dividend increases
+          {t("drawer.dividendStreak", { years: result.consecutive_increases })}
         </p>
       )}
     </section>
@@ -212,9 +223,10 @@ function DividendSection({ result }: { result: DividendResult }) {
 }
 
 function NewsSection({ articles }: { articles: NewsArticle[] }) {
+  const { t } = useTranslation("discover");
   return (
     <section className="card">
-      <h3 className="text-sm font-semibold">Latest news</h3>
+      <h3 className="text-sm font-semibold">{t("drawer.newsTitle")}</h3>
       <ul className="mt-2 divide-y divide-[hsl(var(--border))]">
         {articles.map((a, i) => (
           <li key={i} className="py-2">

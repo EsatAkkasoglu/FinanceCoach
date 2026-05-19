@@ -1,5 +1,9 @@
 # FinCoach
 
+<p align="center">
+        <a href="https://fincoach-esat.web.app/"><strong>Try the live demo — https://fincoach-esat.web.app/</strong></a>
+</p>
+
 **FinCoach** is an AI-powered personal finance coach built as a Windows desktop application. It helps users understand their money, track their budget, manage financial goals, analyze portfolios, compare Turkish investment funds, and interact with a multi-agent finance assistant.
 
 FinCoach is designed not only to display financial data, but also to interpret it through the user’s goals, risk profile, income structure, portfolio composition, and financial behavior.

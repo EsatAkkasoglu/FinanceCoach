@@ -30,5 +30,49 @@
     "conservative": "Piyasa volatil görünüyor. Risk profilinize göre sabit getirili ve düşük oynaklıklı varlıkları değerlendirin.",
     "balanced": "Bugün kazanan ve kaybeden hisseler dengeli dağılmış. Çeşitlendirme fırsatlarına göz atın.",
     "aggressive": "Yüksek momentum'lu hisseler ve trend kriptolar öne çıkıyor. Risk iştahınıza göre fırsatları değerlendirin."
+  },
+  "drawer": {
+    "tickerAnalysis": "Hisse analizi",
+    "close": "Kapat",
+    "analyzing": "{{ticker}} analiz ediliyor…",
+    "eightDimTitle": "8 boyutlu analiz",
+    "eightDimDegraded": "Analiz sınırlı — yeterli veri yok.",
+    "score": "puan {{value}}/100",
+    "technicalsTitle": "Teknik göstergeler",
+    "noTechnicals": "Teknik veri yok.",
+    "rsiPeriod": "RSI ({{period}}g)",
+    "smaPeriod": "SMA ({{period}}g)",
+    "rsiSignal": {
+      "overbought": "Aşırı alım",
+      "oversold": "Aşırı satım",
+      "neutral": "Nötr"
+    },
+    "smaSignal": {
+      "above_sma": "Fiyat SMA üstünde",
+      "below_sma": "Fiyat SMA altında",
+      "na": "—"
+    },
+    "dividendTitle": "Temettü",
+    "dividendYield": "Verim",
+    "dividendSafety": "Güvenlik",
+    "dividendRating": "Derece",
+    "dividendStreak": "{{years}} yıl üst üste temettü artışı",
+    "dividendRatingValue": {
+      "excellent": "Mükemmel",
+      "good": "İyi",
+      "moderate": "Orta",
+      "poor": "Zayıf"
+    },
+    "newsTitle": "Son haberler",
+    "dimensions": {
+      "earnings_surprise": "Kâr sürprizi",
+      "fundamentals": "Temeller",
+      "analyst_sentiment": "Analist görüşü",
+      "historical": "Geçmiş performans",
+      "market_context": "Piyasa ortamı",
+      "sector": "Sektör",
+      "momentum": "Momentum",
+      "sentiment": "Haber duyarlılığı"
+    }
   }
 }

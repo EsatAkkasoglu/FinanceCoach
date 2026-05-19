@@ -30,5 +30,49 @@
     "conservative": "Markets look volatile. Consider low-volatility and fixed-income assets that match your risk profile.",
     "balanced": "Today's winners and losers are fairly distributed. Look for diversification opportunities.",
     "aggressive": "High-momentum stocks and trending crypto are standing out. Evaluate opportunities that match your risk appetite."
+  },
+  "drawer": {
+    "tickerAnalysis": "Ticker analysis",
+    "close": "Close",
+    "analyzing": "Analyzing {{ticker}}…",
+    "eightDimTitle": "8-dimension analysis",
+    "eightDimDegraded": "Analysis degraded — data unavailable.",
+    "score": "score {{value}}/100",
+    "technicalsTitle": "Technicals",
+    "noTechnicals": "No technical data.",
+    "rsiPeriod": "RSI ({{period}}d)",
+    "smaPeriod": "SMA ({{period}}d)",
+    "rsiSignal": {
+      "overbought": "Overbought",
+      "oversold": "Oversold",
+      "neutral": "Neutral"
+    },
+    "smaSignal": {
+      "above_sma": "Price above SMA",
+      "below_sma": "Price below SMA",
+      "na": "—"
+    },
+    "dividendTitle": "Dividend",
+    "dividendYield": "Yield",
+    "dividendSafety": "Safety",
+    "dividendRating": "Rating",
+    "dividendStreak": "{{years}} consecutive years of dividend increases",
+    "dividendRatingValue": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "moderate": "Moderate",
+      "poor": "Poor"
+    },
+    "newsTitle": "Latest news",
+    "dimensions": {
+      "earnings_surprise": "Earnings surprise",
+      "fundamentals": "Fundamentals",
+      "analyst_sentiment": "Analyst sentiment",
+      "historical": "Historical",
+      "market_context": "Market context",
+      "sector": "Sector",
+      "momentum": "Momentum",
+      "sentiment": "News sentiment"
+    }
   }
 }

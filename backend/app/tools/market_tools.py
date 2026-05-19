@@ -294,6 +294,51 @@ def get_company_overview(ticker: str) -> dict[str, Any]:
         return {"ticker": upper, "error": str(exc)}
 
 
+def _crypto_technicals_from_cg(
+    base: str, *, sma_period: int, rsi_period: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Compute SMA/RSI series from CoinGecko daily closes (fallback for crypto)."""
+    days_needed = max(sma_period, rsi_period + 1) + 50
+    days = min(max(days_needed, 90), 365)
+    bars = cg.coin_history(base, days=days)  # newest-first {date, close}
+    if len(bars) < max(sma_period, rsi_period + 1):
+        return [], []
+
+    closes_newest_first = [b["close"] for b in bars]
+    dates_newest_first = [b["date"] for b in bars]
+
+    sma_rows: list[dict[str, Any]] = []
+    for i in range(len(closes_newest_first) - sma_period + 1):
+        window = closes_newest_first[i: i + sma_period]
+        sma_rows.append({
+            "date": dates_newest_first[i],
+            "sma": round(sum(window) / sma_period, 4),
+        })
+
+    closes_oldest_first = list(reversed(closes_newest_first))
+    dates_oldest_first = list(reversed(dates_newest_first))
+    rsi_rows: list[dict[str, Any]] = []
+    if len(closes_oldest_first) > rsi_period:
+        deltas = [
+            closes_oldest_first[i + 1] - closes_oldest_first[i]
+            for i in range(len(closes_oldest_first) - 1)
+        ]
+        gains = [max(d, 0.0) for d in deltas]
+        losses = [abs(min(d, 0.0)) for d in deltas]
+        avg_gain = sum(gains[:rsi_period]) / rsi_period
+        avg_loss = sum(losses[:rsi_period]) / rsi_period
+        rsi_pairs: list[tuple[str, float]] = []
+        for i in range(rsi_period, len(deltas)):
+            avg_gain = (avg_gain * (rsi_period - 1) + gains[i]) / rsi_period
+            avg_loss = (avg_loss * (rsi_period - 1) + losses[i]) / rsi_period
+            rs = avg_gain / avg_loss if avg_loss else float("inf")
+            rsi_val = 100.0 - (100.0 / (1 + rs))
+            rsi_pairs.append((dates_oldest_first[i + 1], round(rsi_val, 2)))
+        rsi_rows = [{"date": d, "rsi": v} for d, v in reversed(rsi_pairs)]
+
+    return sma_rows, rsi_rows
+
+
 @tool
 def get_technical_indicators(
     ticker: str,
@@ -317,7 +362,16 @@ def get_technical_indicators(
         sma_rows = yf_svc.sma(upper, period=sma_period)
         rsi_rows = yf_svc.rsi(upper, period=rsi_period)
     except YFinanceError as exc:
-        return {"ticker": upper, "error": str(exc)}
+        cls = classify_ticker(upper)
+        if cls.get("kind") == "crypto":
+            try:
+                sma_rows, rsi_rows = _crypto_technicals_from_cg(
+                    cls["base"], sma_period=sma_period, rsi_period=rsi_period
+                )
+            except CoinGeckoError as cg_exc:
+                return {"ticker": upper, "error": f"{exc}; coingecko fallback failed: {cg_exc}"}
+        else:
+            return {"ticker": upper, "error": str(exc)}
 
     sma_latest = sma_rows[0]["sma"] if sma_rows else None
     rsi_latest = rsi_rows[0]["rsi"] if rsi_rows else None
@@ -1104,22 +1158,100 @@ def scan_hot_trends(no_social: bool = False) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+_RUMOR_QUERIES = (
+    "merger acquisition deal",
+    "buyout takeover bid",
+    "rumor talks acquire",
+)
+_RUMOR_KEYWORDS = (
+    "merger", "acquisition", "acquire", "acquires", "acquired",
+    "buyout", "takeover", "bid", "deal", "rumor", "rumored",
+    "in talks", "to buy", "to acquire", "stake",
+)
+_BULL_KEYWORDS = ("surge", "soar", "rally", "jump", "rise", "boost", "approval", "wins")
+_BEAR_KEYWORDS = ("fall", "drop", "plunge", "decline", "loss", "miss", "cut", "downgrade", "lawsuit")
+
+
+def _extract_ticker(title: str) -> str | None:
+    """Best-effort ticker extraction from a news title."""
+    import re  # noqa: PLC0415
+    m = re.search(r"\(([A-Z]{1,5}(?:\.[A-Z]{1,3})?)\)", title)
+    if m:
+        return m.group(1)
+    m = re.search(r"\b(NYSE|NASDAQ):\s*([A-Z]{1,5})", title)
+    if m:
+        return m.group(2)
+    return None
+
+
+def _classify_rumor(title: str) -> tuple[str, str | None]:
+    """Return (category, sentiment_label) for a news title."""
+    lower = title.lower()
+    category = "m&a" if any(k in lower for k in _RUMOR_KEYWORDS) else "news"
+    bull = sum(1 for k in _BULL_KEYWORDS if k in lower)
+    bear = sum(1 for k in _BEAR_KEYWORDS if k in lower)
+    if bull > bear and bull > 0:
+        sentiment = "Bullish" if bull >= 2 else "Somewhat-Bullish"
+    elif bear > bull and bear > 0:
+        sentiment = "Bearish" if bear >= 2 else "Somewhat-Bearish"
+    else:
+        sentiment = None
+    return category, sentiment
+
+
 @tool
 def scan_rumors() -> dict[str, Any]:
-    """Recent M&A chatter and analyst-actionable headlines.
+    """Recent M&A chatter and deal-flow headlines.
 
-    Note: this feature was previously backed by Alpha Vantage NEWS_SENTIMENT
-    which has been removed due to rate limits. Use the news_sentiment agent
-    for current news analysis instead.
+    Aggregates Google News RSS results across several M&A-themed queries,
+    filters for deal/merger/acquisition keywords, and returns the items in
+    a UI-friendly shape (category, sentiment_label, ticker if extractable).
     """
-    return {
-        "rumors": [],
+    cache_key = "rumors"
+    cached = cache_get(cache_key)
+    if isinstance(cached, dict):
+        return cached
+
+    from app.tools.news_tools import _fetch_google_news_rss  # noqa: PLC0415
+
+    seen_urls: set[str] = set()
+    rumors: list[dict[str, Any]] = []
+    for q in _RUMOR_QUERIES:
+        try:
+            articles = _fetch_google_news_rss(q, turkish=False, limit=8)
+        except Exception as exc:  # noqa: BLE001
+            log.info("scan_rumors: RSS query %r failed: %s", q, exc)
+            continue
+        for art in articles:
+            url = art.get("url")
+            title = (art.get("title") or "").strip()
+            if not url or not title or url in seen_urls:
+                continue
+            lower = title.lower()
+            if not any(k in lower for k in _RUMOR_KEYWORDS):
+                continue
+            seen_urls.add(url)
+            category, sentiment = _classify_rumor(title)
+            rumors.append({
+                "title": title,
+                "source": art.get("source") or "Google News",
+                "url": url,
+                "published_at": art.get("published_at"),
+                "ticker": _extract_ticker(title),
+                "category": category,
+                "sentiment_label": sentiment,
+            })
+
+    rumors = rumors[:12]
+    out = {
+        "rumors": rumors,
         "as_of": _now_iso(),
-        "note": (
-            "M&A rumor scanning is unavailable. "
-            "Ask the news/sentiment agent for current headlines instead."
-        ),
+        "source": "google_news_rss",
     }
+    if not rumors:
+        out["note"] = "No fresh M&A / deal headlines found."
+    cache_set(cache_key, out)
+    return out
 
 
 # ---------------------------------------------------------------------------
