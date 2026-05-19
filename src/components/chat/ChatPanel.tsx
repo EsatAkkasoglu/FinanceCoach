@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw } from "lucide-react";
+import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Paperclip, X, FileText, FileSpreadsheet, FileCode, Image as ImageIcon, File as FileIcon, AlertCircle, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
-import { streamChat, sendFeedback, autotitleConversation, type Citation as ApiCitation } from "@/lib/api";
+import { streamChat, sendFeedback, autotitleConversation, parseDocument, type Citation as ApiCitation } from "@/lib/api";
 import { parseToolResult } from "@/lib/parseToolResult";
 import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity } from "@/store";
 import { cn } from "@/lib/cn";
@@ -23,6 +23,64 @@ function pickRandom<T>(arr: T[], n: number): T[] {
 interface ChatPanelProps {
   convId: string;
   threadId: string;
+}
+
+// ── Attachments ──────────────────────────────────────────────────────────────
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILES = 6;
+const MAX_TEXT_CHARS = 8000;
+const TEXT_EXT_RE = /\.(txt|md|markdown|csv|tsv|json|ya?ml|log|html?|xml|js|jsx|ts|tsx|py|rb|go|rs|java|kt|swift|c|cpp|h|hpp|cs|css|scss|sass|sh|bash|zsh|sql|env|toml|ini|conf)$/i;
+const PDF_RE = /\.pdf$/i;
+const SPREAD_RE = /\.(xlsx?|xlsm|ods)$/i;
+
+type AttachmentKind = "text" | "image" | "pdf" | "spreadsheet" | "other";
+type AttachmentStatus = "uploading" | "ready" | "error";
+
+interface Attachment {
+  id: string;
+  name: string;
+  size: number;
+  mime: string;
+  kind: AttachmentKind;
+  status: AttachmentStatus;
+  progress: number;
+  summary?: string;
+  excerpt?: string;
+  error?: string;
+}
+
+function detectKind(file: File): AttachmentKind {
+  if (file.type.startsWith("image/")) return "image";
+  if (PDF_RE.test(file.name) || file.type === "application/pdf") return "pdf";
+  if (SPREAD_RE.test(file.name)) return "spreadsheet";
+  if (TEXT_EXT_RE.test(file.name) || file.type.startsWith("text/") || file.type === "application/json") return "text";
+  return "other";
+}
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function KindIcon({ kind, className }: { kind: AttachmentKind; className?: string }) {
+  const cls = cn("h-3.5 w-3.5", className);
+  switch (kind) {
+    case "image": return <ImageIcon className={cls} />;
+    case "pdf": return <FileText className={cls} />;
+    case "spreadsheet": return <FileSpreadsheet className={cls} />;
+    case "text": return <FileCode className={cls} />;
+    default: return <FileIcon className={cls} />;
+  }
+}
+
+function readAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("read error"));
+    reader.readAsText(file);
+  });
 }
 
 export function ChatPanel({ convId, threadId }: ChatPanelProps) {
@@ -46,6 +104,10 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     const raw = t("suggestionPool", { returnObjects: true });
     return pickRandom(Array.isArray(raw) ? (raw as string[]) : [], 4);
   });
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const toolActivitiesRef = useRef<ToolActivity[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const [stoppedPrompt, setStoppedPrompt] = useState<string | null>(null);
@@ -80,17 +142,159 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     abortRef.current = null;
   }
 
+  function updateAttachment(id: string, patch: Partial<Attachment>) {
+    setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  async function processAttachment(att: Attachment, file: File) {
+    // Indeterminate progress ramp until analysis resolves.
+    let pct = 8;
+    const tick = window.setInterval(() => {
+      pct = Math.min(90, pct + Math.max(2, Math.round((90 - pct) * 0.12)));
+      updateAttachment(att.id, { progress: pct });
+    }, 220);
+    try {
+      let summary: string | undefined;
+      let excerpt: string | undefined;
+      if (att.kind === "text") {
+        const raw = await readAsText(file);
+        excerpt = raw.length > MAX_TEXT_CHARS ? raw.slice(0, MAX_TEXT_CHARS) + "\n…(truncated)" : raw;
+        const lines = raw.split(/\r?\n/).length;
+        summary = t("attach.summaryText", { lines, chars: raw.length });
+      } else if (att.kind === "pdf" || att.kind === "image") {
+        try {
+          const res = await parseDocument(file);
+          const parts: string[] = [];
+          if (res.summary) parts.push(res.summary);
+          if (res.suggested_holdings?.length) {
+            parts.push(t("attach.holdingsFound", { count: res.suggested_holdings.length }));
+          }
+          if (res.suggested_transactions?.length) {
+            parts.push(t("attach.txFound", { count: res.suggested_transactions.length }));
+          }
+          summary = parts.join(" · ") || t("attach.summaryGeneric", { kind: att.kind });
+        } catch {
+          summary = t("attach.summaryGeneric", { kind: att.kind });
+        }
+      } else {
+        summary = t("attach.summaryBinary");
+      }
+      window.clearInterval(tick);
+      updateAttachment(att.id, { status: "ready", progress: 100, summary, excerpt });
+    } catch (err) {
+      window.clearInterval(tick);
+      updateAttachment(att.id, {
+        status: "error",
+        progress: 0,
+        error: (err as Error).message || String(err),
+      });
+    }
+  }
+
+  function addFiles(list: FileList | File[]) {
+    const files = Array.from(list);
+    if (files.length === 0) return;
+    const currentCount = attachments.length;
+    const room = MAX_FILES - currentCount;
+    if (room <= 0) {
+      toast.error(t("attach.maxReached", { max: MAX_FILES }));
+      return;
+    }
+    const accepted: { att: Attachment; file: File }[] = [];
+    for (const file of files.slice(0, room)) {
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error(t("attach.tooLarge", { name: file.name, max: humanSize(MAX_FILE_SIZE) }));
+        continue;
+      }
+      const att: Attachment = {
+        id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: file.name,
+        size: file.size,
+        mime: file.type || "application/octet-stream",
+        kind: detectKind(file),
+        status: "uploading",
+        progress: 4,
+      };
+      accepted.push({ att, file });
+    }
+    if (accepted.length === 0) return;
+    setAttachments((prev) => [...prev, ...accepted.map((a) => a.att)]);
+    accepted.forEach(({ att, file }) => void processAttachment(att, file));
+    if (files.length > room) {
+      toast.warning(t("attach.someSkipped", { skipped: files.length - room }));
+    }
+  }
+
+  function retryAttachment(id: string) {
+    // Re-open picker for that slot — simpler than holding the File reference.
+    removeAttachment(id);
+    fileInputRef.current?.click();
+  }
+
+  function onFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files) addFiles(e.target.files);
+    e.target.value = ""; // allow re-picking the same file
+  }
+
+  function onDragEnter(e: React.DragEvent) {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+    dragCounter.current += 1;
+    setIsDragging(true);
+  }
+  function onDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+  }
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setIsDragging(false);
+  }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
+  }
+
+  function buildAttachmentContext(): string {
+    const ready = attachments.filter((a) => a.status === "ready");
+    if (ready.length === 0) return "";
+    const blocks = ready.map((a) => {
+      const header = `**${a.name}** _(${humanSize(a.size)}${a.summary ? ` · ${a.summary}` : ""})_`;
+      if (a.excerpt) {
+        const fence = a.name.match(/\.(json|ya?ml|toml|ini)$/i) ? a.name.split(".").pop()!.toLowerCase() : "";
+        return `${header}\n\`\`\`${fence}\n${a.excerpt}\n\`\`\``;
+      }
+      return header;
+    });
+    return `\n\n📎 **${t("attach.contextHeader", { count: ready.length })}**\n${blocks.join("\n\n")}`;
+  }
+
   async function send(text: string) {
-    if (!text.trim() || streaming) return;
+    const hasReadyAttachments = attachments.some((a) => a.status === "ready");
+    if ((!text.trim() && !hasReadyAttachments) || streaming) return;
+    if (attachments.some((a) => a.status === "uploading")) {
+      toast.warning(t("attach.waitForUpload"));
+      return;
+    }
+    const attachmentContext = buildAttachmentContext();
+    const finalText = (text.trim() || t("attach.implicitPrompt")) + attachmentContext;
     const userId = `u-${Date.now()}`;
     const asstId = `a-${Date.now()}`;
     lastAsstId.current = asstId;
-    appendMessage(convId, { id: userId, role: "user", content: text, createdAt: Date.now() });
+    appendMessage(convId, { id: userId, role: "user", content: finalText, createdAt: Date.now() });
     appendMessage(convId, { id: asstId, role: "assistant", content: "", createdAt: Date.now() });
     setInput("");
+    setAttachments([]);
     setStreaming(true);
     setStoppedPrompt(null);
-    inFlightPromptRef.current = text;
+    inFlightPromptRef.current = finalText;
     clearAgentEvents();
     setActiveAgent(null);
     setToolActivities([]);
@@ -103,7 +307,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
 
     try {
       const uiLang = (i18n.language || "en").slice(0, 2);
-      for await (const event of streamChat(text, threadId, convId, controller.signal, displayCurrency, uiLang)) {
+      for await (const event of streamChat(finalText, threadId, convId, controller.signal, displayCurrency, uiLang)) {
         switch (event.type) {
           case "token":
             appendToken(convId, lastAsstId.current!, (event.payload.text as string) ?? "");
@@ -478,43 +682,93 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           </div>
         )}
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void send(input);
-          }}
-          className="mt-4 flex items-end gap-2"
+        <div
+          className="relative mt-4"
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
         >
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            rows={1}
-            placeholder={t("placeholder")}
-            className="num-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-sm leading-5 outline-none focus:border-accent"
-            disabled={streaming}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={onFileInput}
           />
-          {streaming ? (
-            <button
-              type="button"
-              onClick={stop}
-              title={t("stopGenerating")}
-              className="flex h-11 w-11 items-center justify-center rounded-lg bg-loss/90 text-white shadow-glow"
-            >
-              <Square className="h-4 w-4 fill-current" />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={!input.trim()}
-              title={t("send")}
-              className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent text-accent-fg shadow-glow disabled:opacity-40"
-            >
-              <Send className="h-4 w-4" />
-            </button>
+
+          {attachments.length > 0 && (
+            <AttachmentStrip
+              attachments={attachments}
+              onRemove={removeAttachment}
+              onRetry={retryAttachment}
+            />
           )}
-        </form>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void send(input);
+            }}
+            className={cn(
+              "flex items-end gap-2 rounded-lg transition-colors",
+              isDragging && "ring-2 ring-accent ring-offset-2 ring-offset-[hsl(var(--bg))]",
+            )}
+          >
+            <div className="relative flex flex-1 items-end">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={streaming || attachments.length >= MAX_FILES}
+                title={t("attach.upload")}
+                className="absolute bottom-1.5 left-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-md text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={1}
+                placeholder={t("placeholder")}
+                className="num-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] py-3 pl-11 pr-4 text-sm leading-5 outline-none focus:border-accent"
+                disabled={streaming}
+              />
+            </div>
+            {streaming ? (
+              <button
+                type="button"
+                onClick={stop}
+                title={t("stopGenerating")}
+                className="flex h-11 w-11 items-center justify-center rounded-lg bg-loss/90 text-white shadow-glow"
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim() && !attachments.some((a) => a.status === "ready")}
+                title={t("send")}
+                className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent text-accent-fg shadow-glow disabled:opacity-40"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            )}
+          </form>
+
+          {isDragging && (
+            <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-accent bg-[hsl(var(--surface))]/95 backdrop-blur-sm">
+              <UploadCloud className="h-7 w-7 text-accent" />
+              <p className="text-sm font-medium text-[hsl(var(--text-primary))]">
+                {t("attach.dropHere")}
+              </p>
+              <p className="text-[11px] text-[hsl(var(--text-muted))]">
+                {t("attach.limits", { max: humanSize(MAX_FILE_SIZE), count: MAX_FILES })}
+              </p>
+            </div>
+          )}
+        </div>
         <Disclaimer className="mt-2 text-center" />
       </div>
 
@@ -1258,6 +1512,97 @@ function MessageActions({
   );
 }
 
+
+function AttachmentStrip({
+  attachments,
+  onRemove,
+  onRetry,
+}: {
+  attachments: Attachment[];
+  onRemove: (id: string) => void;
+  onRetry: (id: string) => void;
+}) {
+  const { t } = useTranslation("chat");
+  return (
+    <div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]/60 p-2">
+      {attachments.map((a) => {
+        const isUploading = a.status === "uploading";
+        const isError = a.status === "error";
+        return (
+          <div
+            key={a.id}
+            className={cn(
+              "group relative flex max-w-[260px] items-center gap-2 overflow-hidden rounded-md border bg-[hsl(var(--surface))] px-2 py-1.5 text-xs transition-colors",
+              isError
+                ? "border-loss/40"
+                : "border-[hsl(var(--border))] hover:border-accent/40",
+            )}
+            title={a.error || a.summary || a.name}
+          >
+            <span
+              className={cn(
+                "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                isError
+                  ? "bg-loss/10 text-loss"
+                  : isUploading
+                    ? "bg-accent/10 text-accent"
+                    : "bg-gain/10 text-gain",
+              )}
+            >
+              {isUploading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isError ? (
+                <AlertCircle className="h-3.5 w-3.5" />
+              ) : (
+                <KindIcon kind={a.kind} />
+              )}
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-[11px] font-medium text-[hsl(var(--text-primary))]">
+                {a.name}
+              </span>
+              {isUploading ? (
+                <div className="h-1 w-full overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+                  <div
+                    className="h-full bg-accent transition-[width] duration-200"
+                    style={{ width: `${a.progress}%` }}
+                  />
+                </div>
+              ) : isError ? (
+                <span className="truncate text-[10px] text-loss">
+                  {t("attach.failed")}
+                </span>
+              ) : (
+                <span className="truncate text-[10px] text-[hsl(var(--text-muted))]">
+                  {humanSize(a.size)}
+                  {a.summary ? ` · ${a.summary}` : ""}
+                </span>
+              )}
+            </div>
+            {isError && (
+              <button
+                type="button"
+                onClick={() => onRetry(a.id)}
+                title={t("attach.retry")}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-accent"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onRemove(a.id)}
+              title={t("attach.remove")}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[hsl(var(--text-muted))] hover:bg-loss/10 hover:text-loss"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function CopyButton({ text }: { text: string }) {
   const { t } = useTranslation("chat");
