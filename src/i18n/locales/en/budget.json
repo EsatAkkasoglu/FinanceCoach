@@ -3,13 +3,28 @@
   "subtitle": "Track money in, out, and where it lives.",
   "kpi": {
     "cashOnHand": "Cash on hand",
-    "noAccounts": "No accounts yet",
-    "incomeThisMonth": "Income this month",
-    "noIncome": "No income logged yet",
+    "cashOnHandHint": "Current total",
+    "noAccounts": "Estimate for this month",
+    "incomeThisMonth": "Expected monthly income",
+    "noIncome": "No data yet",
     "spendingThisMonth": "Spending this month",
-    "nothingSpent": "Nothing spent yet",
+    "nothingSpent": "Add an expense",
     "recurringIncome": "Recurring income / mo",
-    "recurringHint": "Mark a transaction as recurring to track it"
+    "recurringHint": "Mark a transaction as recurring to track it",
+    "netCashFlow": "Net cash flow",
+    "netCashFlowEmpty": "Waiting on spending data",
+    "netCashFlowSurplus": "Surplus this month",
+    "netCashFlowDeficit": "Deficit this month"
+  },
+  "hero": {
+    "title": "Complete your budget",
+    "subtitle": "Your income source and cash account are ready. Add your spending and we'll compute your savings rate, emergency-fund coverage, and time-to-goal.",
+    "uploadCta": "Upload document",
+    "manualCta": "Add expense manually",
+    "stepAccount": "Account added",
+    "stepIncome": "Income added",
+    "stepExpense": "Add an expense",
+    "progress": "{{done}} of {{total}} steps done"
   },
   "incomeSources": "Income sources",
   "recurringIncome": "Recurring income",

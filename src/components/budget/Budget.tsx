@@ -2,15 +2,16 @@
  * Budget — single page. Top: 4 summary KPIs. Action strip with import / receipt / manual.
  * Below: accounts panel + subscriptions panel side-by-side, then transactions table.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Upload, Plus, Wallet, TrendingUp, TrendingDown, RefreshCcw,
   Pencil, Trash2, CreditCard, Banknote, Building2, Loader2,
   Calendar, AlertCircle, ArrowUpRight, ArrowDownRight, Sparkles,
-  Repeat, PiggyBank, Music, Home, Briefcase, Shield, Tv, Dumbbell,
-  Wrench, Landmark, type LucideIcon,
+  PiggyBank, Music, Home, Briefcase, Shield, Tv, Dumbbell,
+  Wrench, Landmark, Check, Activity, ClipboardCheck, type LucideIcon,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
 import { toast } from "sonner";
 
@@ -163,6 +164,9 @@ export function Budget() {
   }
 
   const isEmpty = !loading && accounts.length === 0 && txs.length === 0 && subs.length === 0;
+  const hasExpense = txs.some((t) => t.type === "expense");
+  const hasIncome = txs.some((t) => t.type === "income") || subs.some((s) => s.direction === "income");
+  const showHero = !loading && !isEmpty && !hasExpense;
 
   return (
     <div>
@@ -192,10 +196,20 @@ export function Budget() {
       ) : (
         <>
           <SummaryRow summary={summary} fx={fx} />
-          <ActionStrip
-            onImport={() => setImportOpen(true)}
-            onAddManual={() => setTxModal({ open: true, editing: null })}
-          />
+          {showHero ? (
+            <CompletionHero
+              hasAccount={accounts.length > 0}
+              hasIncome={hasIncome}
+              hasExpense={hasExpense}
+              onImport={() => setImportOpen(true)}
+              onAddManual={() => setTxModal({ open: true, editing: null })}
+            />
+          ) : (
+            <ActionStrip
+              onImport={() => setImportOpen(true)}
+              onAddManual={() => setTxModal({ open: true, editing: null })}
+            />
+          )}
 
           {summary && (
             <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -300,46 +314,80 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
   const cashByCcy = summary.cash_on_hand;
   const incomeByCcy = summary.income_mtd;
   const expenseByCcy = summary.expense_mtd;
-  const recurringIncome = summary.recurring.income_monthly_by_currency;
 
   const incomeMoM = computeMoM(incomeByCcy, summary.income_prev_month, fx);
   const expenseMoM = computeMoM(expenseByCcy, summary.expense_prev_month, fx);
 
+  // Net cash flow = income – expense (in target currency)
+  const incomeTotal = fx.rates ? fx.convertBag(incomeByCcy) : sumValues(incomeByCcy);
+  const expenseTotal = fx.rates ? fx.convertBag(expenseByCcy) : sumValues(expenseByCcy);
+  const netBag: Record<string, number> = {};
+  const hasIncome = Object.keys(incomeByCcy).length > 0;
+  const hasExpense = Object.keys(expenseByCcy).length > 0;
+  if (hasIncome || hasExpense) {
+    const net = (incomeTotal ?? 0) - (expenseTotal ?? 0);
+    netBag[fx.target] = net;
+  }
+  const netValue = netBag[fx.target];
+  const netSubtitle =
+    !hasExpense
+      ? t("kpi.netCashFlowEmpty")
+      : netValue != null
+        ? netValue >= 0
+          ? t("kpi.netCashFlowSurplus")
+          : t("kpi.netCashFlowDeficit")
+        : undefined;
+
+  const container = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.02 } },
+  };
+
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+    >
       <KPICard
         title={t("kpi.cashOnHand")}
         icon={<Wallet className="h-4 w-4" />}
         bag={cashByCcy}
         fx={fx}
-        subtitle={Object.keys(cashByCcy).length === 0 ? t("kpi.noAccounts") : undefined}
+        subtitle={Object.keys(cashByCcy).length === 0 ? t("kpi.noAccounts") : t("kpi.cashOnHandHint")}
+        tone="neutral"
       />
       <KPICard
         title={t("kpi.incomeThisMonth")}
         icon={<TrendingUp className="h-4 w-4 text-gain" />}
         bag={incomeByCcy}
         fx={fx}
-        subtitle={Object.keys(incomeByCcy).length === 0 ? t("kpi.noIncome") : undefined}
+        subtitle={!hasIncome ? t("kpi.noIncome") : undefined}
         delta={incomeMoM}
         deltaPositiveIsGood
+        tone="income"
       />
       <KPICard
         title={t("kpi.spendingThisMonth")}
         icon={<TrendingDown className="h-4 w-4 text-loss" />}
         bag={expenseByCcy}
         fx={fx}
-        subtitle={Object.keys(expenseByCcy).length === 0 ? t("kpi.nothingSpent") : undefined}
+        subtitle={!hasExpense ? t("kpi.nothingSpent") : undefined}
         delta={expenseMoM}
         deltaPositiveIsGood={false}
+        tone="expense"
       />
       <KPICard
-        title={t("kpi.recurringIncome")}
-        icon={<Repeat className="h-4 w-4 text-accent" />}
-        bag={recurringIncome}
+        title={t("kpi.netCashFlow")}
+        icon={<Activity className="h-4 w-4 text-accent" />}
+        bag={netBag}
         fx={fx}
-        subtitle={Object.keys(recurringIncome).length === 0 ? t("kpi.recurringHint") : undefined}
+        subtitle={netSubtitle}
+        tone={netValue == null ? "neutral" : netValue >= 0 ? "income" : "expense"}
+        forceConverted
       />
-    </div>
+    </motion.div>
   );
 }
 
@@ -360,62 +408,132 @@ function sumValues(bag: Record<string, number>): number {
 
 function KPICard({
   title, icon, bag, fx, subtitle, delta, deltaPositiveIsGood = true,
+  tone = "neutral", forceConverted = false,
 }: {
   title: string;
   icon: React.ReactNode;
   bag: Record<string, number>;
   fx: UseFxRates;
   subtitle?: string;
-  /** Month-over-month percent change, or null if unavailable. */
   delta?: number | null;
-  /** When true, a positive delta is "good" (green); flip for spending. */
   deltaPositiveIsGood?: boolean;
+  tone?: "neutral" | "income" | "expense";
+  /** Always render the converted total instead of per-currency rows. */
+  forceConverted?: boolean;
 }) {
   const entries = Object.entries(bag);
   const converted = entries.length ? fx.convertBag(bag) : null;
-  const fallback = !fx.rates;  // FX hasn't loaded — show native amounts
+  const fallback = !fx.rates && !forceConverted;
+
+  const toneRing =
+    tone === "income"
+      ? "before:bg-gain/10"
+      : tone === "expense"
+        ? "before:bg-loss/10"
+        : "before:bg-accent/10";
+  const iconWrap =
+    tone === "income"
+      ? "bg-gain/10 text-gain"
+      : tone === "expense"
+        ? "bg-loss/10 text-loss"
+        : "bg-accent-muted/40 text-accent";
+  const dotColor =
+    tone === "income" ? "bg-gain" : tone === "expense" ? "bg-loss" : "bg-accent";
+
+  const item = {
+    hidden: { opacity: 0, y: 8 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: "easeOut" as const } },
+  };
 
   return (
-    <div className="card">
-      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
-        <span>{title}</span>
-        <span>{icon}</span>
+    <motion.div
+      variants={item}
+      className={cn(
+        "card relative overflow-hidden transition hover:border-[hsl(var(--text-muted))]/60",
+        "before:pointer-events-none before:absolute before:-right-12 before:-top-12 before:h-32 before:w-32 before:rounded-full before:blur-2xl",
+        toneRing,
+      )}
+    >
+      <div className="relative flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg", iconWrap)}>{icon}</span>
+          <span>{title}</span>
+        </div>
       </div>
-      <div className="mt-2">
+      <div className="relative mt-3">
         {entries.length === 0 ? (
-          <div className="text-2xl font-semibold tabular-nums">—</div>
+          <div className="text-2xl font-semibold tabular-nums text-[hsl(var(--text-muted))]">—</div>
         ) : fallback ? (
           <div className="space-y-0.5">
             {entries.map(([ccy, n]) => (
               <div key={ccy} className="flex items-baseline gap-2">
-                <span className="num text-2xl font-semibold tabular-nums">
-                  {n.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                </span>
+                <AnimatedNumber
+                  value={n}
+                  className="num text-2xl font-semibold tabular-nums"
+                />
                 <span className="text-xs text-[hsl(var(--text-muted))]">{ccy}</span>
               </div>
             ))}
           </div>
         ) : (
           <div className="text-2xl font-semibold tabular-nums">
-            {converted == null ? "—" : formatCurrency(converted, fx.target)}
+            {converted == null ? (
+              "—"
+            ) : (
+              <AnimatedNumber value={converted} format={(n) => formatCurrency(n, fx.target)} />
+            )}
           </div>
         )}
       </div>
-      {delta != null && Number.isFinite(delta) && (
-        <p className="mt-1 text-[11px]">
+      <div className="relative mt-2 flex items-center gap-2 text-[11px]">
+        {delta != null && Number.isFinite(delta) ? (
           <span
             className={cn(
-              "font-semibold",
-              (deltaPositiveIsGood ? delta >= 0 : delta <= 0) ? "text-gain" : "text-loss",
+              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-semibold",
+              (deltaPositiveIsGood ? delta >= 0 : delta <= 0)
+                ? "bg-gain/15 text-gain"
+                : "bg-loss/15 text-loss",
             )}
           >
             {delta >= 0 ? "+" : ""}{delta.toFixed(1)}%
           </span>
-          <span className="text-[hsl(var(--text-muted))]"> vs last month</span>
-        </p>
-      )}
-      {subtitle && <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">{subtitle}</p>}
-    </div>
+        ) : (
+          <span className={cn("h-1.5 w-1.5 rounded-full", dotColor, "opacity-70")} />
+        )}
+        {subtitle && <span className="text-[hsl(var(--text-muted))]">{subtitle}</span>}
+      </div>
+    </motion.div>
+  );
+}
+
+// Smooth count-up that runs once when the value changes.
+function AnimatedNumber({
+  value, format, className,
+}: { value: number; format?: (n: number) => string; className?: string }) {
+  const [shown, setShown] = useState(value);
+  const fromRef = useRef(value);
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = value;
+    if (from === to) return;
+    const start = performance.now();
+    const dur = 600;
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const v = from + (to - from) * eased;
+      setShown(v);
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = to;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return (
+    <span className={className}>
+      {format ? format(shown) : shown.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+    </span>
   );
 }
 
@@ -599,6 +717,117 @@ function UpcomingCharges({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
         </ul>
       )}
     </section>
+  );
+}
+
+// ── Completion hero ─────────────────────────────────────────────────────────
+
+function CompletionHero({
+  hasAccount, hasIncome, hasExpense, onImport, onAddManual,
+}: {
+  hasAccount: boolean;
+  hasIncome: boolean;
+  hasExpense: boolean;
+  onImport: () => void;
+  onAddManual: () => void;
+}) {
+  const { t } = useTranslation("budget");
+  const steps = [
+    { label: t("hero.stepAccount"), done: hasAccount },
+    { label: t("hero.stepIncome"), done: hasIncome },
+    { label: t("hero.stepExpense"), done: hasExpense },
+  ];
+  const done = steps.filter((s) => s.done).length;
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut", delay: 0.1 }}
+      className="relative mt-6 overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent-muted/60 via-[hsl(var(--surface))] to-[hsl(var(--surface))] p-5 shadow-glow sm:p-6"
+    >
+      {/* Glow blobs */}
+      <div className="pointer-events-none absolute -left-20 -top-20 h-56 w-56 rounded-full bg-accent/20 blur-3xl" />
+      <div className="pointer-events-none absolute -right-16 bottom-0 h-48 w-48 rounded-full bg-accent/10 blur-3xl" />
+
+      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center">
+        {/* Illustration */}
+        <div className="flex shrink-0 items-center justify-center lg:w-32">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.4, ease: "backOut" }}
+            className="relative flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent/60 text-white shadow-glow"
+          >
+            <ClipboardCheck className="h-12 w-12" strokeWidth={1.5} />
+            <motion.span
+              animate={{ rotate: [0, 15, -10, 0] }}
+              transition={{ duration: 3, repeat: Infinity, repeatDelay: 2 }}
+              className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(var(--surface))] text-accent ring-2 ring-accent/40"
+            >
+              <Sparkles className="h-4 w-4" />
+            </motion.span>
+          </motion.div>
+        </div>
+
+        {/* Copy */}
+        <div className="min-w-0 flex-1">
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-[hsl(var(--text))]">
+            {t("hero.title")}
+            <Sparkles className="h-4 w-4 text-accent" />
+          </h2>
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[hsl(var(--text-muted))]">
+            {t("hero.subtitle")}
+          </p>
+
+          {/* Progress steps */}
+          <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]">
+            {steps.map((s) => (
+              <li
+                key={s.label}
+                className={cn(
+                  "flex items-center gap-1.5",
+                  s.done ? "text-gain" : "text-[hsl(var(--text-muted))]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-4 w-4 items-center justify-center rounded-full border",
+                    s.done
+                      ? "border-gain/60 bg-gain/20"
+                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]",
+                  )}
+                >
+                  {s.done && <Check className="h-2.5 w-2.5" />}
+                </span>
+                <span>{s.label}</span>
+              </li>
+            ))}
+            <li className="text-[hsl(var(--text-muted))]">·  {t("hero.progress", { done, total: steps.length })}</li>
+          </ul>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col gap-2 sm:flex-row lg:flex-col lg:w-56">
+          <button
+            type="button"
+            onClick={onImport}
+            className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-accent to-accent/80 px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 hover:shadow-[0_0_28px_-4px_rgba(31,181,122,0.7)] active:scale-[0.98]"
+          >
+            <Upload className="h-4 w-4" />
+            {t("hero.uploadCta")}
+          </button>
+          <button
+            type="button"
+            onClick={onAddManual}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/60 px-4 py-2.5 text-sm font-semibold text-[hsl(var(--text))] transition hover:border-accent/60 hover:bg-[hsl(var(--surface-2))] active:scale-[0.98]"
+          >
+            <Plus className="h-4 w-4" />
+            {t("hero.manualCta")}
+          </button>
+        </div>
+      </div>
+    </motion.section>
   );
 }
 
