@@ -22,6 +22,7 @@ import {
   ping,
   createConversation,
   fetchMe,
+  handleGoogleRedirectResult,
   getProfile,
   onUnauthorized,
   type Conversation,
@@ -145,6 +146,11 @@ export default function App() {
 
   // Restore session via Firebase auth state — fires immediately on mount.
   useEffect(() => {
+    // Handle Google redirect result first (prod sign-in flow)
+    handleGoogleRedirectResult()
+      .then((u) => { if (u) setUser(u); })
+      .catch(() => {});
+
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const u = await fetchMe();

@@ -19,12 +19,13 @@ def _init() -> bool:
         if not firebase_admin._apps:
             import os
             cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+            project_id = os.environ.get("FIREBASE_PROJECT_ID", "fincoach-esat")
             if cred_path:
                 cred = credentials.Certificate(cred_path)
-                firebase_admin.initialize_app(cred)
+                firebase_admin.initialize_app(cred, {"projectId": project_id})
             else:
-                # Application Default Credentials (used on Cloud Run)
-                firebase_admin.initialize_app()
+                # Application Default Credentials — works on Cloud Run automatically
+                firebase_admin.initialize_app(options={"projectId": project_id})
         _initialized = True
         return True
     except Exception as exc:  # noqa: BLE001

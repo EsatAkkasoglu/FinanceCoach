@@ -9,6 +9,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
@@ -80,7 +82,21 @@ export async function register(email: string, password: string): Promise<AuthUse
 }
 
 export async function loginWithGoogle(): Promise<AuthUser> {
+  // Use redirect on deployed web (avoids COOP/popup issues), popup in local dev
+  if (import.meta.env.PROD) {
+    await signInWithRedirect(auth, googleProvider);
+    // Execution continues after the page reloads and redirect result is handled
+    // in App.tsx via getRedirectResult — this line is never actually reached in prod
+    return syncWithBackend();
+  }
   await signInWithPopup(auth, googleProvider);
+  return syncWithBackend();
+}
+
+/** Call once on app startup to complete a pending Google redirect sign-in. */
+export async function handleGoogleRedirectResult(): Promise<AuthUser | null> {
+  const result = await getRedirectResult(auth);
+  if (!result) return null;
   return syncWithBackend();
 }
 
