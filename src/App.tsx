@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu, Globe } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { onAuthStateChanged, onIdTokenChanged } from "firebase/auth";
+import { onIdTokenChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
