@@ -88,12 +88,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FinCoach API", version="0.1.0", lifespan=lifespan)
 
-# Tauri WebView2 origin is variable; allow all for local dev.
+# Allow all origins (Tauri WebView2 + Firebase Hosting + local dev).
+# Explicit allow_headers ensures CORS headers appear on error responses too.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Content-Type", "Authorization"],
+    max_age=600,
 )
 
 app.include_router(auth_router)

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu, Globe } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, onIdTokenChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -151,7 +151,9 @@ export default function App() {
       .then((u) => { if (u) setUser(u); })
       .catch(() => {});
 
-    return onAuthStateChanged(auth, async (firebaseUser) => {
+    // onIdTokenChanged fires on login, logout AND silent token refresh (~1 hr).
+    // This keeps the local user state in sync without showing "session expired".
+    return onIdTokenChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const u = await fetchMe();
         setUser(u);

@@ -65,7 +65,12 @@ jobs:
             FINCOACH_JWT_SECRET=${{ secrets.JWT_SECRET }}
             GEMINI_MODEL=gemini-3.1-flash-lite-preview
             FIREBASE_PROJECT_ID=fincoach-esat
-          flags: "--allow-unauthenticated"
+          flags: >-
+            --allow-unauthenticated
+            --min-instances=1
+            --max-instances=3
+            --memory=1Gi
+            --timeout=300
 
       - name: Show deployed URL
         run: echo "Backend deployed → ${{ steps.deploy.outputs.url }}"

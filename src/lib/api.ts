@@ -19,9 +19,9 @@ const PORT = (import.meta.env.TAURI_FINCOACH_PORT as string | undefined) ?? "876
 export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? `http://localhost:${PORT}`;
 
 // ── Auth token (Firebase ID token, fetched dynamically) ───────────────────
-async function getBearerToken(): Promise<string | null> {
+async function getBearerToken(forceRefresh = false): Promise<string | null> {
   try {
-    return (await auth.currentUser?.getIdToken()) ?? null;
+    return (await auth.currentUser?.getIdToken(forceRefresh)) ?? null;
   } catch {
     return null;
   }
@@ -40,13 +40,28 @@ export function onUnauthorized(handler: UnauthorizedHandler): () => void {
   return () => unauthorizedHandlers.delete(handler);
 }
 
-/** Fetch wrapper that attaches a fresh Firebase ID token and handles 401. */
-export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+/**
+ * Fetch wrapper that attaches a fresh Firebase ID token and handles 401.
+ * On first 401, force-refreshes the token and retries once before logging out.
+ */
+export async function apiFetch(
+  path: string,
+  init: RequestInit = {},
+  _retried = false,
+): Promise<Response> {
   const token = await getBearerToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const resp = await fetch(`${API_BASE}${path}`, { ...init, headers });
-  if (resp.status === 401) {
+
+  if (resp.status === 401 && !_retried && auth.currentUser) {
+    // Force-refresh the Firebase ID token and retry once
+    const fresh = await getBearerToken(true);
+    if (fresh) {
+      return apiFetch(path, init, true);
+    }
+  }
+  if (resp.status === 401 && _retried) {
     unauthorizedHandlers.forEach((h) => h());
   }
   return resp;
