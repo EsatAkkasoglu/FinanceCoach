@@ -10,7 +10,6 @@ import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore,
 import { cn } from "@/lib/cn";
 import { AgentBadge } from "./AgentBadge";
 import { Disclaimer } from "@/components/ui/Disclaimer";
-import { CitationChip } from "./CitationChip";
 
 function pickRandom<T>(arr: T[], n: number): T[] {
   const copy = [...arr];
