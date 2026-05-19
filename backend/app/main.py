@@ -75,24 +75,29 @@ async def lifespan(app: FastAPI):
     from app.tools.fund_tools import prewarm_universe
 
     if settings.using_postgres:
+        import asyncpg
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        # Neon (serverless Postgres) aggressively closes idle connections.
-        # min_size=0 avoids holding connections between requests; the low
-        # max_inactive_connection_lifetime forces asyncpg to drop stale
-        # connections rather than reusing them after the server closed them.
-        # This prevents "the connection is closed" errors after Cloud Run
-        # instances sit idle.
-        async with AsyncPostgresSaver.from_conn_string(
+        # Neon (serverless Postgres) aggressively closes idle connections after
+        # ~5 min of inactivity. Cloud Run scales to 0 between requests, so pool
+        # connections are often stale on the next cold-start.
+        # min_size=0: don't hold connections while idle.
+        # max_inactive_connection_lifetime=60: evict connections unused for 60 s
+        # so asyncpg never reuses a connection Neon already closed.
+        pool = await asyncpg.create_pool(
             settings.checkpointer_url,
             min_size=0,
             max_size=5,
             max_inactive_connection_lifetime=60,
-        ) as checkpointer:
+        )
+        try:
+            checkpointer = AsyncPostgresSaver(pool)
             await checkpointer.setup()
             app.state.supervisor = build_supervisor(checkpointer=checkpointer)
-            log.info("Supervisor built with AsyncPostgresSaver (Neon); port %d", settings.port)
+            log.info("Supervisor built with AsyncPostgresSaver (Neon pool); port %d", settings.port)
             threading.Thread(target=prewarm_universe, daemon=True, name="tefas-prewarm").start()
             yield
+        finally:
+            await pool.close()
     else:
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
         async with AsyncSqliteSaver.from_conn_string(settings.db_path) as checkpointer:
