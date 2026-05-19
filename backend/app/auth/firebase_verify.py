@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -13,19 +14,21 @@ def _init() -> bool:
     if _initialized:
         return True
     try:
+        import os
+
         import firebase_admin
         from firebase_admin import credentials
 
         if not firebase_admin._apps:
-            import os
             cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
             project_id = os.environ.get("FIREBASE_PROJECT_ID", "fincoach-esat")
             if cred_path:
                 cred = credentials.Certificate(cred_path)
                 firebase_admin.initialize_app(cred, {"projectId": project_id})
             else:
-                # Application Default Credentials — works on Cloud Run automatically
+                # Application Default Credentials — provided automatically on Cloud Run
                 firebase_admin.initialize_app(options={"projectId": project_id})
+            logger.info("firebase-admin initialised (project=%s)", project_id)
         _initialized = True
         return True
     except Exception as exc:  # noqa: BLE001
@@ -33,13 +36,19 @@ def _init() -> bool:
         return False
 
 
-def verify_firebase_token(token: str) -> str | None:
-    """Return the Firebase UID if the token is valid, else None."""
+def decode_firebase_token(token: str) -> dict[str, Any] | None:
+    """Verify a Firebase ID token and return the full decoded claims, or None."""
     if not _init():
         return None
     try:
         from firebase_admin import auth
-        decoded = auth.verify_id_token(token)
-        return str(decoded["uid"])
-    except Exception:  # noqa: BLE001
+        return auth.verify_id_token(token)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("firebase token verification failed: %s", exc)
         return None
+
+
+def verify_firebase_token(token: str) -> str | None:
+    """Return the Firebase UID if the token is valid, else None."""
+    decoded = decode_firebase_token(token)
+    return str(decoded["uid"]) if decoded else None

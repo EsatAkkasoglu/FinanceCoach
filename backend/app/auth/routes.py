@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.deps import get_current_user
-from app.auth.firebase_verify import verify_firebase_token
+from app.auth.firebase_verify import decode_firebase_token
 from app.auth.security import create_token, hash_password, verify_password
 from app.db.models import User
 from app.db.session import SessionLocal
@@ -90,12 +90,10 @@ def firebase_signin(
 
     token = credentials.credentials
 
-    # Verify Firebase token and extract claims
-    try:
-        from firebase_admin import auth as fb_auth
-        decoded = fb_auth.verify_id_token(token)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid firebase token") from exc
+    # Verify Firebase token via firebase_verify (ensures _init() is called first)
+    decoded = decode_firebase_token(token)
+    if decoded is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid firebase token")
 
     firebase_uid: str = decoded["uid"]
     email: str = decoded.get("email", "")
