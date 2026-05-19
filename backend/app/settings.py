@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # Storage
     db_path: str = Field(default="./fincoach.db", alias="FINCOACH_DB_PATH")
+    database_url: str = Field(default="", alias="DATABASE_URL")   # Neon PostgreSQL URL; falls back to SQLite
     chroma_path: str = Field(default="./chroma_db", alias="FINCOACH_CHROMA_PATH")
 
     # Behavior flags
@@ -49,8 +50,29 @@ class Settings(BaseSettings):
     langsmith_project: str = Field(default="fincoach-hackathon", alias="LANGSMITH_PROJECT")
 
     @property
+    def using_postgres(self) -> bool:
+        return bool(self.database_url and self.database_url.startswith("postgresql"))
+
+    @property
     def db_url(self) -> str:
+        if self.using_postgres:
+            # SQLAlchemy needs psycopg2 driver prefix for sync engine
+            url = self.database_url
+            if url.startswith("postgresql://") and "+psycopg2" not in url:
+                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            return url
         return f"sqlite:///{self.db_path}"
+
+    @property
+    def checkpointer_url(self) -> str:
+        """URL for LangGraph AsyncPostgresSaver (psycopg3 format)."""
+        if self.using_postgres:
+            # psycopg3 expects plain postgresql:// (no driver prefix)
+            url = self.database_url
+            if "+psycopg2" in url:
+                url = url.replace("+psycopg2", "")
+            return url
+        return self.db_path  # SQLite path for AsyncSqliteSaver
 
 
 settings = Settings()

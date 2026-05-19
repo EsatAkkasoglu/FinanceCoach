@@ -71,17 +71,24 @@ async def lifespan(app: FastAPI):
     configure_langsmith()
     init_db()
 
-    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-    async with AsyncSqliteSaver.from_conn_string(settings.db_path) as checkpointer:
-        app.state.supervisor = build_supervisor(checkpointer=checkpointer)
-        log.info("Supervisor graph built with AsyncSqliteSaver; ready on port %d", settings.port)
+    import threading
+    from app.tools.fund_tools import prewarm_universe
 
-        import threading
-        from app.tools.fund_tools import prewarm_universe
-        threading.Thread(target=prewarm_universe, daemon=True, name="tefas-prewarm").start()
-        log.info("TEFAS universe pre-warm scheduled in background")
-
-        yield
+    if settings.using_postgres:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        async with AsyncPostgresSaver.from_conn_string(settings.checkpointer_url) as checkpointer:
+            await checkpointer.setup()
+            app.state.supervisor = build_supervisor(checkpointer=checkpointer)
+            log.info("Supervisor built with AsyncPostgresSaver (Neon); port %d", settings.port)
+            threading.Thread(target=prewarm_universe, daemon=True, name="tefas-prewarm").start()
+            yield
+    else:
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        async with AsyncSqliteSaver.from_conn_string(settings.db_path) as checkpointer:
+            app.state.supervisor = build_supervisor(checkpointer=checkpointer)
+            log.info("Supervisor built with AsyncSqliteSaver; port %d", settings.port)
+            threading.Thread(target=prewarm_universe, daemon=True, name="tefas-prewarm").start()
+            yield
 
     log.info("FinCoach shutting down")
 

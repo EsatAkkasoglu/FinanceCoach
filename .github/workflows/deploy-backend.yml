@@ -65,6 +65,7 @@ jobs:
             FINCOACH_JWT_SECRET=${{ secrets.JWT_SECRET }}
             GEMINI_MODEL=gemini-3.1-flash-lite-preview
             FIREBASE_PROJECT_ID=fincoach-esat
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
           flags: >-
             --allow-unauthenticated
             --min-instances=0
