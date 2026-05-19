@@ -82,13 +82,17 @@ async def lifespan(app: FastAPI):
         # stale pool connections, causing "the connection is closed" errors.
         # min_size=0: no persistent connections while idle.
         # max_idle=60: evict connections idle for >60 s before Neon closes them.
+        from psycopg.rows import dict_row
         pool = AsyncConnectionPool(
             settings.checkpointer_url,
             min_size=0,
             max_size=5,
             max_idle=60.0,
             open=False,
-            kwargs={"autocommit": True},
+            # Must match from_conn_string defaults: autocommit + no prepared
+            # statements (Neon serverless doesn't support them across connections)
+            # + dict_row so LangGraph checkpoint queries parse correctly.
+            kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
         )
         await pool.open()
         try:
