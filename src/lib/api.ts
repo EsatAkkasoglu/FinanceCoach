@@ -733,6 +733,7 @@ export async function* streamChat(
   convId: string,
   signal?: AbortSignal,
   displayCurrency?: string,
+  language?: string,
 ): AsyncGenerator<ChatEvent> {
   const resp = await apiFetch(`/chat`, {
     method: "POST",
@@ -742,6 +743,7 @@ export async function* streamChat(
       thread_id: threadId,
       conv_id: convId,
       display_currency: displayCurrency,
+      language,
     }),
     signal,
   });

@@ -10,6 +10,8 @@ from app.auth.context import (
     display_currency_var,
     get_current_user_id_or_none,
     get_display_currency,
+    get_ui_language,
+    ui_language_var,
 )
 from app.auth.deps import get_current_user, get_current_user_id
 from app.auth.security import create_token, decode_token, hash_password, verify_password
@@ -17,6 +19,8 @@ from app.auth.security import create_token, decode_token, hash_password, verify_
 __all__ = [
     "current_user_id_var",
     "display_currency_var",
+    "ui_language_var",
+    "get_ui_language",
     "get_current_user_id_or_none",
     "get_display_currency",
     "get_current_user",

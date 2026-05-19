@@ -13,6 +13,11 @@ current_user_id_var: ContextVar[int | None] = ContextVar("current_user_id", defa
 # ("150.000 TL" when the UI is showing "$150,000").
 display_currency_var: ContextVar[str] = ContextVar("display_currency", default="USD")
 
+# UI locale ("en" | "tr" | ...). Synthesizer / agents read this to lock the
+# response language to whatever the frontend picker is set to, instead of
+# guessing from the latest user message.
+ui_language_var: ContextVar[str] = ContextVar("ui_language", default="en")
+
 
 def get_current_user_id_or_none() -> int | None:
     return current_user_id_var.get()
@@ -20,3 +25,7 @@ def get_current_user_id_or_none() -> int | None:
 
 def get_display_currency() -> str:
     return display_currency_var.get()
+
+
+def get_ui_language() -> str:
+    return ui_language_var.get()

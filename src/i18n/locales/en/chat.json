@@ -58,6 +58,28 @@
     "What sectors am I most exposed to in my portfolio?",
     "Compare AAPL vs MSFT fundamentals for me"
   ],
+  "tools": {
+    "get_quote": "Price",
+    "resolve_symbol": "Symbol",
+    "analyze_ticker_8dim": "8-Dim Analysis",
+    "get_dividend_metrics": "Dividend",
+    "scan_hot_trends": "Trend Scan",
+    "scan_rumors": "Rumor Scan",
+    "search_fund": "Fund Search",
+    "get_fund_quote": "Fund Price",
+    "get_fund_history": "Fund History",
+    "list_top_funds": "Top Funds",
+    "list_holdings": "Holdings",
+    "list_transactions": "Transactions",
+    "add_holding": "Add Position",
+    "add_holding_by_value": "Buy by Value",
+    "set_cash_balance": "Set Cash",
+    "remove_holding": "Close Position",
+    "search_news": "News",
+    "get_user_profile": "Profile",
+    "update_risk_score": "Update Risk",
+    "query_memory": "Memory"
+  },
   "agents": {
     "supervisor": "Supervisor",
     "marketData": "Market data",

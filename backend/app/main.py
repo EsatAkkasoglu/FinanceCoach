@@ -363,6 +363,9 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
     display_currency: str = (payload.get("display_currency") or "USD").strip().upper()
     if display_currency not in {"TRY", "USD", "EUR"}:
         display_currency = "USD"
+    ui_language: str = (payload.get("language") or "en").strip().lower()[:2]
+    if ui_language not in {"en", "tr"}:
+        ui_language = "en"
     if not user_message:
         return {"error": "empty message"}
     if not thread_id:
@@ -383,8 +386,9 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
     # Make user_id + UI display currency visible to deeply-nested LangGraph
     # tools / synthesizer via ContextVars.
     current_user_id_var.set(user_id)
-    from app.auth import display_currency_var
+    from app.auth import display_currency_var, ui_language_var
     display_currency_var.set(display_currency)
+    ui_language_var.set(ui_language)
 
     supervisor = app.state.supervisor
     initial_state = {"messages": [HumanMessage(content=user_message)], "user_id": user_id}

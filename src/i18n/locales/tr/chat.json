@@ -58,6 +58,28 @@
     "BIST'te en yüksek piyasa değerine sahip 5 hisseyi göster",
     "Portföyümde hangi sektöre en fazla maruz kalıyorum?"
   ],
+  "tools": {
+    "get_quote": "Fiyat",
+    "resolve_symbol": "Sembol",
+    "analyze_ticker_8dim": "8-Boyutlu Analiz",
+    "get_dividend_metrics": "Temettü",
+    "scan_hot_trends": "Trend Tarama",
+    "scan_rumors": "Söylenti Tarama",
+    "search_fund": "Fon Arama",
+    "get_fund_quote": "Fon Fiyatı",
+    "get_fund_history": "Fon Geçmişi",
+    "list_top_funds": "En İyi Fonlar",
+    "list_holdings": "Pozisyonlar",
+    "list_transactions": "İşlemler",
+    "add_holding": "Pozisyon Ekle",
+    "add_holding_by_value": "Değere Göre Al",
+    "set_cash_balance": "Nakit Ayarla",
+    "remove_holding": "Pozisyon Kapat",
+    "search_news": "Haberler",
+    "get_user_profile": "Profil",
+    "update_risk_score": "Risk Güncelle",
+    "query_memory": "Bellek"
+  },
   "agents": {
     "supervisor": "Yönlendirici",
     "marketData": "Piyasa verisi",

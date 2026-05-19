@@ -9,10 +9,7 @@ import { parseToolResult } from "@/lib/parseToolResult";
 import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity } from "@/store";
 import { cn } from "@/lib/cn";
 import { AgentBadge } from "./AgentBadge";
-import { AgentGraph } from "./AgentGraph";
-import { ReasoningPanel } from "./ReasoningPanel";
 import { Disclaimer } from "@/components/ui/Disclaimer";
-import { Network, Sparkles } from "lucide-react";
 
 function pickRandom<T>(arr: T[], n: number): T[] {
   const copy = [...arr];
@@ -29,7 +26,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ convId, threadId }: ChatPanelProps) {
-  const { t } = useTranslation("chat");
+  const { t, i18n } = useTranslation("chat");
   const {
     messagesByConv, streaming,
     appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setMessageSuggestions, addReasoning, setStreaming, resetConv,
@@ -105,7 +102,8 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     abortRef.current = controller;
 
     try {
-      for await (const event of streamChat(text, threadId, convId, controller.signal, displayCurrency)) {
+      const uiLang = (i18n.language || "en").slice(0, 2);
+      for await (const event of streamChat(text, threadId, convId, controller.signal, displayCurrency, uiLang)) {
         switch (event.type) {
           case "token":
             appendToken(convId, lastAsstId.current!, (event.payload.text as string) ?? "");
@@ -520,46 +518,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
         <Disclaimer className="mt-2 text-center" />
       </div>
 
-      <RightRail messages={messages} />
     </div>
-  );
-}
-
-// ─── RightRail ───────────────────────────────────────────────────────────────
-// Persistent 460px panel on lg+ surfacing the multi-agent narrative: live agent
-// graph on top, "Why this answer" reasoning underneath. Collapses on smaller
-// widths so the chat stays usable on narrow viewports.
-function RightRail({ messages }: { messages: import("@/store").ChatMessage[] }) {
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const reasoning = lastAssistant?.reasoning ?? [];
-
-  return (
-    <aside className="hidden w-[460px] shrink-0 flex-col border-l border-[hsl(var(--border))] bg-[hsl(var(--surface))] lg:flex">
-      <div className="flex items-center gap-2 border-b border-[hsl(var(--border))] px-5 py-3.5">
-        <Network className="h-3.5 w-3.5 text-accent" />
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-          Agent activity
-        </span>
-      </div>
-      <div className="border-b border-[hsl(var(--border))] px-3 py-3">
-        <AgentGraph />
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5 text-accent" />
-          <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-            Why this answer
-          </span>
-        </div>
-        {reasoning.length > 0 ? (
-          <ReasoningPanel entries={reasoning} />
-        ) : (
-          <p className="text-xs text-[hsl(var(--text-muted))]">
-            Once the Coach answers, its reasoning shows up here.
-          </p>
-        )}
-      </div>
-    </aside>
   );
 }
 
@@ -575,28 +534,35 @@ function stableKey(obj: unknown): string {
 
 // ─── AgentActivity ────────────────────────────────────────────────────────────
 
-const TOOL_META: Record<string, { label: string; icon: string }> = {
-  get_quote:           { label: "Fiyat",          icon: "📈" },
-  resolve_symbol:      { label: "Sembol",          icon: "🔎" },
-  analyze_ticker_8dim: { label: "8-Boyutlu Analiz",icon: "🔍" },
-  get_dividend_metrics:{ label: "Temettü",         icon: "💰" },
-  scan_hot_trends:     { label: "Trend Tarama",    icon: "🔥" },
-  scan_rumors:         { label: "Söylenti Tarama", icon: "👂" },
-  search_fund:         { label: "Fon Arama",       icon: "🏦" },
-  get_fund_quote:      { label: "Fon Fiyatı",      icon: "🏦" },
-  get_fund_history:    { label: "Fon Geçmişi",     icon: "📊" },
-  list_top_funds:      { label: "En İyi Fonlar",   icon: "🏆" },
-  list_holdings:       { label: "Pozisyonlar",     icon: "📋" },
-  list_transactions:   { label: "İşlemler",        icon: "📋" },
-  add_holding:         { label: "Pozisyon Ekle",   icon: "➕" },
-  add_holding_by_value:{ label: "Değere Göre Al",  icon: "💸" },
-  set_cash_balance:    { label: "Nakit Ayarla",    icon: "💵" },
-  remove_holding:      { label: "Pozisyon Kapat",  icon: "🗑️" },
-  search_news:         { label: "Haberler",        icon: "📰" },
-  get_user_profile:    { label: "Profil",          icon: "👤" },
-  update_risk_score:   { label: "Risk Güncelle",   icon: "⚖️" },
-  query_memory:        { label: "Bellek",          icon: "🧠" },
+const TOOL_ICONS: Record<string, string> = {
+  get_quote: "📈",
+  resolve_symbol: "🔎",
+  analyze_ticker_8dim: "🔍",
+  get_dividend_metrics: "💰",
+  scan_hot_trends: "🔥",
+  scan_rumors: "👂",
+  search_fund: "🏦",
+  get_fund_quote: "🏦",
+  get_fund_history: "📊",
+  list_top_funds: "🏆",
+  list_holdings: "📋",
+  list_transactions: "📋",
+  add_holding: "➕",
+  add_holding_by_value: "💸",
+  set_cash_balance: "💵",
+  remove_holding: "🗑️",
+  search_news: "📰",
+  get_user_profile: "👤",
+  update_risk_score: "⚖️",
+  query_memory: "🧠",
 };
+
+function useToolMeta(tool: string): { label: string; icon: string } {
+  const { t } = useTranslation("chat");
+  const icon = TOOL_ICONS[tool] ?? "⚙️";
+  const label = t(`tools.${tool}`, { defaultValue: tool });
+  return { label, icon };
+}
 
 // Render parsed result as a clean table — scalar fields + first-level arrays.
 function ResultView({ data, tool }: { data: unknown; tool?: string }) {
@@ -1015,7 +981,7 @@ function ArgPills({ args }: { args: Record<string, unknown> }) {
 function ToolRow({ activity }: { activity: ToolActivity }) {
   const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
-  const meta = TOOL_META[activity.tool] ?? { label: activity.tool, icon: "⚙️" };
+  const meta = useToolMeta(activity.tool);
   const parsed = activity.result ? parseToolResult(activity.result) : null;
 
   // Primary arg value for the header preview (first non-empty value)

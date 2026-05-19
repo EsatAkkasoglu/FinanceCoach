@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
 from app.agents._helpers import normalize_content
-from app.auth import get_current_user_id_or_none, get_display_currency
+from app.auth import get_current_user_id_or_none, get_display_currency, get_ui_language
 
 log = logging.getLogger("fincoach.synthesizer")
 
@@ -321,8 +321,18 @@ async def run(state: AgentState) -> AgentState:
     findings = state.get("findings") or {}
     brief = state.get("advisor_brief")
 
+    ui_lang = get_ui_language()
+    lang_name = {"en": "English", "tr": "Turkish"}.get(ui_lang, "English")
+    lang_directive = (
+        f"RESPONSE LANGUAGE LOCK (overrides any auto-detection): write the "
+        f"`reply` AND every `suggestions` chip in {lang_name} ({ui_lang}). "
+        f"This is the user's UI language and is non-negotiable — ignore the "
+        f"language of the current user message or prior turns if it differs.\n\n"
+    )
+
     payload = (
-        f"USER MESSAGE (current turn):\n{user_query}\n\n"
+        lang_directive
+        + f"USER MESSAGE (current turn):\n{user_query}\n\n"
         f"USER PROFILE (use to personalize suggestions): {_format_user_context()}\n\n"
         f"PLAN: question_type={question_type}, requires_advisor={requires_advisor}, "
         f"specialists_called={plan.get('specialists') or []}\n\n"
