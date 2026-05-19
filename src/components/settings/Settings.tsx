@@ -33,46 +33,18 @@ const CATEGORIES: {
   { id: "danger",     label: "Danger Zone", description: "Reset & destructive actions",    icon: AlertTriangle },
 ];
 
-const MODELS: {
-  id: GeminiModelId;
-  name: string;
-  badge?: string;
-  description: string;
-  speed: string;
-}[] = [
-  {
-    id: "gemini-2.5-pro",
-    name: "Gemini 2.5 Pro",
-    badge: "Most powerful",
-    description: "Best for deep analysis and complex multi-step reasoning.",
-    speed: "Slower",
+const ACTIVE_MODEL = {
+  id: "gemini-3.1-flash-lite-preview" as GeminiModelId,
+  name: "Gemini 3.1 Flash-Lite",
+  badge: "Active",
+  description: "Google's most cost-efficient multimodal model. 2.5× faster than 2.5 Flash, 1M token context window.",
+  speed: "Fastest",
+  pricing: {
+    input: "$0.25 / 1M tokens",
+    output: "$1.50 / 1M tokens",
+    free: "Free tier available",
   },
-  {
-    id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
-    badge: "Recommended",
-    description: "Strong balance of quality and speed for everyday use.",
-    speed: "Fast",
-  },
-  {
-    id: "gemini-2.5-flash-lite",
-    name: "Gemini 2.5 Flash-Lite",
-    description: "Lightweight 2.5 — quick replies for simple questions.",
-    speed: "Faster",
-  },
-  {
-    id: "gemini-2.0-flash",
-    name: "Gemini 2.0 Flash",
-    description: "Stable default. Good general-purpose performance.",
-    speed: "Fast",
-  },
-  {
-    id: "gemini-2.0-flash-lite",
-    name: "Gemini 2.0 Flash-Lite",
-    description: "Cheapest, fastest. Best for high-volume light tasks.",
-    speed: "Fastest",
-  },
-];
+};
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -316,55 +288,50 @@ function AIPanel() {
           </Field>
         </Card>
 
-        {/* Model picker */}
+        {/* Model — fixed, no picker */}
         <Card>
           <h3 className="mb-1 text-sm font-semibold">Model</h3>
           <p className="mb-4 text-xs text-[hsl(var(--text-muted))]">
-            Pick the Gemini variant. Heavier models reason more deeply but cost more latency.
+            FinCoach uses a single optimised model for all requests.
           </p>
 
-          <div className="flex flex-col gap-2">
-            {MODELS.map((m) => {
-              const active = model === m.id;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => setModel(m.id)}
-                  className={cn(
-                    "flex items-start gap-3 rounded-lg border p-3 text-left transition",
-                    active
-                      ? "border-accent bg-accent-muted"
-                      : "border-[hsl(var(--border))] hover:border-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))]"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
-                      active ? "border-accent" : "border-[hsl(var(--border))]"
-                    )}
-                  >
-                    {active && <span className="h-2 w-2 rounded-full bg-accent" />}
+          <div className="rounded-lg border border-accent bg-accent-muted p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-accent">{ACTIVE_MODEL.name}</span>
+                  <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent">
+                    {ACTIVE_MODEL.badge}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={cn("text-sm font-medium", active ? "text-accent" : "text-[hsl(var(--text))]")}>
-                        {m.name}
-                      </span>
-                      {m.badge && (
-                        <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
-                          {m.badge}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{m.description}</p>
-                    <p className="mt-1 font-mono text-[10px] text-[hsl(var(--text-muted))]">{m.id}</p>
-                  </div>
-                  <span className="mt-0.5 shrink-0 text-[10px] font-medium text-[hsl(var(--text-muted))]">
-                    {m.speed}
-                  </span>
-                </button>
-              );
-            })}
+                </div>
+                <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{ACTIVE_MODEL.description}</p>
+                <p className="mt-1.5 font-mono text-[10px] text-[hsl(var(--text-muted))]">{ACTIVE_MODEL.id}</p>
+              </div>
+              <span className="shrink-0 rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
+                {ACTIVE_MODEL.speed}
+              </span>
+            </div>
+
+            {/* Pricing */}
+            <div className="mt-3 flex flex-wrap gap-3 border-t border-accent/20 pt-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-[hsl(var(--text-muted))]">Input</span>
+                <span className="font-mono text-[11px] font-semibold text-[hsl(var(--text))]">
+                  {ACTIVE_MODEL.pricing.input}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-[hsl(var(--text-muted))]">Output</span>
+                <span className="font-mono text-[11px] font-semibold text-[hsl(var(--text))]">
+                  {ACTIVE_MODEL.pricing.output}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-medium text-green-400">
+                  {ACTIVE_MODEL.pricing.free}
+                </span>
+              </div>
+            </div>
           </div>
         </Card>
 

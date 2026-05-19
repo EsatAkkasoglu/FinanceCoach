@@ -31,6 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 type Theme = "dark" | "light";
 
 export type GeminiModelId =
+  | "gemini-3.1-flash-lite-preview"
   | "gemini-2.5-pro"
   | "gemini-2.5-flash"
   | "gemini-2.5-flash-lite"
@@ -66,7 +67,7 @@ export const useSettingsStore = create<SettingsState>()(
       roastMode: false,
       geminiApiKey: "",
       newsApiKey: "",
-      model: "gemini-2.0-flash",
+      model: "gemini-3.1-flash-lite-preview",
       temperature: 0.3,
       displayCurrency: "TRY",
       toggleTheme: () => set((s) => ({ theme: s.theme === "dark" ? "light" : "dark" })),
