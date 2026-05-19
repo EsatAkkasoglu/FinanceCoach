@@ -117,6 +117,23 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FinCoach API", version="0.1.0", lifespan=lifespan)
 
+
+# Firebase Hosting rewrites `/api/**` to this Cloud Run service and forwards
+# the full path unchanged, so the backend sees `/api/health` etc. Strip the
+# prefix at the ASGI layer so local dev (no prefix) and prod (with prefix)
+# both route to the same handlers.
+@app.middleware("http")
+async def strip_api_prefix(request, call_next):
+    scope = request.scope
+    path: str = scope.get("path", "")
+    if path.startswith("/api/"):
+        scope["path"] = path[len("/api"):]
+        raw_path = scope.get("raw_path")
+        if isinstance(raw_path, bytes) and raw_path.startswith(b"/api/"):
+            scope["raw_path"] = raw_path[len(b"/api"):]
+    return await call_next(request)
+
+
 # Allow all origins (Tauri WebView2 + Firebase Hosting + local dev).
 # Explicit allow_headers ensures CORS headers appear on error responses too.
 app.add_middleware(

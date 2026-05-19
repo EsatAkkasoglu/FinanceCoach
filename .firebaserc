@@ -1,5 +1,7 @@
 {
-  "projects": {},
+  "projects": {
+    "default": "fincoach-esat"
+  },
   "targets": {},
   "etags": {}
 }

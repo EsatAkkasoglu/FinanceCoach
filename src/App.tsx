@@ -32,18 +32,6 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 
-function PlaceholderView({ name }: { name: string }) {
-  return (
-    <div className="flex h-full items-center justify-center text-[hsl(var(--text-muted))]">
-      <div className="card-muted">
-        <p className="text-sm">
-          <span className="font-semibold capitalize">{name}</span>
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function ChatRoute() {
   const { t } = useTranslation("chat");
   const { convId } = useParams<{ convId: string }>();

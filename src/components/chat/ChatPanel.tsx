@@ -530,7 +530,6 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
 // graph on top, "Why this answer" reasoning underneath. Collapses on smaller
 // widths so the chat stays usable on narrow viewports.
 function RightRail({ messages }: { messages: import("@/store").ChatMessage[] }) {
-  const { t } = useTranslation("chat");
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const reasoning = lastAssistant?.reasoning ?? [];
 
@@ -539,7 +538,7 @@ function RightRail({ messages }: { messages: import("@/store").ChatMessage[] }) 
       <div className="flex items-center gap-2 border-b border-[hsl(var(--border))] px-5 py-3.5">
         <Network className="h-3.5 w-3.5 text-accent" />
         <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-          {t("agentGraph") || "Agent activity"}
+          Agent activity
         </span>
       </div>
       <div className="border-b border-[hsl(var(--border))] px-3 py-3">
@@ -549,14 +548,14 @@ function RightRail({ messages }: { messages: import("@/store").ChatMessage[] }) 
         <div className="mb-3 flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5 text-accent" />
           <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-            {t("whyThisAnswer") || "Why this answer"}
+            Why this answer
           </span>
         </div>
         {reasoning.length > 0 ? (
           <ReasoningPanel entries={reasoning} />
         ) : (
           <p className="text-xs text-[hsl(var(--text-muted))]">
-            {t("reasoningEmpty") || "Once the Coach answers, its reasoning shows up here."}
+            Once the Coach answers, its reasoning shows up here.
           </p>
         )}
       </div>
