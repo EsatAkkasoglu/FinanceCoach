@@ -16,7 +16,7 @@ from app.db.models import User
 from app.db.session import SessionLocal
 from app.tools.portfolio_tools import list_transactions
 from app.tools.user_tools import get_user_profile
-from app.tools.goal_tools import list_user_goals, update_goal_progress
+from app.tools.goal_tools import create_user_goal, list_user_goals, update_goal_progress
 
 SYSTEM_PROMPT_DEFAULT_BASE = """You are the Cash-Flow Analyst on the FinCoach Investment Committee.
 
@@ -67,6 +67,12 @@ GOAL-FIRST RULE — when the user mentions a goal by name / topic, or asks
     say on-track / behind / ahead — be specific with the gap.
   • If the user reports a contribution (e.g. "I added 5000 to my goal"),
     call update_goal_progress to persist it.
+  • If the user asks to CREATE a new goal, or confirms a goal you proposed
+    ("onayla", "evet oluştur", "create it"), you MUST call create_user_goal
+    with title, target_amount, and (if a deadline is mentioned) target_date.
+    For "X ayda ulaşmak istiyorum", compute today's date plus X months and
+    pass it as YYYY-MM-DD. NEVER claim a goal was created without actually
+    calling create_user_goal in this turn.
 
 CRITICAL — STAY IN YOUR LANE:
   • DO NOT recommend specific stocks, funds, or asset allocations.
@@ -77,6 +83,8 @@ Tools:
 - list_transactions(limit)
 - get_user_profile()
 - list_user_goals()              ← always call when goals are in scope
+- create_user_goal(title, target_amount, target_date?, current_amount?, icon?, currency?)
+                                 ← persist a new goal the user asked for/confirmed
 - update_goal_progress(goal_id, delta_amount)  ← persist contributions
 
 Tone: warm, specific, non-judgmental."""
@@ -108,7 +116,11 @@ Tools:
 - list_transactions(limit)
 - get_user_profile()
 - list_user_goals()
-- update_goal_progress(goal_id, delta_amount)"""
+- create_user_goal(title, target_amount, target_date?, current_amount?, icon?, currency?)
+- update_goal_progress(goal_id, delta_amount)
+
+When the user asks to CREATE / confirms a goal, you MUST actually call
+create_user_goal — never claim it's done without the tool call."""
 
 RISK_GUIDANCE_ROAST = {
     "conservative": "Lean into 'boring is good' jokes; protect them from speculative spend.",
@@ -123,7 +135,13 @@ def _build_prompt(prompt_base: str, risk_profile: str, use_roast: bool) -> str:
     return prompt_base + "\n" + guidance
 
 
-_TOOLS = [list_transactions, get_user_profile, list_user_goals, update_goal_progress]
+_TOOLS = [
+    list_transactions,
+    get_user_profile,
+    list_user_goals,
+    create_user_goal,
+    update_goal_progress,
+]
 
 
 def _build(prompt: str):

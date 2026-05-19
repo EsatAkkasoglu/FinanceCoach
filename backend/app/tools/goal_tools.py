@@ -10,7 +10,7 @@ so the LLM never has to pass it.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from langchain_core.tools import tool
@@ -92,6 +92,63 @@ def list_user_goals() -> dict[str, Any]:
     }
     summary["currency"] = ccy
     return {"goals": goals, "summary": summary, "currency": ccy}
+
+
+@tool
+def create_user_goal(
+    title: str,
+    target_amount: float,
+    target_date: str | None = None,
+    current_amount: float = 0.0,
+    icon: str = "target",
+    currency: str = "TRY",
+) -> dict[str, Any]:
+    """Create a new savings goal for the current user and persist it to the DB.
+
+    Call this when the user explicitly asks to create / set / save a goal
+    ("acil durum fonu hedefi oluştur", "ev için hedef ekle", "create a goal"),
+    or confirms a proposed goal you offered. Do NOT call this speculatively —
+    only after the user has confirmed amount and (optionally) target date.
+
+    Args:
+      title: short human-readable name (e.g. "Acil durum fonu", "Ev peşinatı").
+      target_amount: positive number, in `currency`.
+      target_date: ISO 8601 date (YYYY-MM-DD), or None for open-ended goals.
+        If the user says "12 ayda", compute today + that many months and pass
+        the resulting YYYY-MM-DD.
+      current_amount: already-saved amount, defaults to 0.
+      icon: lucide-style icon slug (default "target").
+      currency: ISO currency code, defaults to "TRY".
+
+    Returns the created goal dict (with id) on success.
+    """
+    user_id = get_current_user_id_or_none()
+    if user_id is None:
+        return {"error": "no authenticated user in context"}
+    if not title or not title.strip():
+        return {"error": "title is required"}
+    if target_amount is None or float(target_amount) <= 0:
+        return {"error": "target_amount must be > 0"}
+    parsed_date: date | None = None
+    if target_date:
+        try:
+            parsed_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        except ValueError:
+            return {"error": f"target_date must be YYYY-MM-DD, got {target_date!r}"}
+    with SessionLocal() as db:
+        g = Goal(
+            user_id=user_id,
+            title=title.strip(),
+            target_amount=float(target_amount),
+            current_amount=max(0.0, float(current_amount or 0.0)),
+            target_date=parsed_date,
+            icon=icon or "target",
+            currency=currency or "TRY",
+        )
+        db.add(g)
+        db.commit()
+        db.refresh(g)
+        return {"ok": True, "action": "created", "goal": _goal_dict(g)}
 
 
 @tool
