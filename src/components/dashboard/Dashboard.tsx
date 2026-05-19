@@ -11,23 +11,30 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   TrendingUp, TrendingDown, Sparkles, AlertCircle, Flame, Newspaper, Coins,
   type LucideIcon,
   Loader2, ArrowUpRight, ArrowDownRight, PiggyBank,
+  Info, ArrowRight, Wallet, Receipt, Target, Briefcase,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis,
 } from "recharts";
 
-import { listPortfolio, getBriefing, getBudgetSummary, captureNetWorth, netWorthHistory, type Holding, type PortfolioTotals, type BriefingItem, type BudgetSummary, type NetWorthPoint } from "@/lib/api";
+import {
+  listPortfolio, getBriefing, getBudgetSummary, captureNetWorth, netWorthHistory,
+  listAccounts, listGoals,
+  type Holding, type PortfolioTotals, type BriefingItem, type BudgetSummary, type NetWorthPoint,
+} from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { useFxRates } from "@/lib/fx";
 import { cn } from "@/lib/cn";
-import { useDashboardStore, useUserStore } from "@/store";
+import { useDashboardStore, useUserStore, useAuthStore } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
 import { Disclaimer } from "@/components/ui/Disclaimer";
+import { buildLocalizedPath, getLanguageFromPath } from "@/lib/routing";
 
 const ICONS: Record<BriefingItem["icon"], LucideIcon> = {
   trending_up: TrendingUp,
@@ -51,17 +58,20 @@ const ASSET_COLORS: Record<string, string> = {
 const STALE_MS = 5 * 60 * 1000;
 
 function useGreeting(name: string) {
+  const { t } = useTranslation("dashboard");
   return useMemo(() => {
     const h = new Date().getHours();
-    const salutation = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+    const key = h < 12 ? "greeting.morning" : h < 18 ? "greeting.afternoon" : "greeting.evening";
+    const salutation = t(key);
     return name ? `${salutation}, ${name}` : salutation;
-  }, [name]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, t]);
 }
 
-const RISK_BADGE: Record<string, { label: string; cls: string }> = {
-  conservative: { label: "Conservative", cls: "bg-blue-500/15 text-blue-400" },
-  balanced:     { label: "Balanced",     cls: "bg-accent/15 text-accent" },
-  aggressive:   { label: "Aggressive",   cls: "bg-orange-500/15 text-orange-400" },
+const RISK_BADGE_CLS: Record<string, string> = {
+  conservative: "bg-blue-500/15 text-blue-400",
+  balanced:     "bg-accent/15 text-accent",
+  aggressive:   "bg-orange-500/15 text-orange-400",
 };
 
 export function Dashboard() {
@@ -69,11 +79,17 @@ export function Dashboard() {
   const { cache, loading, setCache, setLoading } = useDashboardStore();
   const [error, setError] = useState<string | null>(null);
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
+  const [accountCount, setAccountCount] = useState<number | null>(null);
+  const [goalCount, setGoalCount] = useState<number | null>(null);
+  const [briefingFetchedAt, setBriefingFetchedAt] = useState<number | null>(null);
 
-  const { name, avatar, riskProfile } = useUserStore();
+  const { name, avatar, riskProfile, riskScore, monthlyIncome } = useUserStore();
+  const authUser = useAuthStore((s) => s.user);
   const avatarMeta = AVATARS.find((a) => a.id === avatar) ?? AVATARS[0];
   const greeting = useGreeting(name);
-  const badge = RISK_BADGE[riskProfile] ?? RISK_BADGE.balanced;
+  const badgeCls = RISK_BADGE_CLS[riskProfile] ?? RISK_BADGE_CLS.balanced;
+  const badgeLabel = t(`riskBadge.${riskProfile}`);
+  const riskExplain = t(`riskExplanation.${riskProfile}`, { score: riskScore });
 
   const holdings = cache?.holdings ?? [];
   const totals = cache?.totals ?? null;
@@ -89,16 +105,20 @@ export function Dashboard() {
       setLoading(true);
       setError(null);
       try {
-        const [p, b, budgetData] = await Promise.all([
+        const [p, b, budgetData, accounts, goals] = await Promise.all([
           listPortfolio(),
           getBriefing(),
           getBudgetSummary().catch(() => null),
+          listAccounts().catch(() => []),
+          listGoals().catch(() => []),
         ]);
         if (cancelled) return;
         setCache({ holdings: p.holdings, totals: p.totals, briefing: b.items, fetchedAt: Date.now() });
         setBudget(budgetData);
+        setAccountCount(accounts.length);
+        setGoalCount(goals.length);
+        setBriefingFetchedAt(Date.now());
 
-        // Capture today's net-worth snapshot (idempotent) + load 30-day history.
         if (p.totals && p.totals.count > 0) {
           captureNetWorth(p.totals.value, "USD").catch(() => {});
         }
@@ -114,6 +134,16 @@ export function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Compute totals for the next-step recommendation
+  const hasIncome = useMemo(() => {
+    if (!budget) return monthlyIncome > 0;
+    return Object.values(budget.income_mtd).some((v) => v > 0) || monthlyIncome > 0;
+  }, [budget, monthlyIncome]);
+  const hasExpense = useMemo(() => {
+    if (!budget) return false;
+    return Object.values(budget.expense_mtd).some((v) => v > 0);
+  }, [budget]);
+
   return (
     <div>
       {/* Top bar — anchors page title vs page content */}
@@ -121,9 +151,7 @@ export function Dashboard() {
         <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
           {t("title")}
         </span>
-        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide", badge.cls)}>
-          {badge.label}
-        </span>
+        <RiskBadge cls={badgeCls} label={badgeLabel} explanation={riskExplain} title={t("riskExplanation.title")} />
       </div>
 
       {/* Personalized hero header */}
@@ -146,10 +174,20 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-6">
         <NetWorthCard totals={totals} holdings={holdings} history={history} loading={loading && !cache} />
         <BudgetSnapshotCard budget={budget} loading={loading && !cache} />
-        <BriefingCard items={briefing} loading={loading && !cache} />
+        <BriefingCard items={briefing} loading={loading && !cache} fetchedAt={briefingFetchedAt} />
         <PortfolioCard holdings={holdings} loading={loading && !cache} />
         <HoldingsTable holdings={holdings} loading={loading && !cache} />
       </div>
+
+      <NextStepCard
+        loading={loading && !cache}
+        hasOnboarded={authUser?.has_onboarded ?? false}
+        accountCount={accountCount}
+        hasIncome={hasIncome}
+        hasExpense={hasExpense}
+        goalCount={goalCount}
+        holdingCount={holdings.length}
+      />
 
       <Disclaimer className="mt-8 text-center" />
     </div>
@@ -167,12 +205,13 @@ function NetWorthCard({
 }) {
   const { t } = useTranslation("dashboard");
   const fx = useFxRates();
+  // Always honor the user's selected display currency, even when there are
+  // no holdings (empty state previously hard-coded USD).
+  const displayCcy = fx.rates ? fx.target : "USD";
   let value = totals?.value ?? 0;
   let pnl = totals?.pnl ?? 0;
   let pnlPct = totals?.pnl_pct ?? 0;
-  let displayCcy = "USD";
   if (fx.rates && totals && totals.count > 0) {
-    displayCcy = fx.target;
     let v = 0, c = 0;
     for (const h of holdings) {
       const ccy = h.currency ?? "USD";
@@ -236,7 +275,6 @@ function NetWorthCard({
 function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null; loading: boolean }) {
   const { t } = useTranslation("dashboard");
   const fx = useFxRates();
-  const { monthlyIncome } = useUserStore();
 
   const totalIncome = useMemo(() => {
     if (!budget) return null;
@@ -256,17 +294,18 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
 
   const displayCcy = fx.rates ? fx.target : "USD";
 
-  // Savings rate: (income - expense) / income, or fall back to onboarding monthlyIncome
+  // Savings rate is only meaningful when BOTH income AND expense have real data
+  // for the month. Falling back to onboarding `monthlyIncome` while expenses
+  // are 0 makes the rate trivially 100% — misleading and not useful.
   const savingsRate = useMemo(() => {
-    if (totalIncome != null && totalIncome > 0 && totalExpense != null) {
+    if (
+      totalIncome != null && totalIncome > 0 &&
+      totalExpense != null && totalExpense > 0
+    ) {
       return ((totalIncome - totalExpense) / totalIncome) * 100;
     }
-    if (monthlyIncome > 0 && totalExpense != null) {
-      const inc = fx.rates ? (fx.convert(monthlyIncome, "USD") ?? monthlyIncome) : monthlyIncome;
-      return ((inc - totalExpense) / inc) * 100;
-    }
     return null;
-  }, [totalIncome, totalExpense, monthlyIncome, fx]);
+  }, [totalIncome, totalExpense]);
 
   return (
     <div className="card lg:col-span-2">
@@ -315,10 +354,30 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
 }
 
 // ---------- Briefing ----------
-function BriefingCard({ items, loading }: { items: BriefingItem[] | null; loading: boolean }) {
+function BriefingCard({
+  items, loading, fetchedAt,
+}: {
+  items: BriefingItem[] | null;
+  loading: boolean;
+  fetchedAt: number | null;
+}) {
   const { t } = useTranslation("dashboard");
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!fetchedAt) return;
+    const id = setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, [fetchedAt]);
+
+  function relativeTime(): string {
+    if (!fetchedAt) return "";
+    const minutes = Math.floor((Date.now() - fetchedAt) / 60_000);
+    if (minutes < 1) return t("addedJustNow");
+    return t("addedMinutesAgo", { count: minutes });
+  }
+
   return (
-    <div className="card lg:col-span-2">
+    <div className="card lg:col-span-2 flex flex-col">
       <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("todaysBrief")}</div>
       {loading ? (
         <div className="mt-3 flex h-16 items-center">
@@ -346,6 +405,12 @@ function BriefingCard({ items, loading }: { items: BriefingItem[] | null; loadin
         </ul>
       ) : (
         <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{t("briefUnavailable")}</p>
+      )}
+      {fetchedAt && (
+        <div className="mt-auto flex items-center justify-between pt-3 text-[10px] text-[hsl(var(--text-muted))]">
+          <span className="truncate">{t("briefSource")}</span>
+          <span className="shrink-0 pl-2">{t("briefUpdated", { time: relativeTime() })}</span>
+        </div>
       )}
     </div>
   );
@@ -425,6 +490,153 @@ function PortfolioCard({ holdings, loading }: { holdings: Holding[]; loading: bo
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// ---------- Risk Badge (with hover explanation) ----------
+function RiskBadge({
+  cls, label, explanation, title,
+}: {
+  cls: string;
+  label: string;
+  explanation: string;
+  title: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide transition",
+          cls
+        )}
+      >
+        <span>{label}</span>
+        <Info className="h-3 w-3 opacity-70" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3 text-left shadow-2xl">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+            {title}
+          </p>
+          <p className="text-xs leading-relaxed text-[hsl(var(--text))]">{explanation}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Next Step Card (coach's call-to-action) ----------
+type StepKind = "onboarding" | "account" | "income" | "expense" | "goal" | "holding";
+
+interface NextStepProps {
+  loading: boolean;
+  hasOnboarded: boolean;
+  accountCount: number | null;
+  hasIncome: boolean;
+  hasExpense: boolean;
+  goalCount: number | null;
+  holdingCount: number;
+}
+
+function NextStepCard({
+  loading, hasOnboarded, accountCount, hasIncome, hasExpense, goalCount, holdingCount,
+}: NextStepProps) {
+  const { t } = useTranslation("dashboard");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const lang = getLanguageFromPath(location.pathname) ?? "en";
+
+  // Build the ordered checklist; first not-yet-done = next step.
+  const steps: { kind: StepKind; done: boolean }[] = [
+    { kind: "onboarding", done: hasOnboarded },
+    { kind: "account",    done: (accountCount ?? 0) > 0 },
+    { kind: "income",     done: hasIncome },
+    { kind: "expense",    done: hasExpense },
+    { kind: "goal",       done: (goalCount ?? 0) > 0 },
+    { kind: "holding",    done: holdingCount > 0 },
+  ];
+  const completedCount = steps.filter((s) => s.done).length;
+  const pct = Math.round((completedCount / steps.length) * 100);
+  const next = steps.find((s) => !s.done);
+
+  const META: Record<StepKind, {
+    title: string; desc: string; cta: string;
+    Icon: LucideIcon; path: string;
+  }> = {
+    onboarding: { title: t("nextStep.completeOnboarding"), desc: t("nextStep.completeOnboardingDesc"), cta: t("nextStep.completeOnboarding"), Icon: Sparkles, path: "/dashboard" },
+    account:    { title: t("nextStep.addAccount"),    desc: t("nextStep.addAccountDesc"),    cta: t("nextStep.ctaAccount"),   Icon: Wallet,    path: "/budget" },
+    income:     { title: t("nextStep.addIncome"),     desc: t("nextStep.addIncomeDesc"),     cta: t("nextStep.ctaIncome"),    Icon: ArrowUpRight, path: "/budget" },
+    expense:    { title: t("nextStep.addExpense"),    desc: t("nextStep.addExpenseDesc"),    cta: t("nextStep.ctaExpense"),   Icon: Receipt,   path: "/budget" },
+    goal:       { title: t("nextStep.addGoal"),       desc: t("nextStep.addGoalDesc"),       cta: t("nextStep.ctaGoal"),      Icon: Target,    path: "/goals" },
+    holding:    { title: t("nextStep.addHolding"),    desc: t("nextStep.addHoldingDesc"),    cta: t("nextStep.ctaHolding"),   Icon: Briefcase, path: "/portfolio" },
+  };
+
+  if (loading) return null;
+
+  const allDone = !next;
+  const meta = next ? META[next.kind] : null;
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border border-accent/30 bg-gradient-to-br from-accent/10 via-accent/5 to-transparent p-5">
+      <div className="flex flex-col items-start gap-4 md:flex-row md:items-center">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent/20 shadow-glow">
+          {allDone ? (
+            <Sparkles className="h-6 w-6 text-accent" />
+          ) : meta ? (
+            <meta.Icon className="h-6 w-6 text-accent" />
+          ) : null}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-accent">
+              {t("nextStep.title")}
+            </span>
+            <span className="text-[10px] text-[hsl(var(--text-muted))]">·</span>
+            <span className="text-[10px] text-[hsl(var(--text-muted))]">
+              {t("nextStep.subtitle")}
+            </span>
+          </div>
+          <h3 className="mt-1 text-lg font-semibold tracking-tight">
+            {allDone ? t("nextStep.allDone") : meta?.title}
+          </h3>
+          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            {allDone ? t("nextStep.allDoneDesc") : meta?.desc}
+          </p>
+
+          {/* Progress bar */}
+          <div className="mt-3 flex items-center gap-3">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+              <div
+                className="h-full rounded-full bg-accent transition-all duration-500"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="shrink-0 text-[10px] font-medium text-[hsl(var(--text-muted))]">
+              {completedCount}/{steps.length} · {pct}% {t("profileCompletion.complete")}
+            </span>
+          </div>
+        </div>
+
+        {!allDone && meta && (
+          <button
+            type="button"
+            onClick={() => navigate(buildLocalizedPath(lang, meta.path))}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-glow transition hover:bg-accent/90 active:scale-95"
+          >
+            {meta.cta}
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

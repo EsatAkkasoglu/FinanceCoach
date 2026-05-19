@@ -1,6 +1,6 @@
 {
   "title": "Dashboard",
-  "todayAtAGlance": "Today at a glance",
+  "todayAtAGlance": "Today's snapshot and your next best move",
   "netWorth": "Net worth",
   "allTime": "all-time",
   "lastNDays": "Last {{count}} days",
@@ -16,6 +16,62 @@
   "addHoldingsForBreakdown": "Add holdings to see breakdown.",
   "holdings": "Holdings",
   "noHoldingsDesc": "No holdings yet. Add from the Portfolio tab to see live valuations.",
+  "greeting": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening"
+  },
+  "riskBadge": {
+    "label": "Risk profile",
+    "conservative": "Conservative",
+    "balanced": "Balanced",
+    "aggressive": "Aggressive"
+  },
+  "riskExplanation": {
+    "title": "Why this profile?",
+    "conservative": "Your answers (score {{score}}/125) prioritize capital preservation. Low volatility tolerance and short horizon. Recommendations will lean into bonds and cash.",
+    "balanced": "Your answers (score {{score}}/125) balance growth and stability. Medium horizon, moderate volatility tolerance. Recommendations will lean 60/40 stocks/bonds.",
+    "aggressive": "Your answers (score {{score}}/125) prioritize growth over stability. Long horizon, comfortable with volatility. Recommendations will lean into equities and growth assets."
+  },
+  "briefSource": "Sources: yfinance, NewsAPI, fear/greed index",
+  "briefUpdated": "Updated {{time}}",
+  "addedJustNow": "just now",
+  "addedMinutesAgo": "{{count}}m ago",
+  "nextStep": {
+    "title": "Your next best move",
+    "subtitle": "Suggested by your coach",
+    "addAccount": "Add your first account",
+    "addAccountDesc": "Adding a bank account starts your net worth view.",
+    "addIncome": "Add your monthly income",
+    "addIncomeDesc": "Income unlocks budget analytics.",
+    "addExpense": "Log your first expense",
+    "addExpenseDesc": "Add a real expense this month — I'll compute your true savings rate.",
+    "addGoal": "Set your first goal",
+    "addGoalDesc": "Emergency fund, home or trip — add a goal and I'll plan the monthly saving.",
+    "addHolding": "Add your investments",
+    "addHoldingDesc": "Add stocks/ETFs/crypto to start return analysis.",
+    "completeOnboarding": "Complete your profile",
+    "completeOnboardingDesc": "A few questions left — you're one step away from personalized recommendations.",
+    "ctaAccount": "Add account",
+    "ctaIncome": "Add income",
+    "ctaExpense": "Add transaction",
+    "ctaGoal": "Create goal",
+    "ctaHolding": "Add holding",
+    "allDone": "Profile complete 🎉",
+    "allDoneDesc": "All key data is in. Ask your coach for an analysis any time."
+  },
+  "profileCompletion": {
+    "title": "Profile completion",
+    "complete": "complete",
+    "steps": {
+      "onboarding": "Onboarding",
+      "account": "Account",
+      "income": "Income",
+      "expense": "Transaction",
+      "goal": "Goal",
+      "holding": "Investment"
+    }
+  },
   "table": {
     "ticker": "Ticker",
     "qty": "Qty",

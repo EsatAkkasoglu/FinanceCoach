@@ -1,6 +1,6 @@
 {
   "title": "Özet",
-  "todayAtAGlance": "Bugünün özeti",
+  "todayAtAGlance": "Bugünün finansal özeti ve sıradaki en iyi adım",
   "netWorth": "Net değer",
   "allTime": "tüm zamanlar",
   "lastNDays": "Son {{count}} gün",
@@ -16,6 +16,62 @@
   "addHoldingsForBreakdown": "Dağılımı görmek için varlık ekleyin.",
   "holdings": "Varlıklar",
   "noHoldingsDesc": "Henüz varlık yok. Canlı değerleme için Portföy sekmesinden ekleyin.",
+  "greeting": {
+    "morning": "Günaydın",
+    "afternoon": "İyi günler",
+    "evening": "İyi akşamlar"
+  },
+  "riskBadge": {
+    "label": "Risk profili",
+    "conservative": "Korumacı",
+    "balanced": "Dengeli",
+    "aggressive": "Agresif"
+  },
+  "riskExplanation": {
+    "title": "Bu profili neden aldınız?",
+    "conservative": "Yanıtlarınız (puan {{score}}/125) sermaye korumayı öne çıkarıyor. Volatilite konforunuz düşük ve yatırım vadeniz kısa. Önerilerimiz tahvil ve nakit ağırlıklı olacak.",
+    "balanced": "Yanıtlarınız (puan {{score}}/125) büyüme ile istikrar arasında denge gösteriyor. Orta vadeli hedefler ve makul volatilite toleransı. Önerilerimiz 60/40 hisse/tahvil temelli olacak.",
+    "aggressive": "Yanıtlarınız (puan {{score}}/125) yüksek büyüme hedefi ve uzun yatırım vadesi gösteriyor. Volatiliteyi kabul edebiliyorsunuz. Önerilerimiz hisse ve büyüme varlıklarına yönelik olacak."
+  },
+  "briefSource": "Veri kaynakları: yfinance, NewsAPI, korku/açgözlülük endeksi",
+  "briefUpdated": "Güncellendi {{time}}",
+  "addedJustNow": "az önce",
+  "addedMinutesAgo": "{{count}} dk önce",
+  "nextStep": {
+    "title": "Sıradaki en iyi adım",
+    "subtitle": "Koçun bir sonraki önerisi",
+    "addAccount": "İlk hesabını ekle",
+    "addAccountDesc": "Banka hesabını ekleyerek net değerini görmeye başla.",
+    "addIncome": "Aylık gelirini ekle",
+    "addIncomeDesc": "Gelir bilgini ekleyerek bütçe analizini aktifleştir.",
+    "addExpense": "İlk işlemini ekle",
+    "addExpenseDesc": "Bu ay yaptığın bir gideri ekle — gerçek tasarruf oranını hesaplayayım.",
+    "addGoal": "İlk hedefini belirle",
+    "addGoalDesc": "Acil durum fonu, ev veya tatil — bir hedef ekle, aylık birikim planı hazırlayayım.",
+    "addHolding": "Yatırımlarını ekle",
+    "addHoldingDesc": "Portföye hisse/ETF/kripto ekleyerek getiri analizine başla.",
+    "completeOnboarding": "Profilini tamamla",
+    "completeOnboardingDesc": "Birkaç soru daha — sana özel önerilere bir adım kaldı.",
+    "ctaAccount": "Hesap ekle",
+    "ctaIncome": "Gelir ekle",
+    "ctaExpense": "İşlem ekle",
+    "ctaGoal": "Hedef oluştur",
+    "ctaHolding": "Varlık ekle",
+    "allDone": "Profilin tamamlandı 🎉",
+    "allDoneDesc": "Tüm temel veriler hazır. Koçundan istediğin zaman analiz iste."
+  },
+  "profileCompletion": {
+    "title": "Profil tamamlanma",
+    "complete": "tamamlandı",
+    "steps": {
+      "onboarding": "Onboarding",
+      "account": "Hesap",
+      "income": "Gelir",
+      "expense": "İşlem",
+      "goal": "Hedef",
+      "holding": "Yatırım"
+    }
+  },
   "table": {
     "ticker": "Sembol",
     "qty": "Adet",
