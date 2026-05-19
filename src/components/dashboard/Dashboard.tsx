@@ -155,15 +155,14 @@ export function Dashboard() {
       </div>
 
       {/* Personalized hero header */}
-      <div className="mb-10 flex items-center gap-5">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/20 text-3xl leading-none shadow-glow shrink-0">
-          {avatarMeta.emoji}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-[32px] font-semibold leading-tight tracking-tight truncate">{greeting}</h1>
-          <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{t("todayAtAGlance")}</p>
-        </div>
-      </div>
+      <DashboardHero
+        avatarEmoji={avatarMeta.emoji}
+        greeting={greeting}
+        totals={totals}
+        holdings={holdings}
+        fallbackSubtitle={t("todayAtAGlance")}
+      />
+
 
       {error && (
         <div className="mb-6 rounded-xl border border-loss/40 bg-loss/10 px-4 py-3 text-sm text-loss">
@@ -190,6 +189,69 @@ export function Dashboard() {
       />
 
       <Disclaimer className="mt-8 text-center" />
+    </div>
+  );
+}
+
+// ---------- Hero ----------
+function DashboardHero({
+  avatarEmoji, greeting, totals, holdings, fallbackSubtitle,
+}: {
+  avatarEmoji: string;
+  greeting: string;
+  totals: PortfolioTotals | null;
+  holdings: Holding[];
+  fallbackSubtitle: string;
+}) {
+  const fx = useFxRates();
+  const displayCcy = fx.rates ? fx.target : "USD";
+
+  // Aggregate today's $ delta across holdings in the display currency.
+  // `change_today` is a per-position percentage; the kit's hero shows the
+  // sum of (value * change_today / 100). We compute the same here when the
+  // backend hasn't aggregated it for us.
+  const { todayDelta, totalValue } = useMemo(() => {
+    let value = 0;
+    let delta = 0;
+    for (const h of holdings) {
+      const ccy = h.currency ?? "USD";
+      const hv = fx.rates ? (fx.convert(h.current_value ?? 0, ccy) ?? (h.current_value ?? 0)) : (h.current_value ?? 0);
+      value += hv;
+      const pct = (h as unknown as { change_today?: number }).change_today;
+      if (typeof pct === "number") delta += hv * (pct / 100);
+    }
+    if (totals && value === 0) value = totals.value;
+    return { todayDelta: delta, totalValue: value };
+  }, [holdings, totals, fx]);
+
+  const showDelta = totalValue > 0;
+  const positive = todayDelta >= 0;
+
+  return (
+    <div className="mb-10 flex items-center gap-5">
+      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-accent/20 text-3xl leading-none shadow-glow">
+        {avatarEmoji}
+      </div>
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-[32px] font-semibold leading-tight tracking-tight">{greeting}</h1>
+        {showDelta ? (
+          <p className="mt-2 flex flex-wrap items-baseline gap-x-2 text-sm text-[hsl(var(--text-muted))]">
+            <span className="num font-medium text-[hsl(var(--text))]">
+              {formatCurrency(totalValue, displayCcy)}
+            </span>
+            <span className="opacity-50">·</span>
+            {todayDelta === 0 ? (
+              <span className="text-[hsl(var(--text-muted))]">{fallbackSubtitle}</span>
+            ) : (
+              <span className={cn("num font-medium", positive ? "text-gain" : "text-loss")}>
+                {positive ? "▲" : "▼"} {formatCurrency(Math.abs(todayDelta), displayCcy)} today
+              </span>
+            )}
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{fallbackSubtitle}</p>
+        )}
+      </div>
     </div>
   );
 }

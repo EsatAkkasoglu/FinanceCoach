@@ -9,7 +9,10 @@ import { parseToolResult } from "@/lib/parseToolResult";
 import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity } from "@/store";
 import { cn } from "@/lib/cn";
 import { AgentBadge } from "./AgentBadge";
+import { AgentGraph } from "./AgentGraph";
+import { ReasoningPanel } from "./ReasoningPanel";
 import { Disclaimer } from "@/components/ui/Disclaimer";
+import { Network, Sparkles } from "lucide-react";
 
 function pickRandom<T>(arr: T[], n: number): T[] {
   const copy = [...arr];
@@ -29,7 +32,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const { t } = useTranslation("chat");
   const {
     messagesByConv, streaming,
-    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setMessageSuggestions, setStreaming, resetConv,
+    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setMessageSuggestions, addReasoning, setStreaming, resetConv,
   } = useChatStore();
   const messages = messagesByConv[convId] ?? [];
   const setAgentEvent = useAgentVizStore((s) => s.setEvent);
@@ -217,6 +220,18 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             break;
           }
           case "agent_reasoning": {
+            const p = event.payload as Record<string, unknown>;
+            if (lastAsstId.current && typeof p.agent === "string") {
+              addReasoning(convId, lastAsstId.current, {
+                agent: p.agent as string,
+                why_summary: typeof p.why_summary === "string" ? p.why_summary : undefined,
+                key_drivers: Array.isArray(p.key_drivers) ? (p.key_drivers as Array<{ source: string; factor: string; impact: string }>) : [],
+                allocation_drivers: Array.isArray(p.allocation_drivers) ? (p.allocation_drivers as Array<{ asset_class: string; drivers: Array<{ source: string; factor: string; impact: string }> }>) : undefined,
+                risk_score: typeof p.risk_score === "number" ? p.risk_score : undefined,
+                profile: typeof p.profile === "string" ? p.profile : undefined,
+                equity_band: Array.isArray(p.equity_band) ? (p.equity_band as [number | undefined, number | undefined]) : undefined,
+              });
+            }
             break;
           }
           case "suggestions": {
@@ -505,7 +520,47 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
         <Disclaimer className="mt-2 text-center" />
       </div>
 
+      <RightRail messages={messages} />
     </div>
+  );
+}
+
+// ─── RightRail ───────────────────────────────────────────────────────────────
+// Persistent 460px panel on lg+ surfacing the multi-agent narrative: live agent
+// graph on top, "Why this answer" reasoning underneath. Collapses on smaller
+// widths so the chat stays usable on narrow viewports.
+function RightRail({ messages }: { messages: import("@/store").ChatMessage[] }) {
+  const { t } = useTranslation("chat");
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  const reasoning = lastAssistant?.reasoning ?? [];
+
+  return (
+    <aside className="hidden w-[460px] shrink-0 flex-col border-l border-[hsl(var(--border))] bg-[hsl(var(--surface))] lg:flex">
+      <div className="flex items-center gap-2 border-b border-[hsl(var(--border))] px-5 py-3.5">
+        <Network className="h-3.5 w-3.5 text-accent" />
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+          {t("agentGraph") || "Agent activity"}
+        </span>
+      </div>
+      <div className="border-b border-[hsl(var(--border))] px-3 py-3">
+        <AgentGraph />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5 text-accent" />
+          <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+            {t("whyThisAnswer") || "Why this answer"}
+          </span>
+        </div>
+        {reasoning.length > 0 ? (
+          <ReasoningPanel entries={reasoning} />
+        ) : (
+          <p className="text-xs text-[hsl(var(--text-muted))]">
+            {t("reasoningEmpty") || "Once the Coach answers, its reasoning shows up here."}
+          </p>
+        )}
+      </div>
+    </aside>
   );
 }
 

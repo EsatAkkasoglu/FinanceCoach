@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   MessageSquare, LayoutDashboard, Briefcase, Wallet, Target, FileText, Settings as SettingsIcon,
   Coins, Compass, Search, Brain,
-  Circle, Plus, Trash2, Pencil, Check, X, LogOut, ChevronDown, ChevronRight,
+  Plus, Trash2, Pencil, Check, X, LogOut, ChevronDown, ChevronRight, ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { buildLocalizedPath, getLanguageFromPath, isSupportedLanguage, stripLanguagePrefix } from "@/lib/routing";
@@ -35,6 +35,19 @@ interface Props {
   onMobileClose?: () => void;
 }
 
+// Inline brand mark — a stylized forward "F" matching design system preview/brand-logo.html.
+function BrandMark({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <g stroke="#FFFFFF" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 50 L20 16 L42 16 L52 6" />
+        <path d="M46 6 L52 6 L52 12" />
+        <path d="M20 32 L36 32" />
+      </g>
+    </svg>
+  );
+}
+
 export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpen = false, onMobileClose }: Props) {
   const { t, i18n } = useTranslation();
   const { t: tChat } = useTranslation("chat");
@@ -50,10 +63,6 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
   const authUser = useAuthStore((s) => s.user);
   const setAuthUser = useAuthStore((s) => s.setUser);
 
-  async function handleLogout() {
-    await apiLogout();
-    setAuthUser(null);
-  }
   const [creating, setCreating] = useState(false);
   const [recentOpen, setRecentOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -61,6 +70,13 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<MemoryHit[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileWrapRef = useRef<HTMLDivElement | null>(null);
+
+  async function handleLogout() {
+    await apiLogout();
+    setAuthUser(null);
+  }
 
   useEffect(() => {
     const q = search.trim();
@@ -81,6 +97,17 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
     }, 300);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  // Close profile menu on outside click
+  useEffect(() => {
+    if (!profileOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!profileWrapRef.current?.contains(e.target as Node)) setProfileOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [profileOpen]);
+
   const avatarMeta = AVATARS.find((a) => a.id === avatar) ?? AVATARS[0];
 
   useEffect(() => {
@@ -145,6 +172,10 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
     setEditingId(null);
   }
 
+  const displayName = name || authUser?.username || "You";
+  const visibleConvs = conversations.slice(0, 6);
+  const hiddenCount = Math.max(0, conversations.length - visibleConvs.length);
+
   return (
     <>
       {mobileOpen && (
@@ -154,124 +185,113 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
           aria-hidden="true"
         />
       )}
-    <aside
-      className={cn(
-        "z-40 flex w-60 flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4",
-        "fixed inset-y-0 left-0 transition-transform duration-200 md:static md:translate-x-0",
-        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-      )}
-    >
-      {/* Logo + user identity */}
-      <div className="mb-4 flex items-center gap-2 px-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent shadow-glow text-lg leading-none">
-          {avatarMeta.emoji}
+      <aside
+        className={cn(
+          "z-40 flex w-60 flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 pt-4 pb-3.5",
+          "fixed inset-y-0 left-0 transition-transform duration-200 md:static md:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+        )}
+      >
+        {/* Brand row — logo tile + wordmark, separated from profile */}
+        <div className="mb-3.5 flex items-center gap-2.5 px-1.5">
+          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-accent shadow-glow">
+            <BrandMark size={18} />
+          </div>
+          <div className="text-[15px] font-bold leading-none tracking-tight">{t("appName")}</div>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold tracking-tight">{t("appName")}</div>
-          {(name || authUser?.username) && (
-            <div className="truncate text-[10px] text-[hsl(var(--text-muted))]">
-              {name || authUser?.username}
+
+        {/* Search row — semantic memory search disguised as a chats search */}
+        <div className="mb-3">
+          <div className="flex items-center gap-2 rounded-[10px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2.5 py-[7px] focus-within:border-accent">
+            <Search className="h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("search")}
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[hsl(var(--text-muted))]"
+            />
+            <span className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-1.5 py-0.5 font-mono text-[10px] text-[hsl(var(--text-muted))]">
+              ⌘K
+            </span>
+          </div>
+          {searchResults && (
+            <div className="mt-1.5 max-h-44 overflow-y-auto rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-1.5 text-[10px]">
+              {searching && <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("loading")}</div>}
+              {!searching && searchResults.length === 0 && (
+                <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("noResults")}</div>
+              )}
+              {!searching && searchResults.map((h, i) => (
+                <div key={i} className="flex items-start gap-1.5 rounded px-1 py-1 hover:bg-[hsl(var(--surface-2))]">
+                  <Brain className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 leading-snug text-[hsl(var(--text))]">{h.text}</p>
+                    {(h.metadata as { kind?: string }).kind && (
+                      <p className="mt-0.5 uppercase tracking-wide text-[9px] text-[hsl(var(--text-muted))]">
+                        {(h.metadata as { kind?: string }).kind}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
-        <button
-          onClick={handleLogout}
-          title="Sign out"
-          className="rounded-md p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-        </button>
-      </div>
 
-      {/* Main nav — product spine */}
-      <nav className="mb-4 flex flex-col gap-1">
-        {NAV_PATHS.map(({ path, key, icon: Icon }) => {
-          const active = currentPath === path || currentPath.startsWith(`${path}/`);
-          return (
-            <button
-              key={path}
-              onClick={() => void handleNavClick(path)}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
-                active
-                  ? "bg-accent-muted text-accent"
-                  : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {t(`nav.${key}`)}
-            </button>
-          );
-        })}
-      </nav>
+        {/* Main nav */}
+        <nav className="mb-3.5 flex flex-col gap-0.5">
+          {NAV_PATHS.map(({ path, key, icon: Icon }) => {
+            const active = currentPath === path || currentPath.startsWith(`${path}/`);
+            return (
+              <button
+                key={path}
+                onClick={() => void handleNavClick(path)}
+                className={cn(
+                  "flex items-center gap-3 rounded-[10px] px-3 py-2 text-[13px] transition",
+                  active
+                    ? "bg-accent-muted text-accent"
+                    : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]",
+                )}
+              >
+                <Icon className="h-[15px] w-[15px]" />
+                {t(`nav.${key}`)}
+              </button>
+            );
+          })}
+        </nav>
 
-      {/* Semantic memory search */}
-      <div className="mb-3 px-2">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("search")}
-            className="w-full rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] py-1 pl-7 pr-2 text-[11px] outline-none focus:border-accent"
-          />
-        </div>
-        {searchResults && (
-          <div className="mt-1.5 max-h-44 overflow-y-auto rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-1.5 text-[10px]">
-            {searching && <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("loading")}</div>}
-            {!searching && searchResults.length === 0 && (
-              <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("noResults")}</div>
-            )}
-            {!searching && searchResults.map((h, i) => (
-              <div key={i} className="flex items-start gap-1.5 rounded px-1 py-1 hover:bg-[hsl(var(--surface-2))]">
-                <Brain className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 leading-snug text-[hsl(var(--text))]">{h.text}</p>
-                  {(h.metadata as { kind?: string }).kind && (
-                    <p className="mt-0.5 uppercase tracking-wide text-[9px] text-[hsl(var(--text-muted))]">
-                      {(h.metadata as { kind?: string }).kind}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Recent chats (collapsible) */}
-      <div className="mb-4">
-        <div className="mb-1 flex items-center justify-between px-2">
+        {/* Recent eyebrow + new chat */}
+        <div className="mb-1.5 flex items-center justify-between px-2">
           <button
             onClick={() => setRecentOpen((v) => !v)}
-            className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))]"
+            className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))]"
           >
-            {recentOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {recentOpen ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
             {t("recent")}
           </button>
           <button
             onClick={handleNewChat}
             disabled={creating}
             title={tChat("newChat")}
-            className="rounded-md p-1 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-accent disabled:opacity-40"
+            className="rounded p-1 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-accent disabled:opacity-40"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3 w-3" />
           </button>
         </div>
-        {recentOpen && conversations.length > 0 && (
-          <div className="flex flex-col gap-0.5 overflow-y-auto max-h-52">
-            {conversations.map((conv) => (
+
+        {recentOpen && visibleConvs.length > 0 && (
+          <div className="flex max-h-44 flex-col gap-px overflow-y-auto">
+            {visibleConvs.map((conv) => (
               <div
                 key={conv.id}
                 onClick={() => onSelectConversation(conv)}
                 className={cn(
-                  "group flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs transition",
+                  "group flex cursor-pointer items-center gap-2 rounded-[10px] px-3 py-2 text-xs transition",
                   onChatRoute && activeConvId === conv.id
                     ? "bg-accent-muted text-accent"
-                    : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+                    : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]",
                 )}
               >
-                <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                <MessageSquare className="h-3 w-3 shrink-0" />
 
                 {editingId === conv.id ? (
                   <input
@@ -292,7 +312,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
                 )}
 
                 {editingId === conv.id ? (
-                  <div className="flex gap-1 shrink-0">
+                  <div className="flex shrink-0 gap-1">
                     <button onClick={(e) => { e.stopPropagation(); void commitEdit(conv); }}>
                       <Check className="h-3 w-3 text-gain" />
                     </button>
@@ -302,46 +322,84 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
                   </div>
                 ) : (
                   <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
-                    <button
-                      onClick={(e) => startEdit(e, conv)}
-                      className="rounded p-0.5 hover:text-accent"
-                    >
+                    <button onClick={(e) => startEdit(e, conv)} className="rounded p-0.5 hover:text-accent">
                       <Pencil className="h-3 w-3" />
                     </button>
-                    <button
-                      onClick={(e) => void handleDelete(e, conv)}
-                      className="rounded p-0.5 hover:text-loss"
-                    >
+                    <button onClick={(e) => void handleDelete(e, conv)} className="rounded p-0.5 hover:text-loss">
                       <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 )}
               </div>
             ))}
+            {hiddenCount > 0 && (
+              <div className="px-3 py-1.5 text-[11px] text-[hsl(var(--text-muted))]">
+                +{hiddenCount} more
+              </div>
+            )}
           </div>
         )}
         {recentOpen && conversations.length === 0 && (
-          <p className="px-2 text-[10px] text-[hsl(var(--text-muted))]">{t("noChatsYet")}</p>
+          <p className="px-3 text-[10px] text-[hsl(var(--text-muted))]">{t("noChatsYet")}</p>
         )}
-      </div>
 
-      {/* Status */}
-      <div className="mt-auto rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-3">
-        <div className="flex items-center gap-2 text-xs">
-          <Circle
+        {/* Spacer pushes status + profile to bottom */}
+        <div className="flex-1" />
+
+        {/* Status pill */}
+        <div className="mb-2 flex items-center gap-2 rounded-[10px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-[11px]">
+          <span
             className={cn(
-              "h-2 w-2 fill-current",
-              healthy === true && "text-gain",
-              healthy === false && "text-loss",
-              healthy === null && "text-warning animate-pulse"
+              "h-1.5 w-1.5 rounded-full",
+              healthy === true && "bg-gain shadow-[0_0_6px_rgba(34,197,94,0.7)]",
+              healthy === false && "bg-loss",
+              healthy === null && "bg-warning animate-pulse",
             )}
           />
-          <span className="text-[hsl(var(--text-muted))]">
+          <span className="flex-1 font-medium">
             {healthy === true ? tChat("coach") + " online" : healthy === false ? "Offline" : t("loading")}
           </span>
         </div>
-      </div>
-    </aside>
+
+        {/* Profile chip with expandable menu */}
+        <div className="relative" ref={profileWrapRef}>
+          <button
+            onClick={() => setProfileOpen((v) => !v)}
+            className="flex w-full items-center gap-2.5 rounded-[12px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-2 text-left transition hover:border-[hsl(var(--text-muted))]"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-accent/30 bg-accent-muted text-lg leading-none">
+              {avatarMeta.emoji}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs font-semibold">{displayName}</div>
+              <div className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">Personal account</div>
+            </div>
+            {profileOpen ? (
+              <ChevronDown className="h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
+            ) : (
+              <ChevronUp className="h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
+            )}
+          </button>
+          {profileOpen && (
+            <div className="absolute bottom-full left-0 right-0 z-50 mb-1.5 flex flex-col gap-0.5 rounded-[12px] border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-1 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
+              <button
+                onClick={() => { setProfileOpen(false); void handleNavClick("/settings"); }}
+                className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-xs text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+              >
+                <SettingsIcon className="h-3.5 w-3.5" />
+                <span className="flex-1 text-left">{t("nav.settings")}</span>
+              </button>
+              <button
+                onClick={() => { setProfileOpen(false); void handleLogout(); }}
+                className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-xs text-loss transition hover:bg-loss/10"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="flex-1 text-left">Sign out</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
     </>
   );
 }

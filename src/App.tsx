@@ -12,6 +12,7 @@ import { Budget } from "@/components/budget/Budget";
 import { Funds } from "@/components/funds/Funds";
 import { Goals } from "@/components/goals/Goals";
 import { Discover } from "@/components/insights/Discover";
+import { Documents } from "@/components/documents/Documents";
 import { Settings } from "@/components/settings/Settings";
 import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
@@ -307,7 +308,7 @@ export default function App() {
           <Route path="/:lang/settings" element={<Settings />} />
           <Route path="/:lang/goals" element={<Goals />} />
           <Route path="/:lang/discover" element={<Discover />} />
-          <Route path="/:lang/documents" element={<PlaceholderView name="documents" />} />
+          <Route path="/:lang/documents" element={<Documents />} />
           <Route path="/:lang/chat" element={<ChatRoute />} />
           <Route path="/:lang/chat/:convId" element={<ChatRoute />} />
           <Route path="/:lang" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
