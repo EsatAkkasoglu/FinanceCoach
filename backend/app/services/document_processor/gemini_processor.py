@@ -46,19 +46,46 @@ T = TypeVar("T", bound=BaseModel)
 VISION_DUMP_PROMPT = """You are reading a financial / trading document that may include chart screenshots.
 
 Your ONLY job: produce a faithful, verbatim text dump of everything visible in the document,
-INCLUDING numbers and labels printed inside chart images.
+INCLUDING numbers and labels printed inside chart images, AND the SEMANTIC ROLE of each number
+(entry / take-profit / stop-loss / current price / support / resistance / leverage / etc.).
+
+How to assign roles on trade-setup charts (this is the critical part — most users care about
+"what is the entry / TP / SL" not just the raw numbers):
+- GREEN / TEAL filled rectangle = take-profit zone (long setup) OR entry zone for a short.
+  The TOP edge of a green box is usually the TP target; the BOTTOM edge is the entry.
+- RED / MAROON filled rectangle (placed below green) = stop-loss zone for a long. The number
+  inside or labelling the bottom edge is the SL.
+- For SHORT setups the colors invert (red box above price = TP zone going down, green/entry above).
+  Decide long vs short from arrows, the author's note, and which color sits above current price.
+- Arrows (cyan/blue) show the expected price path — follow them to confirm long vs short.
+- Labels like "2X", "3X", "Halit Pozu" = leverage / position name, not price levels.
+- Yellow horizontal lines = key support/resistance, not entry/TP/SL unless the box uses them.
+- The price tag attached to the current candle (right-axis highlight) = current price.
+
+Output format per asset (one block per chart):
+<TICKER>: <author's note from the bullet, verbatim>.
+  Direction: long | short | unclear
+  Entry: <num or "n/a">
+  TP: <num or "n/a">  (if multiple, list all: TP1, TP2…)
+  SL: <num or "n/a">
+  Leverage: <e.g. 2X, 3X, or "n/a">
+  Other levels: <remaining numbers with a brief label each, e.g. "support 74,500", "resistance 200.14B">
 
 Rules:
-- For every chart/screenshot: list the asset/ticker name, then EVERY price level, target, stop,
-  zone boundary, and annotation label visible on that chart. Read the actual pixels — do not
-  paraphrase, do not skip numbers, do not round.
-- Format per asset as: "<TICKER>: <author's note from the bullet>. Levels: <num1>, <num2>, ..."
-- Preserve the document's original language (Turkish, English, etc.).
-- Do not add interpretation, recommendations, or content not present in the document.
+- Read actual pixels — do not paraphrase, do not skip numbers, do not round.
+- Preserve the document's original language (Turkish, English, etc.) for the author's note.
+- If a role is genuinely ambiguous, write "unclear" rather than guessing.
 - If a number is partially cut off or illegible, write it followed by "(?)".
+- Do not add interpretation, recommendations, or content not present in the document.
 
-Example for a SOL chart showing prices 88.62, 82.94, 79.88 with note "bu poza daha girmedi":
-SOL: bu poza daha girmedi, aşağı gidip yukarı çıkarken girişe gelince girmek için. Levels: 88.62, 82.94, 79.88.
+Example (SOL long setup, green box 82.94→88.62 above, red box 82.94→79.88 below, cyan arrow up):
+SOL: bu poza daha girmedi, aşağı gidip yukarı çıkarken girişe gelince girmek için.
+  Direction: long
+  Entry: 82.94
+  TP: 88.62
+  SL: 79.88
+  Leverage: n/a
+  Other levels: n/a
 
 Output the dump only — no preamble, no closing remarks.
 """

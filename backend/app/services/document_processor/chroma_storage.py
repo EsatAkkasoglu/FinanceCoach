@@ -17,7 +17,7 @@ from app.settings import settings
 log = logging.getLogger("fincoach.doc_embeddings")
 
 COLLECTION_NAME = "document_chunks"
-EMBEDDING_MODEL = "text-embedding-004"
+EMBEDDING_MODEL = "gemini-embedding-2"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 
@@ -59,16 +59,17 @@ class ChromaEmbeddingStorage:
             return 0
 
         client = genai.Client(api_key=settings.gemini_api_key)
+        embeddings: list[list[float]] = []
         try:
-            result = client.models.embed_content(
-                model=EMBEDDING_MODEL,
-                contents=chunks,
-            )
+            for chunk in chunks:
+                result = client.models.embed_content(
+                    model=EMBEDDING_MODEL,
+                    contents=chunk,
+                )
+                embeddings.append(result.embeddings[0].values)
         except Exception:
             log.warning("embedding call failed for %s", filename, exc_info=True)
             return 0
-
-        embeddings = [e.values for e in result.embeddings]
         now = int(time.time())
         ids: list[str] = []
         metadatas: list[dict] = []
