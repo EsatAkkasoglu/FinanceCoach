@@ -140,13 +140,24 @@ class GeminiDocumentProcessor:
         self,
         api_key: str | None = None,
         model: str | None = None,
+        vision_model: str | None = None,
+        extract_model: str | None = None,
         storage: DocumentStorage | None = None,
     ) -> None:
         self._api_key = api_key or settings.gemini_api_key
+        # `model` stays as the legacy default (used by `_extract`, single-shot multimodal+schema).
+        # `vision_model` and `extract_model` let callers split the two-pass PDF pipeline so the
+        # cheapest model is used per role. Each falls back to `model`, then to settings.
         self._model = model or settings.gemini_model
+        self._vision_model = vision_model or settings.vision_model or self._model
+        self._extract_model = extract_model or settings.extract_model or self._model
         self._storage = storage or NoOpStorage()
         if not self._api_key:
             raise ProcessorError("GEMINI_API_KEY is not configured")
+        log.info(
+            "document_processor models | default=%s | vision=%s | extract=%s",
+            self._model, self._vision_model, self._extract_model,
+        )
 
     def extract_profile(self, source: DocumentSource) -> ProfileExtraction:
         """Parse a profile-relevant document. Storage hook fires before the LLM call.
@@ -200,7 +211,7 @@ class GeminiDocumentProcessor:
 
         try:
             response = client.models.generate_content(
-                model=self._model,
+                model=self._vision_model,
                 contents=[doc_part, VISION_DUMP_PROMPT],
                 config=types.GenerateContentConfig(temperature=0.0),
             )
@@ -220,7 +231,7 @@ class GeminiDocumentProcessor:
         client = genai.Client(api_key=self._api_key)
         try:
             response = client.models.generate_content(
-                model=self._model,
+                model=self._extract_model,
                 contents=[prompt],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",

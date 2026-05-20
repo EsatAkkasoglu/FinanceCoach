@@ -335,10 +335,23 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   }
 
   function buildAgentContextFromMeta(atts: MessageAttachment[]): string {
+    // Note: we deliberately do NOT inline the extracted text here. PDF/image
+    // content is embedded into ChromaDB at upload time and the backend's
+    // document_parser agent retrieves the relevant passages on every turn
+    // (including follow-ups). Inlining the excerpt would (a) waste tokens
+    // on every subsequent turn the user reads chat history, (b) fail on
+    // follow-up questions once the excerpt scrolls out of the context
+    // window, and (c) duplicate work the agent already does correctly.
+    //
+    // We only emit a compact, machine-readable list of filenames so the
+    // strategist knows which files exist and can route doc-related
+    // questions to document_parser. Plain-text attachments still inline
+    // their excerpt because they are not indexed in Chroma.
     if (atts.length === 0) return "";
     const blocks = atts.map((a) => {
       const header = `**${a.name}** _(${humanSize(a.size)}${a.summary ? ` · ${a.summary}` : ""})_`;
-      if (a.excerpt) {
+      const isIndexed = a.kind === "pdf" || a.kind === "image";
+      if (!isIndexed && a.excerpt) {
         const fence = a.name.match(/\.(json|ya?ml|toml|ini)$/i) ? a.name.split(".").pop()!.toLowerCase() : "";
         return `${header}\n\`\`\`${fence}\n${a.excerpt}\n\`\`\``;
       }

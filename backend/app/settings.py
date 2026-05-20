@@ -42,8 +42,26 @@ class Settings(BaseSettings):
     jwt_ttl_seconds: int = Field(default=60 * 60 * 24 * 30, alias="FINCOACH_JWT_TTL_SECONDS")  # 30 days
 
     # LLM
-    gemini_model: str = Field(default="gemini-3.1-flash-lite-preview", alias="GEMINI_MODEL")
+    # Locked to Gemini 3.1 Flash-Lite for cheapest multimodal inference ($0.25 / 1M input).
+    # All roles (chat / vision / extract) use the same model.
+    gemini_model: str = Field(default="gemini-3.1-flash-lite", alias="GEMINI_MODEL")
+    gemini_vision_model: str = Field(
+        default="gemini-3.1-flash-lite", alias="GEMINI_VISION_MODEL",
+        description="Model for PDF/image vision dump.",
+    )
+    gemini_extract_model: str = Field(
+        default="gemini-3.1-flash-lite", alias="GEMINI_EXTRACT_MODEL",
+        description="Model for text-only schema extraction.",
+    )
     gemini_temperature: float = Field(default=0.3, alias="GEMINI_TEMPERATURE")
+
+    @property
+    def vision_model(self) -> str:
+        return self.gemini_vision_model or self.gemini_model
+
+    @property
+    def extract_model(self) -> str:
+        return self.gemini_extract_model or self.gemini_model
 
     # LangSmith tracing
     langsmith_tracing: bool = Field(default=False, alias="LANGSMITH_TRACING")

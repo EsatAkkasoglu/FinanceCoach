@@ -152,7 +152,20 @@ THE FIRM:
   research desk:
     market_data        Live prices, technicals, fund performance — any asset.
     news_sentiment     Headlines, sentiment, trending tickers, rumors.
-    document_parser    PDFs / bank statements the user uploaded.
+    document_parser    The ONLY desk that can read uploaded files (PDFs,
+                       images, statements, trading notes). Use it for ANY
+                       question whose answer may live in a previously
+                       uploaded document — trade-setup levels
+                       (entry / TP / SL), positions described in a Yayın
+                       Notu, bank-statement line items, fund factsheet
+                       figures, contents of any prior attachment. The
+                       document text is NOT in chat history; this desk
+                       re-queries the document index every turn, so
+                       follow-up questions about a file attached many
+                       turns ago still work. WHEN the strategist context
+                       lists `UPLOADED DOCUMENTS` and the user's question
+                       could plausibly be answered from one of them, the
+                       desk MUST be in the specialist list (in any language).
   client desk:
     portfolio          The user's OWN holdings, weights, P&L, concentration.
     budget_coach       The user's spending, savings rate, investable surplus,
@@ -285,6 +298,15 @@ clarity; apply the same logic regardless of the user's language):
     → specialists=[portfolio, news_sentiment, market_data]
       requires_advisor=False, question_type=mixed
 
+  UPLOADED DOCUMENTS section lists `20.05.2026 - Yayın Notu.pdf`.
+  User (turn 1): "SOL için giriş ve hedef seviyelerini göster"
+  User (turn 5, no further attachment): "Doge coin için hangi pozisyon verilmiş?"
+    → specialists=[document_parser], requires_advisor=False, question_type=lookup
+       (Both questions resolve from the uploaded note. document_parser
+       re-queries the index every turn; do NOT assume the doc text is in
+       chat history. NEVER answer "no information about X" from chat
+       memory alone when an uploaded document is listed and could contain X.)
+
 EXAMPLES (with prior context — note how follow-up changes everything):
   Prior brief headline: balanced allocation recommendation for a conservative profile.
   User: "ok, I bought 700 EUR of SCHD and 300 EUR of JNJ, leave the rest as cash"
@@ -338,7 +360,9 @@ def _get_strategist_llm():
 
 
 def _keyword_fallback_plan(
-    user_text: str, has_prior_context: bool = False
+    user_text: str,
+    has_prior_context: bool = False,
+    has_uploaded_documents: bool = False,
 ) -> ExecutionPlan:
     """Used only if the structured-output LLM call fails."""
     text = (user_text or "").lower().strip()
@@ -375,7 +399,22 @@ def _keyword_fallback_plan(
         chosen.append("news_sentiment")
     if any(k in text for k in ("risk", "profil")):
         chosen.append("risk_profiler")
+    # Explicit document keywords always pull in document_parser.
     if any(k in text for k in ("pdf", "ekstre", "statement", "dekont", "fatura")):
+        chosen.append("document_parser")
+    # If any document is indexed, route doc-flavoured questions there too.
+    # Trade-setup vocabulary (entry / TP / SL / position / level) in any
+    # language is a strong signal the user is asking about an attached note.
+    elif has_uploaded_documents and any(
+        k in text
+        for k in (
+            "tp", "sl", "stop", "hedef", "giriş", "giris", "entry",
+            "pozisyon", "position", "seviye", "level", "long", "short",
+            "yayın", "yayin", "not", "notu", "belge", "doküman", "dokuman",
+            "dosya", "file", "document", "yüklediğim", "yukledigim",
+            "uploaded", "ekledim",
+        )
+    ):
         chosen.append("document_parser")
     if advisory or not chosen:
         # Default exposure to market_data for advisory or unclear queries.
@@ -448,6 +487,22 @@ def _extract_recent_turns(messages: list, k: int = 3) -> list[dict[str, str]]:
     return turns[-k:]
 
 
+def _fetch_uploaded_documents() -> list[dict[str, Any]]:
+    """Best-effort enumeration of files indexed for the user, used to enrich
+    the strategist context so it knows when to route to document_parser.
+
+    Returns ``[{"filename": str, "chunks": int}, ...]`` (empty on failure).
+    The call hits Chroma's local persistent client — cheap, no network.
+    """
+    try:
+        from app.tools.document_tools import list_uploaded_documents
+        hits = list_uploaded_documents.invoke({}) or []
+        return hits if isinstance(hits, list) else []
+    except Exception as exc:  # noqa: BLE001
+        log.warning("uploaded-documents lookup failed: %s", exc)
+        return []
+
+
 def _fetch_memory_hints(query: str, k: int = 3) -> list[dict[str, Any]]:
     """Run a semantic search over the user's past chats / decisions BEFORE
     the strategist plans, so the LLM knows about durable preferences ("I hate
@@ -487,6 +542,7 @@ def _format_strategist_context(
     prev_brief: dict[str, Any] | None,
     current_query: str,
     memory_hints: list[dict[str, Any]] | None = None,
+    uploaded_documents: list[dict[str, Any]] | None = None,
 ) -> str:
     """Build the human-message payload for the strategist LLM."""
     lines: list[str] = []
@@ -524,6 +580,27 @@ def _format_strategist_context(
             lines.append("")
     else:
         lines.append("PREVIOUS INVESTMENT COMMITTEE BRIEF: (none — no plan on the table yet)")
+        lines.append("")
+
+    if uploaded_documents:
+        lines.append(
+            "UPLOADED DOCUMENTS (already extracted and embedded — the "
+            "document_parser desk can retrieve passages on demand; the text "
+            "is NOT in chat history):"
+        )
+        for d in uploaded_documents[:8]:
+            name = (d.get("filename") or "(unknown)").strip()
+            chunks = d.get("chunks") or 0
+            lines.append(f"  - {name} ({chunks} chunk(s) indexed)")
+        lines.append(
+            "  → If the current question may be answered from any of these "
+            "files (trade levels, positions, statement line items, anything "
+            "the user asked about a previously attached document), include "
+            "document_parser in the specialist list."
+        )
+        lines.append("")
+    else:
+        lines.append("UPLOADED DOCUMENTS: (none — the user has not attached any files)")
         lines.append("")
 
     if memory_hints:
@@ -566,6 +643,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
     # Proactive memory: pull durable preferences / facts from past turns BEFORE
     # planning so the strategist can route on them.
     memory_hints = _fetch_memory_hints(user_text, k=3) if user_text else []
+    uploaded_documents = _fetch_uploaded_documents()
 
     log.info("")
     log.info("┌── STRATEGIST ────────────────────────────────────────")
@@ -574,6 +652,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
     log.info("│  prior turns  : %d", len(recent_turns))
     log.info("│  prev brief   : %s", "yes" if prev_brief else "no")
     log.info("│  memory hints : %d", len(memory_hints))
+    log.info("│  uploaded docs: %d", len(uploaded_documents))
 
     if not user_text:
         log.info("│  decision     : empty query → memory fallback")
@@ -598,7 +677,9 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
             # table" and the synthesizer is allowed to reference it.
         }
 
-    payload = _format_strategist_context(recent_turns, prev_brief, user_text, memory_hints)
+    payload = _format_strategist_context(
+        recent_turns, prev_brief, user_text, memory_hints, uploaded_documents,
+    )
 
     plan: ExecutionPlan
     try:
@@ -608,7 +689,9 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
     except Exception as exc:
         log.warning("strategist LLM call failed (%s) — using keyword fallback", exc)
         plan = _keyword_fallback_plan(
-            user_text, has_prior_context=bool(recent_turns or prev_brief)
+            user_text,
+            has_prior_context=bool(recent_turns or prev_brief),
+            has_uploaded_documents=bool(uploaded_documents),
         )
 
     # Dedupe and validate specialist list against AGENT_NODES.

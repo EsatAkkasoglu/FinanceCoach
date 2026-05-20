@@ -12,9 +12,53 @@ from app.settings import settings
 
 logger = logging.getLogger("fincoach.tokens")
 
-# Gemini 3.1 Flash-Lite Preview pricing (USD per 1M tokens, standard tier)
+# Gemini 3.1 Flash-Lite pricing (USD per 1M tokens, standard tier)
 _INPUT_COST_PER_M  = 0.25
 _OUTPUT_COST_PER_M = 1.50
+
+
+def _read_token_usage(response: Any) -> tuple[int, int]:
+    """Extract (input_tokens, output_tokens) from a LangChain ``LLMResult``.
+
+    Different ``langchain-google-genai`` versions stash usage in different
+    places. We probe every known location in priority order:
+
+      1. ``response.llm_output["token_usage"]``      (older path)
+      2. ``response.llm_output["usage_metadata"]``   (intermediate path)
+      3. ``response.generations[*][*].message.usage_metadata``  (current path —
+         AIMessage.usage_metadata standardized by LangChain)
+      4. ``response.generations[*][*].generation_info["usage_metadata"]``
+         (streaming / Gemini-specific path)
+
+    Returns (0, 0) if nothing is found — never raises.
+    """
+    inp = 0
+    out = 0
+
+    llm_output = getattr(response, "llm_output", None) or {}
+    if isinstance(llm_output, dict):
+        for key in ("token_usage", "usage_metadata"):
+            usage = llm_output.get(key) or {}
+            if isinstance(usage, dict):
+                inp = inp or usage.get("input_tokens") or usage.get("prompt_token_count") or 0
+                out = out or usage.get("output_tokens") or usage.get("candidates_token_count") or 0
+
+    if inp or out:
+        return int(inp), int(out)
+
+    # Walk per-generation usage. Streaming responses always populate this.
+    for gen_list in getattr(response, "generations", None) or []:
+        for gen in gen_list or []:
+            msg = getattr(gen, "message", None)
+            usage = getattr(msg, "usage_metadata", None) if msg is not None else None
+            if not isinstance(usage, dict):
+                info = getattr(gen, "generation_info", None) or {}
+                usage = info.get("usage_metadata") if isinstance(info, dict) else None
+            if isinstance(usage, dict):
+                inp += int(usage.get("input_tokens") or usage.get("prompt_token_count") or 0)
+                out += int(usage.get("output_tokens") or usage.get("candidates_token_count") or 0)
+
+    return inp, out
 
 
 class TokenLogger(BaseCallbackHandler):
@@ -22,18 +66,7 @@ class TokenLogger(BaseCallbackHandler):
 
     def on_llm_end(self, response: Any, **kwargs: Any) -> None:
         try:
-            usage = response.llm_output.get("usage_metadata") or {}
-            # Gemini SDK exposes prompt_token_count / candidates_token_count
-            inp  = usage.get("prompt_token_count") or usage.get("input_tokens") or 0
-            out  = usage.get("candidates_token_count") or usage.get("output_tokens") or 0
-            if inp == 0 and out == 0:
-                # fallback: iterate generations
-                for gen_list in response.generations:
-                    for gen in gen_list:
-                        meta = getattr(gen, "generation_info", {}) or {}
-                        u = meta.get("usage_metadata") or {}
-                        inp += u.get("prompt_token_count", 0)
-                        out += u.get("candidates_token_count", 0)
+            inp, out = _read_token_usage(response)
             cost = (inp * _INPUT_COST_PER_M + out * _OUTPUT_COST_PER_M) / 1_000_000
             logger.info(
                 "token_usage | model=%s | input=%d | output=%d | total=%d | cost=$%.6f",
