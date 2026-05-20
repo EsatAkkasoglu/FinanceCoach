@@ -45,7 +45,8 @@
     "summaryGeneric": "{{kind}} analiz edildi",
     "summaryBinary": "ikili dosya — bağlam olarak eklendi",
     "holdingsFound": "{{count}} pozisyon tespit edildi",
-    "txFound": "{{count}} işlem tespit edildi"
+    "txFound": "{{count}} işlem tespit edildi",
+    "tempStorage": "Dosya içeriği vektör veritabanında saklanır ve sonraki sohbetlerinizde kullanılabilir. Ham dosya verisi diske kaydedilmez."
   },
   "newConversation": "Yeni sohbet başlatılıyor…",
   "conversationNotFound": "Sohbet bulunamadı. Kenar çubuğundan birini seçin veya",

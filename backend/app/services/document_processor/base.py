@@ -30,8 +30,9 @@ SUPPORTED_MIME_TYPES = frozenset({
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
 })
 
-# Inline base64 ceiling Gemini imposes on PDFs. Above this, use the File API.
-INLINE_LIMIT_BYTES = 18 * 1024 * 1024  # 18 MB — conservative cushion vs the 20 MB request cap
+# Inline base64 ceiling. Raised to 19 MB so files up to 20 MB (our hard cap) never
+# trigger the File API path — all uploads stay in-memory and in our own ChromaDB.
+INLINE_LIMIT_BYTES = 19 * 1024 * 1024
 
 
 @dataclass(frozen=True)

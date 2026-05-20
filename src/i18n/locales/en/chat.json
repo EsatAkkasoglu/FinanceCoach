@@ -45,7 +45,8 @@
     "summaryGeneric": "{{kind}} analysed",
     "summaryBinary": "binary file — attached as context",
     "holdingsFound": "{{count}} holdings detected",
-    "txFound": "{{count}} transactions detected"
+    "txFound": "{{count}} transactions detected",
+    "tempStorage": "File contents are embedded and stored in your personal knowledge base for retrieval. Raw bytes are never saved to disk."
   },
   "newConversation": "Starting a new conversation…",
   "conversationNotFound": "Conversation not found. Pick one from the sidebar or start a",

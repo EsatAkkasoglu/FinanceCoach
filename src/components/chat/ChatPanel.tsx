@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { streamChat, sendFeedback, autotitleConversation, parseDocument, type Citation as ApiCitation } from "@/lib/api";
 import { parseToolResult } from "@/lib/parseToolResult";
-import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity } from "@/store";
+import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity, type MessageAttachment } from "@/store";
 import { cn } from "@/lib/cn";
 import { AgentBadge } from "./AgentBadge";
 import { Disclaimer } from "@/components/ui/Disclaimer";
@@ -26,7 +26,7 @@ interface ChatPanelProps {
 }
 
 // ── Attachments ──────────────────────────────────────────────────────────────
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 const MAX_FILES = 6;
 const MAX_TEXT_CHARS = 8000;
 const TEXT_EXT_RE = /\.(txt|md|markdown|csv|tsv|json|ya?ml|log|html?|xml|js|jsx|ts|tsx|py|rb|go|rs|java|kt|swift|c|cpp|h|hpp|cs|css|scss|sass|sh|bash|zsh|sql|env|toml|ini|conf)$/i;
@@ -47,6 +47,71 @@ interface Attachment {
   summary?: string;
   excerpt?: string;
   error?: string;
+}
+
+// In-memory cache of the actual File objects so chips can re-open them after send.
+// Survives the session but not a page reload — that's intentional (no 5MB blobs in localStorage).
+const fileRefCache = new Map<string, File>();
+
+function openAttachment(att: MessageAttachment) {
+  const file = fileRefCache.get(att.id);
+  if (!file) {
+    toast.info(`"${att.name}" bu oturumda artık açılamaz (sayfa yenilendi).`);
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  const previewable = att.kind === "image" || att.kind === "pdf" || att.kind === "text" || att.kind === "code";
+  if (previewable) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    // Revoke after a delay so the new tab has time to load.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } else {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = att.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 5_000);
+  }
+}
+
+function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
+  return (
+    <div className="not-prose mb-2 flex flex-wrap gap-2">
+      {attachments.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          onClick={() => openAttachment(a)}
+          title={`${a.name} · ${humanSize(a.size)}`}
+          className={cn(
+            "group/att flex items-center gap-2 rounded-lg border border-[hsl(var(--border))]",
+            "bg-[hsl(var(--surface-2))]/70 px-2.5 py-1.5 text-left",
+            "transition-all duration-200 ease-out",
+            "hover:-translate-y-0.5 hover:border-accent/60 hover:bg-[hsl(var(--surface-2))] hover:shadow-[0_0_0_1px_hsl(var(--accent)/0.25),0_4px_16px_-4px_hsl(var(--accent)/0.35)]",
+            "active:translate-y-0 active:scale-[0.98]"
+          )}
+        >
+          <span className={cn(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+            "bg-accent/10 text-accent transition-transform duration-200",
+            "group-hover/att:scale-110 group-hover/att:bg-accent/20"
+          )}>
+            <KindIcon kind={a.kind === "binary" ? "other" : (a.kind as AttachmentKind)} className="h-4 w-4" />
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate max-w-[200px] text-xs font-medium text-[hsl(var(--text-primary))]">
+              {a.name}
+            </span>
+            <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
+              {a.kind} · {humanSize(a.size)}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function detectKind(file: File): AttachmentKind {
@@ -226,6 +291,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
         progress: 4,
       };
       accepted.push({ att, file });
+      fileRefCache.set(att.id, file);
     }
     if (accepted.length === 0) return;
     setAttachments((prev) => [...prev, ...accepted.map((a) => a.att)]);
@@ -268,10 +334,9 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
   }
 
-  function buildAttachmentContext(): string {
-    const ready = attachments.filter((a) => a.status === "ready");
-    if (ready.length === 0) return "";
-    const blocks = ready.map((a) => {
+  function buildAgentContextFromMeta(atts: MessageAttachment[]): string {
+    if (atts.length === 0) return "";
+    const blocks = atts.map((a) => {
       const header = `**${a.name}** _(${humanSize(a.size)}${a.summary ? ` · ${a.summary}` : ""})_`;
       if (a.excerpt) {
         const fence = a.name.match(/\.(json|ya?ml|toml|ini)$/i) ? a.name.split(".").pop()!.toLowerCase() : "";
@@ -279,22 +344,49 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
       }
       return header;
     });
-    return `\n\n📎 **${t("attach.contextHeader", { count: ready.length })}**\n${blocks.join("\n\n")}`;
+    return `\n\n📎 **${t("attach.contextHeader", { count: atts.length })}**\n${blocks.join("\n\n")}`;
   }
 
-  async function send(text: string) {
+  async function send(text: string, replayAttachments?: MessageAttachment[]) {
     const hasReadyAttachments = attachments.some((a) => a.status === "ready");
-    if ((!text.trim() && !hasReadyAttachments) || streaming) return;
+    const replaying = replayAttachments && replayAttachments.length > 0;
+    if ((!text.trim() && !hasReadyAttachments && !replaying) || streaming) return;
     if (attachments.some((a) => a.status === "uploading")) {
       toast.warning(t("attach.waitForUpload"));
       return;
     }
-    const attachmentContext = buildAttachmentContext();
-    const finalText = (text.trim() || t("attach.implicitPrompt")) + attachmentContext;
+    const userText = text.trim();
+    // Build the context sent to the agent (structured + extracted text), but keep `content` clean.
+    let agentContext = "";
+    let messageAttachments: MessageAttachment[] | undefined;
+    if (replaying) {
+      messageAttachments = replayAttachments;
+      agentContext = buildAgentContextFromMeta(replayAttachments);
+    } else if (hasReadyAttachments) {
+      const ready = attachments.filter((a) => a.status === "ready");
+      messageAttachments = ready.map<MessageAttachment>((a) => ({
+        id: a.id,
+        name: a.name,
+        mime: a.mime,
+        kind: a.kind === "other" ? "binary" : a.kind,
+        size: a.size,
+        summary: a.summary,
+        excerpt: a.excerpt,
+      }));
+      agentContext = buildAgentContextFromMeta(messageAttachments);
+    }
+    const finalText = (userText || t("attach.implicitPrompt")) + agentContext;
+    const displayContent = userText; // clean — attachments render as chips
     const userId = `u-${Date.now()}`;
     const asstId = `a-${Date.now()}`;
     lastAsstId.current = asstId;
-    appendMessage(convId, { id: userId, role: "user", content: finalText, createdAt: Date.now() });
+    appendMessage(convId, {
+      id: userId,
+      role: "user",
+      content: displayContent,
+      attachments: messageAttachments,
+      createdAt: Date.now(),
+    });
     appendMessage(convId, { id: asstId, role: "assistant", content: "", createdAt: Date.now() });
     setInput("");
     setAttachments([]);
@@ -588,7 +680,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
               if (idx <= 0) return;
               const prior = messages[idx - 1];
               if (!prior || prior.role !== "user") return;
-              void send(prior.content);
+              void send(prior.content, prior.attachments);
             };
             return (
               <div
@@ -633,6 +725,9 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                         isStreamingThis && "chat-streaming-fade"
                       )}
                     >
+                      {m.attachments && m.attachments.length > 0 && (
+                        <MessageAttachments attachments={m.attachments} />
+                      )}
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {m.content || (isAssistant ? "…" : "")}
                       </ReactMarkdown>
@@ -1566,6 +1661,16 @@ function AttachmentStrip({
             )}
             title={a.error || a.summary || a.name}
           >
+            {!isError && !isUploading && (
+              <div className="group/hint absolute -right-1 -top-1 z-10">
+                <div className="flex h-4 w-4 cursor-default items-center justify-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[9px] font-bold text-[hsl(var(--text-muted))] transition-colors group-hover/hint:border-accent/50 group-hover/hint:bg-accent/10 group-hover/hint:text-accent">
+                  !
+                </div>
+                <div className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-52 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2.5 py-2 text-[10px] leading-snug text-[hsl(var(--text-muted))] opacity-0 shadow-lg transition-opacity group-hover/hint:opacity-100">
+                  {t("attach.tempStorage")}
+                </div>
+              </div>
+            )}
             <span
               className={cn(
                 "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",

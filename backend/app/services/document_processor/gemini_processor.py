@@ -43,6 +43,27 @@ def _extract_pdf_text(data: bytes) -> str:
 T = TypeVar("T", bound=BaseModel)
 
 
+VISION_DUMP_PROMPT = """You are reading a financial / trading document that may include chart screenshots.
+
+Your ONLY job: produce a faithful, verbatim text dump of everything visible in the document,
+INCLUDING numbers and labels printed inside chart images.
+
+Rules:
+- For every chart/screenshot: list the asset/ticker name, then EVERY price level, target, stop,
+  zone boundary, and annotation label visible on that chart. Read the actual pixels — do not
+  paraphrase, do not skip numbers, do not round.
+- Format per asset as: "<TICKER>: <author's note from the bullet>. Levels: <num1>, <num2>, ..."
+- Preserve the document's original language (Turkish, English, etc.).
+- Do not add interpretation, recommendations, or content not present in the document.
+- If a number is partially cut off or illegible, write it followed by "(?)".
+
+Example for a SOL chart showing prices 88.62, 82.94, 79.88 with note "bu poza daha girmedi":
+SOL: bu poza daha girmedi, aşağı gidip yukarı çıkarken girişe gelince girmek için. Levels: 88.62, 82.94, 79.88.
+
+Output the dump only — no preamble, no closing remarks.
+"""
+
+
 PROFILE_PROMPT = """You are FinCoach's document analyst. The user uploaded a financial document or
 provided a plain-text description to help bootstrap their portfolio and profile.
 
@@ -101,20 +122,68 @@ class GeminiDocumentProcessor:
             raise ProcessorError("GEMINI_API_KEY is not configured")
 
     def extract_profile(self, source: DocumentSource) -> ProfileExtraction:
-        """Parse a profile-relevant document. Storage hook fires before the LLM call."""
-        # For PDFs: try cheap text extraction first. If the PDF is mostly images
-        # (e.g. chart screenshots), pdfplumber yields very little text and we fall
-        # through to the full Gemini multimodal call.
+        """Parse a profile-relevant document. Storage hook fires before the LLM call.
+
+        Strategy:
+        - Text-rich PDFs (banka ekstresi vb.): pdfplumber → text-only call (cheap, 1 call).
+        - Image-heavy PDFs (chart screenshots): two-pass —
+            (1) vision dump call (no schema, focused on reading numbers off charts)
+            (2) structured extraction from the dumped text (cheap text-only call).
+          This gives much better numeric accuracy than a single multimodal+schema call.
+        - Other (images, docx): single multimodal+schema call (current behavior).
+        """
         if source.mime_type == "application/pdf":
             pre_text = _extract_pdf_text(source.data)
-            # Heuristic: >200 chars/page → text-rich, send text only (much cheaper).
             pages_estimate = max(1, source.size_bytes // (100 * 1024))
             if len(pre_text) > pages_estimate * 200:
                 log.info("PDF is text-rich (%d chars); skipping multimodal call", len(pre_text))
                 prompt_with_text = PROFILE_PROMPT + f"\n\nDocument text:\n{pre_text}"
-                return self._extract_text_only(prompt_with_text)
-            log.info("PDF is image-heavy (%d chars extracted); using multimodal", len(pre_text))
+                result = self._extract_text_only(prompt_with_text)
+                if not result.extracted_text:
+                    result = result.model_copy(update={"extracted_text": pre_text})
+                return result
+
+            log.info("PDF is image-heavy (%d chars extracted); two-pass vision+schema", len(pre_text))
+            vision_dump = self._vision_dump(source)
+            prompt_with_text = (
+                PROFILE_PROMPT
+                + "\n\nDocument text (already extracted from the file, INCLUDING chart numbers):\n"
+                + vision_dump
+            )
+            result = self._extract_text_only(prompt_with_text)
+            # Always overwrite extracted_text with the high-fidelity vision dump.
+            return result.model_copy(update={"extracted_text": vision_dump})
+
         return self._extract(source, ProfileExtraction, PROFILE_PROMPT)
+
+    def _vision_dump(self, source: DocumentSource) -> str:
+        """First-pass: ask Gemini to dump every visible label/number — no schema constraint."""
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=self._api_key)
+        if source.needs_file_api:
+            uploaded = client.files.upload(
+                file=source.data,
+                config={"mime_type": source.mime_type, "display_name": source.filename},
+            )
+            doc_part = types.Part.from_uri(file_uri=uploaded.uri, mime_type=source.mime_type)
+        else:
+            doc_part = types.Part.from_bytes(data=source.data, mime_type=source.mime_type)
+
+        try:
+            response = client.models.generate_content(
+                model=self._model,
+                contents=[doc_part, VISION_DUMP_PROMPT],
+                config=types.GenerateContentConfig(temperature=0.0),
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise ProcessorError(f"Gemini vision dump failed: {exc}") from exc
+
+        text = (getattr(response, "text", "") or "").strip()
+        if not text:
+            raise ProcessorError("Gemini vision dump returned empty text")
+        return text
 
     def _extract_text_only(self, prompt: str) -> ProfileExtraction:
         """Send a plain-text prompt to Gemini (no file bytes). Much cheaper for text-rich PDFs."""

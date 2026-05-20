@@ -148,10 +148,23 @@ export interface ReasoningEntry {
   equity_band?: [number | undefined, number | undefined];
 }
 
+export type MessageAttachmentKind = "image" | "pdf" | "text" | "spreadsheet" | "code" | "binary";
+
+export interface MessageAttachment {
+  id: string;
+  name: string;
+  mime: string;
+  kind: MessageAttachmentKind;
+  size: number;
+  summary?: string;
+  excerpt?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachments?: MessageAttachment[];
   agent?: string;
   citations?: Citation[];
   steps?: ToolActivity[];
