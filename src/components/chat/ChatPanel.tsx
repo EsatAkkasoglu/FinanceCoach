@@ -177,6 +177,12 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             parts.push(t("attach.txFound", { count: res.suggested_transactions.length }));
           }
           summary = parts.join(" · ") || t("attach.summaryGeneric", { kind: att.kind });
+          if (res.extracted_text) {
+            const MAX_CHARS = 12000;
+            excerpt = res.extracted_text.length > MAX_CHARS
+              ? res.extracted_text.slice(0, MAX_CHARS) + "\n…(truncated)"
+              : res.extracted_text;
+          }
         } catch {
           summary = t("attach.summaryGeneric", { kind: att.kind });
         }

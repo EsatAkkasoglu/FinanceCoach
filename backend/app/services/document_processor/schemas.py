@@ -76,3 +76,7 @@ class ProfileExtraction(BaseModel):
         default=None,
         description="If the document is wrong type or unreadable, what should the user upload instead.",
     )
+    extracted_text: str | None = Field(
+        default=None,
+        description="Full verbatim text content extracted from the document (all readable text, preserving structure). Used by the chat agent to answer questions about the document.",
+    )

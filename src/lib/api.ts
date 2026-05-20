@@ -339,6 +339,7 @@ export interface ProfileExtraction {
   missing_or_unclear: string[];
   follow_up_questions: string[];
   needs_better_document: string | null;
+  extracted_text: string | null;
 }
 
 // ── Budget: accounts ────────────────────────────────────────────────────────

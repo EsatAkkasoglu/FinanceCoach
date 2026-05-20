@@ -29,6 +29,17 @@ from app.settings import settings
 
 log = logging.getLogger("fincoach.document_processor")
 
+
+def _extract_pdf_text(data: bytes) -> str:
+    """Cheap text extraction via pdfplumber (no API call). Returns empty string on failure."""
+    try:
+        import io
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            return "\n".join(p.extract_text() or "" for p in pdf.pages).strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -49,6 +60,12 @@ Tasks:
    set `needs_better_document` to one short sentence telling the user what to upload instead
    (e.g. "Upload a brokerage statement listing positions and quantities.").
 7. Suggest 1-3 short follow-up questions the assistant should ask to fill remaining gaps.
+8. Extract ALL readable content into `extracted_text`:
+   - Written text (headings, bullet points, labels)
+   - For chart images: read every visible ticker symbol, price level, and annotation
+     (e.g. "BTC: short bölgesindeyiz. Key levels: 81,358 / 78,773 / 77,734 / 74,500")
+   - For market analysis PDFs: list each asset with its notes and key price levels
+   This field is critical — it is what the chat agent reads to answer user questions.
 
 Income Category Rules:
 - "salary", "wage", "paycheck", "employment" → category: "salary"
@@ -85,7 +102,49 @@ class GeminiDocumentProcessor:
 
     def extract_profile(self, source: DocumentSource) -> ProfileExtraction:
         """Parse a profile-relevant document. Storage hook fires before the LLM call."""
+        # For PDFs: try cheap text extraction first. If the PDF is mostly images
+        # (e.g. chart screenshots), pdfplumber yields very little text and we fall
+        # through to the full Gemini multimodal call.
+        if source.mime_type == "application/pdf":
+            pre_text = _extract_pdf_text(source.data)
+            # Heuristic: >200 chars/page → text-rich, send text only (much cheaper).
+            pages_estimate = max(1, source.size_bytes // (100 * 1024))
+            if len(pre_text) > pages_estimate * 200:
+                log.info("PDF is text-rich (%d chars); skipping multimodal call", len(pre_text))
+                prompt_with_text = PROFILE_PROMPT + f"\n\nDocument text:\n{pre_text}"
+                return self._extract_text_only(prompt_with_text)
+            log.info("PDF is image-heavy (%d chars extracted); using multimodal", len(pre_text))
         return self._extract(source, ProfileExtraction, PROFILE_PROMPT)
+
+    def _extract_text_only(self, prompt: str) -> ProfileExtraction:
+        """Send a plain-text prompt to Gemini (no file bytes). Much cheaper for text-rich PDFs."""
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=self._api_key)
+        try:
+            response = client.models.generate_content(
+                model=self._model,
+                contents=[prompt],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ProfileExtraction,
+                    temperature=0.0,
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise ProcessorError(f"Gemini text-only generation failed: {exc}") from exc
+
+        parsed = getattr(response, "parsed", None)
+        if isinstance(parsed, ProfileExtraction):
+            return parsed
+        raw = getattr(response, "text", "") or ""
+        if not raw.strip():
+            raise ProcessorError("Gemini returned an empty response")
+        try:
+            return ProfileExtraction.model_validate_json(raw)
+        except Exception as exc:  # noqa: BLE001
+            raise ProcessorError(f"document did not match expected schema: {exc}") from exc
 
     def _extract(self, source: DocumentSource, schema: type[T], prompt: str) -> T:
         # Run the storage hook first so future audit trails capture every parse attempt
