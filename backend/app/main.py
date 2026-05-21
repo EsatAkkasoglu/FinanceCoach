@@ -856,9 +856,12 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
     enriched: list[dict] = []
     total_value = 0.0
     total_cost = 0.0
+    total_day_pnl = 0.0
 
     for h in rows:
         cost_total = h.quantity * h.cost_basis
+        change_today = None
+        day_pnl = None
         if h.asset_class == "cash":
             current_price = 1.0
             current_value = h.quantity
@@ -868,6 +871,12 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
             current_price = quote["price"] if quote else h.cost_basis
             currency = (quote or {}).get("currency") or h.currency or "USD"
             current_value = h.quantity * current_price
+            # Per-position day change. `get_quote` returns change_pct (1-day %).
+            # Surface it so the dashboard hero / holdings rows can show today's move.
+            if quote is not None and quote.get("change_pct") is not None:
+                change_today = round(quote["change_pct"], 2)
+                day_pnl = round(current_value * (change_today / 100.0), 2)
+                total_day_pnl += day_pnl
 
         pnl = current_value - cost_total
         pnl_pct = (pnl / cost_total * 100.0) if cost_total else 0.0
@@ -882,11 +891,14 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
             "cost_total": round(cost_total, 2),
             "pnl": round(pnl, 2),
             "pnl_pct": round(pnl_pct, 2),
+            "change_today": change_today,
+            "day_pnl": day_pnl,
             "currency": currency,
         })
         total_value += current_value
         total_cost += cost_total
 
+    day_pnl_pct = (total_day_pnl / total_value * 100.0) if total_value else 0.0
     return {
         "holdings": enriched,
         "totals": {
@@ -894,6 +906,8 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
             "cost": round(total_cost, 2),
             "pnl": round(total_value - total_cost, 2),
             "pnl_pct": round(((total_value - total_cost) / total_cost * 100.0) if total_cost else 0.0, 2),
+            "day_pnl": round(total_day_pnl, 2),
+            "day_pnl_pct": round(day_pnl_pct, 2),
             "count": len(enriched),
         },
     }

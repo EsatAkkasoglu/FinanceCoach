@@ -14,7 +14,27 @@
     "netCashFlow": "Net cash flow",
     "netCashFlowEmpty": "Waiting on spending data",
     "netCashFlowSurplus": "Surplus this month",
-    "netCashFlowDeficit": "Deficit this month"
+    "netCashFlowDeficit": "Deficit this month",
+    "cardDebt": "Card debt",
+    "cardDebtHint": "Across credit cards",
+    "noCardDebt": "No card debt",
+    "utilization": "{{pct}}% utilization"
+  },
+  "trend": {
+    "title": "Income vs expense",
+    "subtitle": "Last {{count}} months",
+    "income": "income",
+    "expense": "expense",
+    "net": "net",
+    "surplusWidening": "Surplus is widening",
+    "surplusNarrowing": "Surplus is narrowing",
+    "inDeficit": "Spending exceeds income",
+    "empty": "Add a few months of data to see the trend.",
+    "heatmapTitle": "Spend heatmap",
+    "heatmapSubtitle": "Last 30 days",
+    "heatmapEmpty": "Daily spending appears here once you log expenses.",
+    "momUp": "+{{pct}}% vs last month",
+    "momDown": "{{pct}}% vs last month"
   },
   "hero": {
     "title": "Complete your budget",
@@ -56,6 +76,7 @@
     "showMore": "Show more",
     "showAll": "Show all",
     "showLess": "Show less",
+    "categoryFilter": "Category filter",
     "headers": {
       "date": "Date",
       "description": "Description",

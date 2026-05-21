@@ -153,6 +153,10 @@ export interface Holding {
   cost_total?: number;
   pnl?: number;
   pnl_pct?: number;
+  /** 1-day % change for this position (null when the quote lacks it). */
+  change_today?: number | null;
+  /** Today's P&L in the holding's native currency (value * change_today/100). */
+  day_pnl?: number | null;
   currency?: string;
 }
 
@@ -161,6 +165,9 @@ export interface PortfolioTotals {
   cost: number;
   pnl: number;
   pnl_pct: number;
+  /** Aggregate day P&L across positions, in mixed native currencies (pre-FX). */
+  day_pnl?: number;
+  day_pnl_pct?: number;
   count: number;
 }
 
@@ -612,6 +619,33 @@ export async function getBudgetSummary(month?: string) {
   const r = await apiFetch(`/budget/summary${qs}`);
   if (!r.ok) throw new Error(`summary ${r.status}`);
   return r.json() as Promise<BudgetSummary>;
+}
+
+// ── Budget: trend (6-month flow + per-category MoM) ──────────────────────────
+
+export interface BudgetTrendMonth {
+  month: string;
+  income: number;
+  expense: number;
+  net: number;
+}
+
+export interface CategoryMoM {
+  category: string;
+  current: number;
+  previous: number;
+  change_pct: number | null;
+}
+
+export interface BudgetTrend {
+  months: BudgetTrendMonth[];
+  category_mom: CategoryMoM[];
+}
+
+export async function getBudgetTrend(months = 6): Promise<BudgetTrend> {
+  const r = await apiFetch(`/budget/trend?months=${months}`);
+  if (!r.ok) return { months: [], category_mom: [] };
+  return r.json() as Promise<BudgetTrend>;
 }
 
 // ── Document parsing ────────────────────────────────────────────────────────

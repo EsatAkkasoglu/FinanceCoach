@@ -16,21 +16,37 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } 
 import { toast } from "sonner";
 
 import {
-  listAccounts, listTransactions, listSubscriptions, getBudgetSummary,
+  listAccounts, listTransactions, listSubscriptions, getBudgetSummary, getBudgetTrend,
   deleteAccount, deleteTransaction, deleteSubscription, updateSubscription,
   type Account, type Transaction, type Subscription, type BudgetSummary,
-  type SubDirection, type SubscriptionInput,
+  type SubDirection, type SubscriptionInput, type BudgetTrend,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { useFxRates, type UseFxRates } from "@/lib/fx";
 import { paletteAt, chartTooltipContentStyle } from "@/lib/chartColors";
+import { SpendHeatmap, InsightLine, type HeatCell } from "@/components/ui/dataviz";
+import { LineChart, Line, XAxis, YAxis, Tooltip as RLineTooltip } from "recharts";
 import { Button } from "@/components/ui/Button";
 import { AccountFormModal } from "./AccountFormModal";
 import { TransactionFormModal, COMMON_CATEGORIES } from "./TransactionFormModal";
 import { SubscriptionFormModal } from "./SubscriptionFormModal";
 import { BudgetImportModal } from "./BudgetImportModal";
 import { Disclaimer } from "@/components/ui/Disclaimer";
+
+const CATEGORY_SWATCHES = [
+  { dot: "bg-teal-400", badge: "bg-teal-400/10 text-teal-200" },
+  { dot: "bg-violet-400", badge: "bg-violet-400/10 text-violet-200" },
+  { dot: "bg-amber-400", badge: "bg-amber-400/10 text-amber-200" },
+  { dot: "bg-blue-400", badge: "bg-blue-400/10 text-blue-200" },
+  { dot: "bg-pink-400", badge: "bg-pink-400/10 text-pink-200" },
+  { dot: "bg-emerald-400", badge: "bg-emerald-400/10 text-emerald-200" },
+  { dot: "bg-red-400", badge: "bg-red-400/10 text-red-200" },
+] as const;
+
+function categorySwatch(index: number) {
+  return CATEGORY_SWATCHES[((index % CATEGORY_SWATCHES.length) + CATEGORY_SWATCHES.length) % CATEGORY_SWATCHES.length];
+}
 
 const ACCOUNT_ICON: Record<Account["kind"], typeof Wallet> = {
   cash: Wallet,
@@ -73,6 +89,7 @@ export function Budget() {
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [summary, setSummary] = useState<BudgetSummary | null>(null);
+  const [trend, setTrend] = useState<BudgetTrend | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,16 +134,18 @@ export function Budget() {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const [a, t, s, sum] = await Promise.all([
+      const [a, t, s, sum, tr] = await Promise.all([
         listAccounts(),
         listTransactions(),
         listSubscriptions(true),
         getBudgetSummary(),
+        getBudgetTrend(6).catch(() => null),
       ]);
       setAccounts(a);
       setTxs(t);
       setSubs(s);
       setSummary(sum);
+      setTrend(tr);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -211,6 +230,8 @@ export function Budget() {
               onAddManual={() => setTxModal({ open: true, editing: null })}
             />
           )}
+
+          <TrendBand trend={trend} txs={txs} fx={fx} />
 
           {summary && (
             <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -316,8 +337,16 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
   const incomeByCcy = summary.income_mtd;
   const expenseByCcy = summary.expense_mtd;
 
+  const debtByCcy = summary.credit_card_debt ?? {};
   const incomeMoM = computeMoM(incomeByCcy, summary.income_prev_month, fx);
   const expenseMoM = computeMoM(expenseByCcy, summary.expense_prev_month, fx);
+
+  // Credit utilization = debt / (debt + cash) as a rough proxy.
+  const debtTotal = fx.rates ? (fx.convertBag(debtByCcy) ?? 0) : sumValues(debtByCcy);
+  const cashTotal = fx.rates ? (fx.convertBag(cashByCcy) ?? 0) : sumValues(cashByCcy);
+  const utilization = debtTotal > 0 && (debtTotal + cashTotal) > 0
+    ? Math.round((debtTotal / (debtTotal + cashTotal)) * 100)
+    : null;
 
   // Net cash flow = income – expense (in target currency)
   const incomeTotal = fx.rates ? fx.convertBag(incomeByCcy) : sumValues(incomeByCcy);
@@ -349,7 +378,7 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
       variants={container}
       initial="hidden"
       animate="show"
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
     >
       <KPICard
         title={t("kpi.cashOnHand")}
@@ -388,7 +417,143 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
         tone={netValue == null ? "neutral" : netValue >= 0 ? "income" : "expense"}
         forceConverted
       />
+      <KPICard
+        title={t("kpi.cardDebt")}
+        icon={<CreditCard className="h-4 w-4 text-loss" />}
+        bag={debtByCcy}
+        fx={fx}
+        subtitle={
+          Object.keys(debtByCcy).length === 0
+            ? t("kpi.noCardDebt")
+            : utilization != null
+              ? t("kpi.utilization", { pct: utilization })
+              : t("kpi.cardDebtHint")
+        }
+        tone={Object.keys(debtByCcy).length === 0 ? "neutral" : "expense"}
+      />
     </motion.div>
+  );
+}
+
+// ── Trend band: 6-month income/expense lines + 30-day spend heatmap ──────────
+
+function TrendBand({
+  trend, txs, fx,
+}: { trend: BudgetTrend | null; txs: Transaction[]; fx: UseFxRates }) {
+  const { t } = useTranslation("budget");
+
+  // Build the 30-day spend heatmap from expense transactions (client-side).
+  const heatCells = useMemo<HeatCell[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const byDay = new Map<string, number>();
+    for (const tx of txs) {
+      if (tx.type !== "expense") continue;
+      const iso = tx.occurred_on;
+      const amt = fx.rates ? (fx.convert(tx.amount, tx.currency) ?? tx.amount) : tx.amount;
+      byDay.set(iso, (byDay.get(iso) ?? 0) + amt);
+    }
+    const cells: HeatCell[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const iso = d.toISOString().slice(0, 10);
+      cells.push({ date: iso, value: byDay.get(iso) ?? 0 });
+    }
+    return cells;
+  }, [txs, fx]);
+
+  const months = trend?.months ?? [];
+  const hasTrend = months.length >= 2 && months.some((m) => m.income > 0 || m.expense > 0);
+  const hasHeat = heatCells.some((c) => c.value > 0);
+
+  if (!hasTrend && !hasHeat) return null;
+
+  // Net-direction insight from the last two months.
+  let insight: { text: string; tone: "positive" | "negative" | "neutral" } | null = null;
+  if (months.length >= 2) {
+    const last = months[months.length - 1];
+    const prev = months[months.length - 2];
+    if (last.net < 0) insight = { text: t("trend.inDeficit"), tone: "negative" };
+    else if (last.net >= prev.net) insight = { text: t("trend.surplusWidening"), tone: "positive" };
+    else insight = { text: t("trend.surplusNarrowing"), tone: "neutral" };
+  }
+
+  const monthLabel = (iso: string) =>
+    new Date(iso + "-01").toLocaleDateString([], { month: "short" });
+
+  return (
+    <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
+      <section className="card lg:col-span-7">
+        <header className="mb-2">
+          <h2 className="text-sm font-semibold">{t("trend.title")}</h2>
+          <p className="text-[11px] text-content-muted">{t("trend.subtitle", { count: months.length })}</p>
+        </header>
+        {!hasTrend ? (
+          <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-content-muted">
+            {t("trend.empty")}
+          </p>
+        ) : (
+          <>
+            <div className="h-32">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={months} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}>
+                  <XAxis dataKey="month" tickFormatter={monthLabel} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis hide domain={["dataMin", "dataMax"]} />
+                  <RLineTooltip
+                    contentStyle={chartTooltipContentStyle}
+                    formatter={(v: number, name: string) => [
+                      fx.rates ? formatCurrency(v, fx.target) : v.toFixed(0),
+                      t(`trend.${name}`),
+                    ]}
+                    labelFormatter={(l: string) => monthLabel(l)}
+                  />
+                  <Line type="monotone" dataKey="income" stroke="#22C55E" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="expense" stroke="#EF4444" strokeWidth={2} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-1 flex items-center gap-4 text-[11px]">
+              <span className="flex items-center gap-1 text-gain"><span className="h-2 w-2 rounded-full bg-gain" />{t("trend.income")}</span>
+              <span className="flex items-center gap-1 text-loss"><span className="h-2 w-2 rounded-full bg-loss" />{t("trend.expense")}</span>
+              {insight && (
+                <span className={cn(
+                  "ml-auto",
+                  insight.tone === "positive" ? "text-gain" : insight.tone === "negative" ? "text-loss" : "text-content-muted",
+                )}>
+                  {insight.text}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="card lg:col-span-5">
+        <header className="mb-2">
+          <h2 className="text-sm font-semibold">{t("trend.heatmapTitle")}</h2>
+          <p className="text-[11px] text-content-muted">{t("trend.heatmapSubtitle")}</p>
+        </header>
+        {!hasHeat ? (
+          <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-content-muted">
+            {t("trend.heatmapEmpty")}
+          </p>
+        ) : (
+          <>
+            <SpendHeatmap cells={heatCells} columns={10} />
+            <InsightLine>
+              {(() => {
+                const total = heatCells.reduce((a, c) => a + c.value, 0);
+                const active = heatCells.filter((c) => c.value > 0).length;
+                return fx.rates
+                  ? `${formatCurrency(total, fx.target)} across ${active} days`
+                  : `${total.toFixed(0)} across ${active} days`;
+              })()}
+            </InsightLine>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -615,10 +780,10 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
         <ul className="flex-1 self-center space-y-2">
           {items.map((it, i) => {
             const pct = total ? (it.value / total) * 100 : 0;
-            const color = paletteAt(i);
+            const swatch = categorySwatch(i);
             return (
-              <li key={it.name} className="grid items-center gap-x-2 text-xs" style={{ gridTemplateColumns: "8px 1fr auto auto" }}>
-                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: color }} />
+              <li key={it.name} className="grid grid-cols-[8px_minmax(0,1fr)_auto_auto] items-center gap-x-2 text-xs">
+                <span className={cn("h-2 w-2 shrink-0 rounded-full", swatch.dot)} />
                 <span className="truncate text-content capitalize">
                   {localizeCategory(it.name, i18n.language)}
                 </span>
@@ -626,8 +791,10 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
                   {fx.rates ? formatCurrency(it.value, fx.target) : `${it.raw.toFixed(0)} ${it.currency}`}
                 </span>
                 <span
-                  className="rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-right min-w-[2.5rem]"
-                  style={{ background: `${color}22`, color }}
+                  className={cn(
+                    "min-w-[2.5rem] rounded-full px-1.5 py-0.5 text-right text-[10px] font-medium tabular-nums",
+                    swatch.badge,
+                  )}
                 >
                   {pct.toFixed(0)}%
                 </span>
@@ -1205,7 +1372,11 @@ function TransactionsPanel({
           <FilterChip active={filterType === "expense"} onClick={() => setFilterType("expense")}>
             <ArrowUpRight className="h-3 w-3" /> {tBudget("transactions.expense")}
           </FilterChip>
+          <label htmlFor="budget-category-filter" className="sr-only">
+            {tBudget("transactions.categoryFilter")}
+          </label>
           <select
+            id="budget-category-filter"
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
             className="rounded-lg border border-line bg-surface-raised px-2 py-1 text-xs"

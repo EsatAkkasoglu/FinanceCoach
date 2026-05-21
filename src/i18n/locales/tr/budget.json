@@ -14,7 +14,27 @@
     "netCashFlow": "Net nakit akışı",
     "netCashFlowEmpty": "Harcama verisi bekleniyor",
     "netCashFlowSurplus": "Bu ay tasarruf",
-    "netCashFlowDeficit": "Bu ay açık"
+    "netCashFlowDeficit": "Bu ay açık",
+    "cardDebt": "Kart borcu",
+    "cardDebtHint": "Kredi kartları toplamı",
+    "noCardDebt": "Kart borcu yok",
+    "utilization": "%{{pct}} kullanım"
+  },
+  "trend": {
+    "title": "Gelir ve gider",
+    "subtitle": "Son {{count}} ay",
+    "income": "gelir",
+    "expense": "gider",
+    "net": "net",
+    "surplusWidening": "Tasarruf artıyor",
+    "surplusNarrowing": "Tasarruf azalıyor",
+    "inDeficit": "Harcama geliri aşıyor",
+    "empty": "Trendi görmek için birkaç aylık veri ekle.",
+    "heatmapTitle": "Harcama ısı haritası",
+    "heatmapSubtitle": "Son 30 gün",
+    "heatmapEmpty": "Gider girdikçe günlük harcaman burada görünür.",
+    "momUp": "geçen aya göre +%{{pct}}",
+    "momDown": "geçen aya göre %{{pct}}"
   },
   "hero": {
     "title": "Bütçeni tamamla",
@@ -56,6 +76,7 @@
     "showMore": "Daha fazla göster",
     "showAll": "Tümünü göster",
     "showLess": "Daha az göster",
+    "categoryFilter": "Kategori filtresi",
     "headers": {
       "date": "Tarih",
       "description": "Açıklama",

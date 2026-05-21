@@ -555,6 +555,78 @@ def budget_summary(
     }
 
 
+@router.get("/budget/trend")
+def budget_trend(
+    months: int = Query(default=6, ge=1, le=24),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Monthly income / expense / net totals for the last N months, plus a
+    per-category month-over-month comparison for the current month.
+
+    Amounts are summed across currencies WITHOUT FX conversion (the prototype is
+    single-currency in practice and the client can FX-convert if needed). Returns
+    a chronological list (oldest → newest) for direct charting.
+    """
+    today = date.today()
+    current_start = today.replace(day=1)
+
+    # Build the list of month-start dates, oldest first.
+    starts: list[date] = []
+    cursor = current_start
+    for _ in range(months):
+        starts.append(cursor)
+        cursor = (cursor - timedelta(days=1)).replace(day=1)
+    starts.reverse()
+
+    points: list[dict] = []
+    with SessionLocal() as db:
+        for start in starts:
+            end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+            income = sum(_sum_by_ccy(db, user_id, "income", start, end).values())
+            expense = sum(_sum_by_ccy(db, user_id, "expense", start, end).values())
+            points.append({
+                "month": start.isoformat(),
+                "income": round(income, 2),
+                "expense": round(expense, 2),
+                "net": round(income - expense, 2),
+            })
+
+        # Per-category MoM: current month vs previous month (expense only).
+        prev_start = (current_start - timedelta(days=1)).replace(day=1)
+        next_month = (current_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        cur_cats = _cat_totals(db, user_id, current_start, next_month)
+        prev_cats = _cat_totals(db, user_id, prev_start, current_start)
+        names = set(cur_cats) | set(prev_cats)
+        category_mom = []
+        for name in names:
+            cur = cur_cats.get(name, 0.0)
+            prev = prev_cats.get(name, 0.0)
+            change_pct = ((cur - prev) / prev * 100.0) if prev else None
+            category_mom.append({
+                "category": name,
+                "current": round(cur, 2),
+                "previous": round(prev, 2),
+                "change_pct": round(change_pct, 1) if change_pct is not None else None,
+            })
+        category_mom.sort(key=lambda c: c["current"], reverse=True)
+
+    return {"months": points, "category_mom": category_mom}
+
+
+def _cat_totals(db, user_id: int, start: date, end: date) -> dict[str, float]:
+    rows = db.execute(
+        select(Transaction.category, func.sum(Transaction.amount))
+        .where(
+            Transaction.user_id == user_id,
+            Transaction.type == "expense",
+            Transaction.occurred_on >= start,
+            Transaction.occurred_on < end,
+        )
+        .group_by(Transaction.category)
+    ).all()
+    return {cat: float(total or 0.0) for cat, total in rows}
+
+
 def _parse_month(value: str | None) -> date | None:
     if not value:
         return None

@@ -85,7 +85,7 @@ export function Discover() {
     : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
@@ -106,8 +106,15 @@ export function Discover() {
             <GlobalCryptoBar global={trends.crypto_global} asOf={asOf} />
           )}
 
+          <MarketSnapshot
+            trends={trends}
+            holdings={holdings}
+            rumors={rumors}
+            news={news}
+          />
+
           {/* Movers + trending crypto */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
             <MoversCard trends={trends} onPick={setActive} />
             <TrendingCryptoCard trends={trends} onPick={setActive} />
           </div>
@@ -117,11 +124,13 @@ export function Discover() {
             <PortfolioSpotlight holdings={holdings} trends={trends} onPick={setActive} />
           )}
 
-          {/* News feed */}
-          {news.length > 0 && <NewsSection articles={news} />}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            {/* News feed */}
+            {news.length > 0 && <NewsSection articles={news} />}
 
-          {/* Rumor mill */}
-          <RumorsCard rumors={rumors} onPick={setActive} />
+            {/* Rumor mill */}
+            <RumorsCard rumors={rumors} onPick={setActive} />
+          </div>
         </>
       )}
 
@@ -202,6 +211,46 @@ function GlobalCryptoBar({
   );
 }
 
+// ── MarketSnapshot ──────────────────────────────────────────────────────────
+
+function MarketSnapshot({
+  trends,
+  holdings,
+  rumors,
+  news,
+}: {
+  trends: TrendsResult | null;
+  holdings: Holding[];
+  rumors: RumorItem[];
+  news: NewsArticle[];
+}) {
+  const { t } = useTranslation("discover");
+  const gainers = trends?.top_gainers?.length ?? 0;
+  const losers = trends?.top_losers?.length ?? 0;
+  const portfolioHits = new Set(holdings.map((h) => h.ticker.toUpperCase()));
+  const overlap = (trends?.top_gainers ?? []).filter((g) => portfolioHits.has(g.ticker.toUpperCase())).length
+    + (trends?.top_losers ?? []).filter((g) => portfolioHits.has(g.ticker.toUpperCase())).length;
+
+  const stats = [
+    { label: t("hotToday"), value: `${gainers + losers}`, hint: t("topGainers") },
+    { label: t("portfolioSpotlight"), value: `${overlap}`, hint: t("rankHint") },
+    { label: t("latestNews"), value: `${news.length}`, hint: news.length > 0 ? news[0].source : t("noTrendData") },
+    { label: t("rumorMill"), value: `${rumors.length}`, hint: t("noRumors") },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {stats.map((item) => (
+        <div key={item.label} className="card border border-line/80 bg-surface-raised/60 p-4">
+          <p className="text-[10px] uppercase tracking-widest text-content-muted">{item.label}</p>
+          <div className="mt-2 text-2xl font-semibold tabular-nums">{item.value}</div>
+          <p className="mt-1 text-[11px] text-content-muted">{item.hint}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── MoversCard ────────────────────────────────────────────────────────────────
 
 function MoversCard({
@@ -221,7 +270,7 @@ function MoversCard({
   ].sort((a, b) => b.pct - a.pct);
 
   return (
-    <section className="card">
+    <section className="card lg:col-span-7">
       <header className="mb-3 flex items-center gap-2">
         <Flame className="h-4 w-4 text-warning" />
         <h2 className="text-sm font-semibold">{t("hotToday")}</h2>
@@ -289,7 +338,7 @@ function TrendingCryptoCard({
   const crypto = trends?.crypto_trending?.slice(0, 8) ?? [];
 
   return (
-    <section className="card">
+    <section className="card lg:col-span-5">
       <header className="mb-3 flex items-center gap-2">
         <Flame className="h-4 w-4 text-accent" />
         <h2 className="text-sm font-semibold">{t("trendingCrypto")}</h2>
@@ -387,7 +436,7 @@ function PortfolioSpotlight({
 function NewsSection({ articles }: { articles: NewsArticle[] }) {
   const { t } = useTranslation("discover");
   return (
-    <section className="card">
+    <section className="card lg:col-span-7">
       <header className="mb-3 flex items-center gap-2">
         <Newspaper className="h-4 w-4 text-content-muted" />
         <h2 className="text-sm font-semibold">{t("latestNews")}</h2>
@@ -425,7 +474,7 @@ function NewsSection({ articles }: { articles: NewsArticle[] }) {
 function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: string) => void }) {
   const { t } = useTranslation("discover");
   return (
-    <section className="card">
+    <section className="card lg:col-span-5">
       <header className="mb-3 flex items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-warning" />
         <h2 className="text-sm font-semibold">{t("rumorMill")}</h2>
