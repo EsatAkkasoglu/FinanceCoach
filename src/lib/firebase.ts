@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDTM8WJ_e0XkE0vcBPQwD7QFUowoG2hE1E",
-  authDomain: "fincoach-esat.web.app",
+  authDomain: "fincoach-esat.firebaseapp.com",
   projectId: "fincoach-esat",
   storageBucket: "fincoach-esat.firebasestorage.app",
   messagingSenderId: "231143485349",
