@@ -28,8 +28,8 @@ export function StepRiskQuiz({ answers, onChange }: Props) {
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">{t("risk.title")}</h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{t("risk.subtitle")}</p>
-        <div className="mt-2 text-xs text-[hsl(var(--text-muted))]">
+        <p className="mt-1 text-sm text-content-muted">{t("risk.subtitle")}</p>
+        <div className="mt-2 text-xs text-content-muted">
           {t("risk.progress", { completed, total: RISK_QUIZ.length })} ·{" "}
           <span className={cn("font-semibold", LABEL_COLOR[label])}>
             {completed === RISK_QUIZ.length
@@ -50,10 +50,10 @@ export function StepRiskQuiz({ answers, onChange }: Props) {
           return (
             <div
               key={q.id}
-              className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4"
+              className="rounded-lg border border-line bg-surface p-4"
             >
               <div className="mb-3 text-sm font-medium">
-                <span className="mr-2 text-[hsl(var(--text-muted))]">{idx + 1}.</span>
+                <span className="mr-2 text-content-muted">{idx + 1}.</span>
                 {prompt}
               </div>
               <div className="grid gap-2">
@@ -68,7 +68,7 @@ export function StepRiskQuiz({ answers, onChange }: Props) {
                         "rounded-md border px-3 py-2 text-left text-sm transition",
                         active
                           ? "border-accent bg-accent-muted"
-                          : "border-[hsl(var(--border))] hover:border-accent"
+                          : "border-line hover:border-accent"
                       )}
                     >
                       {optionLabels[oi] ?? o.label}

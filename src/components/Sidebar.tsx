@@ -200,7 +200,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
       )}
       <aside
         className={cn(
-          "z-40 flex w-60 flex-col border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 pt-4 pb-3.5",
+          "z-40 flex w-60 flex-col border-r border-line bg-surface px-3 pt-4 pb-3.5",
           "fixed inset-y-0 left-0 transition-transform duration-200 md:static md:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         )}
@@ -214,7 +214,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
           <button
             type="button"
             onClick={onMobileClose}
-            className="rounded-md p-1 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))] md:hidden"
+            className="rounded-md p-1 text-content-muted hover:bg-surface-raised hover:text-content md:hidden"
             aria-label="Close menu"
           >
             <X className="h-4 w-4" />
@@ -223,33 +223,33 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
 
         {/* Search row — semantic memory search disguised as a chats search */}
         <div className="mb-3">
-          <div className="flex items-center gap-2 rounded-[10px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2.5 py-[7px] focus-within:border-accent">
-            <Search className="h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
+          <div className="flex items-center gap-2 rounded-[10px] border border-line bg-surface-raised px-2.5 py-[7px] focus-within:border-accent">
+            <Search className="h-3 w-3 shrink-0 text-content-muted" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("search")}
-              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[hsl(var(--text-muted))]"
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-content-muted"
             />
-            <span className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-1.5 py-0.5 font-mono text-[10px] text-[hsl(var(--text-muted))]">
+            <span className="rounded border border-line bg-bg px-1.5 py-0.5 font-mono text-[10px] text-content-muted">
               ⌘K
             </span>
           </div>
           {(searchResults || matchedConvs.length > 0) && (
-            <div className="mt-1.5 max-h-60 overflow-y-auto rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-1.5 text-[10px]">
+            <div className="mt-1.5 max-h-60 overflow-y-auto rounded-md border border-line bg-bg p-1.5 text-[10px]">
               {matchedConvs.length > 0 && (
                 <>
-                  <div className="px-1 py-0.5 uppercase tracking-wide text-[9px] text-[hsl(var(--text-muted))]">
+                  <div className="px-1 py-0.5 uppercase tracking-wide text-[9px] text-content-muted">
                     {t("recent")}
                   </div>
                   {matchedConvs.map((conv) => (
                     <button
                       key={conv.id}
                       onClick={() => handleConvSelect(conv)}
-                      className="flex w-full items-start gap-1.5 rounded px-1 py-1 text-left hover:bg-[hsl(var(--surface-2))]"
+                      className="flex w-full items-start gap-1.5 rounded px-1 py-1 text-left hover:bg-surface-raised"
                     >
-                      <MessageSquare className="mt-0.5 h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
-                      <span className="min-w-0 flex-1 truncate text-[hsl(var(--text))]">
+                      <MessageSquare className="mt-0.5 h-3 w-3 shrink-0 text-content-muted" />
+                      <span className="min-w-0 flex-1 truncate text-content">
                         {conv.title ?? "Untitled"}
                       </span>
                     </button>
@@ -257,21 +257,21 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
                 </>
               )}
               {searchResults && searchResults.length > 0 && (
-                <div className="mt-1 px-1 py-0.5 uppercase tracking-wide text-[9px] text-[hsl(var(--text-muted))]">
+                <div className="mt-1 px-1 py-0.5 uppercase tracking-wide text-[9px] text-content-muted">
                   Memory
                 </div>
               )}
-              {searching && <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("loading")}</div>}
+              {searching && <div className="px-1 py-1 text-content-muted">{t("loading")}</div>}
               {!searching && searchResults && searchResults.length === 0 && matchedConvs.length === 0 && (
-                <div className="px-1 py-1 text-[hsl(var(--text-muted))]">{t("noResults")}</div>
+                <div className="px-1 py-1 text-content-muted">{t("noResults")}</div>
               )}
               {!searching && searchResults?.map((h, i) => (
-                <div key={i} className="flex items-start gap-1.5 rounded px-1 py-1 hover:bg-[hsl(var(--surface-2))]">
+                <div key={i} className="flex items-start gap-1.5 rounded px-1 py-1 hover:bg-surface-raised">
                   <Brain className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
                   <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 leading-snug text-[hsl(var(--text))]">{h.text}</p>
+                    <p className="line-clamp-2 leading-snug text-content">{h.text}</p>
                     {(h.metadata as { kind?: string }).kind && (
-                      <p className="mt-0.5 uppercase tracking-wide text-[9px] text-[hsl(var(--text-muted))]">
+                      <p className="mt-0.5 uppercase tracking-wide text-[9px] text-content-muted">
                         {(h.metadata as { kind?: string }).kind}
                       </p>
                     )}
@@ -294,7 +294,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
                   "flex items-center gap-3 rounded-[10px] px-3 py-2 text-[13px] transition",
                   active
                     ? "bg-accent-muted text-accent"
-                    : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]",
+                    : "text-content-muted hover:bg-surface-raised hover:text-content",
                 )}
               >
                 <Icon className="h-[15px] w-[15px]" />
@@ -308,7 +308,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
         <div className="mb-1.5 flex items-center justify-between px-2">
           <button
             onClick={() => setRecentOpen((v) => !v)}
-            className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))]"
+            className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-content-muted transition hover:text-content"
           >
             {recentOpen ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
             {t("recent")}
@@ -317,7 +317,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
             onClick={handleNewChat}
             disabled={creating}
             title={tChat("newChat")}
-            className="rounded p-1 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-accent disabled:opacity-40"
+            className="rounded p-1 text-content-muted transition hover:bg-surface-raised hover:text-accent disabled:opacity-40"
           >
             <Plus className="h-3 w-3" />
           </button>
@@ -333,7 +333,7 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
                   "group flex cursor-pointer items-center gap-2 rounded-[10px] px-3 py-2 text-xs transition",
                   onChatRoute && activeConvId === conv.id
                     ? "bg-accent-muted text-accent"
-                    : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]",
+                    : "text-content-muted hover:bg-surface-raised hover:text-content",
                 )}
               >
                 <MessageSquare className="h-3 w-3 shrink-0" />
@@ -378,21 +378,21 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
               </div>
             ))}
             {hiddenCount > 0 && (
-              <div className="px-3 py-1.5 text-[11px] text-[hsl(var(--text-muted))]">
+              <div className="px-3 py-1.5 text-[11px] text-content-muted">
                 +{hiddenCount} more
               </div>
             )}
           </div>
         )}
         {recentOpen && conversations.length === 0 && (
-          <p className="px-3 text-[10px] text-[hsl(var(--text-muted))]">{t("noChatsYet")}</p>
+          <p className="px-3 text-[10px] text-content-muted">{t("noChatsYet")}</p>
         )}
 
         {/* Spacer pushes status + profile to bottom */}
         <div className="flex-1" />
 
         {/* Status pill */}
-        <div className="mb-2 flex items-center gap-2 rounded-[10px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-[11px]">
+        <div className="mb-2 flex items-center gap-2 rounded-[10px] border border-line bg-surface-raised px-3 py-2 text-[11px]">
           <span
             className={cn(
               "h-1.5 w-1.5 rounded-full",
@@ -410,26 +410,26 @@ export function Sidebar({ healthy, onSelectConversation, activeConvId, mobileOpe
         <div className="relative" ref={profileWrapRef}>
           <button
             onClick={() => setProfileOpen((v) => !v)}
-            className="flex w-full items-center gap-2.5 rounded-[12px] border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-2 text-left transition hover:border-[hsl(var(--text-muted))]"
+            className="flex w-full items-center gap-2.5 rounded-[12px] border border-line bg-surface-raised p-2 text-left transition hover:border-content-muted"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-accent/30 bg-accent-muted text-lg leading-none">
               {avatarMeta.emoji}
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-semibold">{displayName}</div>
-              <div className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">Personal account</div>
+              <div className="mt-0.5 text-[10px] text-content-muted">Personal account</div>
             </div>
             {profileOpen ? (
-              <ChevronDown className="h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
+              <ChevronDown className="h-3 w-3 shrink-0 text-content-muted" />
             ) : (
-              <ChevronUp className="h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
+              <ChevronUp className="h-3 w-3 shrink-0 text-content-muted" />
             )}
           </button>
           {profileOpen && (
-            <div className="absolute bottom-full left-0 right-0 z-50 mb-1.5 flex flex-col gap-0.5 rounded-[12px] border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-1 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
+            <div className="absolute bottom-full left-0 right-0 z-50 mb-1.5 flex flex-col gap-0.5 rounded-[12px] border border-line bg-surface p-1 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
               <button
                 onClick={() => { setProfileOpen(false); void handleNavClick("/settings"); }}
-                className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-xs text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+                className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-xs text-content-muted transition hover:bg-surface-raised hover:text-content"
               >
                 <SettingsIcon className="h-3.5 w-3.5" />
                 <span className="flex-1 text-left">{t("nav.settings")}</span>

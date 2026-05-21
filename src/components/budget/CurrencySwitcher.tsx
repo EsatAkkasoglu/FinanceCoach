@@ -35,7 +35,7 @@ export function CurrencySwitcher({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <div
-        className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-0.5"
+        className="inline-flex items-center rounded-full border border-line bg-surface-raised p-0.5"
         role="group"
         aria-label="Display currency"
       >
@@ -47,7 +47,7 @@ export function CurrencySwitcher({ className }: { className?: string }) {
               "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition",
               current === c
                 ? "bg-accent text-white"
-                : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+                : "text-content-muted hover:text-content",
             )}
             aria-pressed={current === c}
           >
@@ -62,7 +62,7 @@ export function CurrencySwitcher({ className }: { className?: string }) {
         disabled={loading}
         title="Güncel kurları getir"
         className={cn(
-          "flex items-center gap-1 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1 text-[10px] text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))] disabled:opacity-50",
+          "flex items-center gap-1 rounded-full border border-line bg-surface-raised px-2 py-1 text-[10px] text-content-muted transition hover:text-content disabled:opacity-50",
         )}
       >
         {loading ? (

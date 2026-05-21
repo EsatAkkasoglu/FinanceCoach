@@ -20,7 +20,7 @@ const ASSET_BADGE: Record<string, string> = {
   etf: "bg-gain/10 text-gain",
   crypto: "bg-warning/15 text-warning",
   bond: "bg-accent/15 text-accent",
-  cash: "bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))]",
+  cash: "bg-surface-raised text-content-muted",
 };
 
 export function Portfolio() {
@@ -85,7 +85,7 @@ export function Portfolio() {
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-          <p className="text-sm text-[hsl(var(--text-muted))]">
+          <p className="text-sm text-content-muted">
             {t("subtitle")}
           </p>
         </div>
@@ -176,11 +176,11 @@ function SummaryRow({
   return (
     <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
       <div className="card">
-        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("netWorth")}</div>
+        <div className="text-xs uppercase tracking-wide text-content-muted">{t("netWorth")}</div>
         <div className="num mt-2 text-2xl font-semibold">{formatCurrency(value, displayCcy)}</div>
       </div>
       <div className="card">
-        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("allTimePnl")}</div>
+        <div className="text-xs uppercase tracking-wide text-content-muted">{t("allTimePnl")}</div>
         <div className={cn("num mt-2 text-2xl font-semibold", positive ? "text-gain" : "text-loss")}>
           {formatPercent(pnlPct)}
         </div>
@@ -189,7 +189,7 @@ function SummaryRow({
         </div>
       </div>
       <div className="card">
-        <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("positions")}</div>
+        <div className="text-xs uppercase tracking-wide text-content-muted">{t("positions")}</div>
         <div className="num mt-2 text-2xl font-semibold">{count}</div>
       </div>
     </div>
@@ -220,8 +220,8 @@ function HoldingsTable({
   return (
     <div className="card overflow-hidden p-0">
       <table className="num min-w-full text-sm">
-        <thead className="text-xs text-[hsl(var(--text-muted))]">
-          <tr className="border-b border-[hsl(var(--border))]">
+        <thead className="text-xs text-content-muted">
+          <tr className="border-b border-line">
             <th className="px-4 py-3 text-left font-normal">{t("table.ticker")}</th>
             <th className="px-3 py-3 text-left font-normal">{t("table.type")}</th>
             <th className="px-3 py-3 text-right font-normal">{t("table.qty")}</th>
@@ -237,7 +237,7 @@ function HoldingsTable({
             <tr
               key={h.id ?? h.ticker}
               className={cn(
-                "group border-b border-[hsl(var(--border))] last:border-0 hover:bg-[hsl(var(--surface-2))]/50 transition",
+                "group border-b border-line last:border-0 hover:bg-surface-raised/50 transition",
                 deletingId === h.id && "opacity-40 pointer-events-none",
               )}
             >
@@ -248,7 +248,7 @@ function HoldingsTable({
                 </span>
               </td>
               <td className="px-3 py-3 text-right">{h.quantity}</td>
-              <td className="px-3 py-3 text-right text-[hsl(var(--text-muted))]">
+              <td className="px-3 py-3 text-right text-content-muted">
                 {fmt(h.cost_basis, h)}
               </td>
               <td className="px-3 py-3 text-right">
@@ -268,7 +268,7 @@ function HoldingsTable({
                   {(h.asset_class === "stock" || h.asset_class === "etf") && (
                     <button
                       onClick={() => onAnalyze(h.ticker)}
-                      className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-accent"
+                      className="rounded p-1.5 text-content-muted hover:bg-surface hover:text-accent"
                       title={`8-dim analysis for ${h.ticker}`}
                       aria-label={`Analyze ${h.ticker}`}
                     >
@@ -278,14 +278,14 @@ function HoldingsTable({
                   <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
                     <button
                       onClick={() => onEdit(h)}
-                      className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-accent"
+                      className="rounded p-1.5 text-content-muted hover:bg-surface hover:text-accent"
                       aria-label={`Edit ${h.ticker}`}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => onDelete(h)}
-                      className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-loss"
+                      className="rounded p-1.5 text-content-muted hover:bg-surface hover:text-loss"
                       aria-label={`Delete ${h.ticker}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -311,7 +311,7 @@ function EmptyPortfolio({ onAdd }: { onAdd: () => void }) {
         <Briefcase className="h-6 w-6 text-accent" />
       </div>
       <h2 className="text-lg font-semibold tracking-tight">{t("empty.title")}</h2>
-      <p className="mt-1 max-w-md text-sm text-[hsl(var(--text-muted))]">
+      <p className="mt-1 max-w-md text-sm text-content-muted">
         {t("empty.desc")}
       </p>
 
@@ -350,17 +350,17 @@ function CTACard({
         "flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition",
         accent
           ? "border-accent bg-accent-muted/30 hover:bg-accent-muted/50"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] hover:border-[hsl(var(--text-muted))]",
+          : "border-line bg-surface-raised hover:border-content-muted",
       )}
     >
       <span className={cn(
         "flex h-9 w-9 items-center justify-center rounded-lg",
-        accent ? "bg-accent text-white" : "bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
+        accent ? "bg-accent text-white" : "bg-surface text-content-muted",
       )}>
         {icon}
       </span>
       <span className="text-sm font-semibold">{title}</span>
-      <span className="text-xs text-[hsl(var(--text-muted))]">{description}</span>
+      <span className="text-xs text-content-muted">{description}</span>
     </button>
   );
 }
@@ -371,13 +371,13 @@ function PortfolioSkeleton() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {[0, 1, 2].map((i) => (
           <div key={i} className="card h-24 animate-pulse">
-            <div className="h-3 w-20 rounded bg-[hsl(var(--surface-2))]" />
-            <div className="mt-3 h-7 w-32 rounded bg-[hsl(var(--surface-2))]" />
+            <div className="h-3 w-20 rounded bg-surface-raised" />
+            <div className="mt-3 h-7 w-32 rounded bg-surface-raised" />
           </div>
         ))}
       </div>
       <div className="card flex h-32 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+        <Loader2 className="h-5 w-5 animate-spin text-content-muted" />
       </div>
     </div>
   );

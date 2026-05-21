@@ -39,7 +39,7 @@ export function StepGoals({ goal, financialChallenges, onChange }: Props) {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">{t("goals.title")}</h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{t("goals.subtitle")}</p>
+        <p className="mt-1 text-sm text-content-muted">{t("goals.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -59,7 +59,7 @@ export function StepGoals({ goal, financialChallenges, onChange }: Props) {
               "flex flex-col items-center gap-1 rounded-lg border p-4 transition",
               goal.type === g.id
                 ? "border-accent bg-accent-muted shadow-glow"
-                : "border-[hsl(var(--border))] hover:border-accent"
+                : "border-line hover:border-accent"
             )}
           >
             <span className="text-3xl">{g.emoji}</span>
@@ -69,9 +69,9 @@ export function StepGoals({ goal, financialChallenges, onChange }: Props) {
       </div>
 
       {selected && (
-        <div className="space-y-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4">
+        <div className="space-y-4 rounded-lg border border-line bg-surface-raised p-4">
           <label className="block">
-            <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <span className="text-xs uppercase tracking-wide text-content-muted">
               {t("goals.targetAmount")}
             </span>
             <input
@@ -81,22 +81,22 @@ export function StepGoals({ goal, financialChallenges, onChange }: Props) {
               value={goal.amount || ""}
               onChange={(e) => onChange({ goal: { amount: Number(e.target.value) } })}
               placeholder="300000"
-              className="num mt-2 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-base outline-none focus:border-accent"
+              className="num mt-2 w-full rounded-lg border border-line bg-surface px-4 py-3 text-base outline-none focus:border-accent"
             />
-            <span className="mt-1 block text-xs text-[hsl(var(--text-muted))]">
+            <span className="mt-1 block text-xs text-content-muted">
               {goal.amount > 0 ? formatCurrency(goal.amount) : t("goals.numbersOnly")}
             </span>
           </label>
 
           <label className="block">
-            <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <span className="text-xs uppercase tracking-wide text-content-muted">
               {t("goals.byWhen")}
             </span>
             <input
               type="date"
               value={goal.targetDate}
               onChange={(e) => onChange({ goal: { targetDate: e.target.value } })}
-              className="mt-2 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-base outline-none focus:border-accent"
+              className="mt-2 w-full rounded-lg border border-line bg-surface px-4 py-3 text-base outline-none focus:border-accent"
             />
           </label>
         </div>
@@ -104,10 +104,10 @@ export function StepGoals({ goal, financialChallenges, onChange }: Props) {
 
       <div className="space-y-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <p className="text-xs uppercase tracking-wide text-content-muted">
             {t("goals.familiar")}
           </p>
-          <p className="mt-0.5 text-sm text-[hsl(var(--text-muted))]">{t("goals.familiarHint")}</p>
+          <p className="mt-0.5 text-sm text-content-muted">{t("goals.familiarHint")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {FINANCIAL_CHALLENGES.map((ch) => {
@@ -121,7 +121,7 @@ export function StepGoals({ goal, financialChallenges, onChange }: Props) {
                   "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition",
                   active
                     ? "border-accent bg-accent/10 text-accent"
-                    : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:border-accent/50"
+                    : "border-line text-content-muted hover:border-accent/50"
                 )}
               >
                 <span>{ch.emoji}</span>

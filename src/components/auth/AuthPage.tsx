@@ -67,10 +67,10 @@ export function AuthPage() {
   const isRegister = mode === "register";
 
   return (
-    <div className="flex h-screen items-center justify-center bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
-      <div className="w-full max-w-sm rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-8 shadow-lg">
+    <div className="flex h-screen items-center justify-center bg-bg text-content">
+      <div className="w-full max-w-sm rounded-xl border border-line bg-surface p-8 shadow-lg">
         <h1 className="mb-1 text-2xl font-semibold">FinCoach</h1>
-        <p className="mb-6 text-sm text-[hsl(var(--text-muted))]">
+        <p className="mb-6 text-sm text-content-muted">
           {isRegister ? t("createAccount") : t("signInToContinue")}
         </p>
 
@@ -79,7 +79,7 @@ export function AuthPage() {
           type="button"
           onClick={handleGoogle}
           disabled={googleLoading || submitting}
-          className="mb-4 flex w-full items-center justify-center gap-2.5 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-4 py-2 text-sm font-medium transition hover:bg-[hsl(var(--surface-2))] disabled:opacity-50"
+          className="mb-4 flex w-full items-center justify-center gap-2.5 rounded-md border border-line bg-bg px-4 py-2 text-sm font-medium transition hover:bg-surface-raised disabled:opacity-50"
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -92,16 +92,16 @@ export function AuthPage() {
 
         <div className="relative mb-4">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-[hsl(var(--border))]" />
+            <div className="w-full border-t border-line" />
           </div>
           <div className="relative flex justify-center text-xs">
-            <span className="bg-[hsl(var(--surface))] px-2 text-[hsl(var(--text-muted))]">or</span>
+            <span className="bg-surface px-2 text-content-muted">or</span>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[hsl(var(--text-muted))]">
+            <span className="mb-1 block text-xs font-medium text-content-muted">
               {t("email", { defaultValue: "Email" })}
             </span>
             <input
@@ -110,12 +110,12 @@ export function AuthPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
+              className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
             />
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[hsl(var(--text-muted))]">
+            <span className="mb-1 block text-xs font-medium text-content-muted">
               {t("password")}
             </span>
             <input
@@ -126,14 +126,14 @@ export function AuthPage() {
               maxLength={128}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm outline-none focus:border-[hsl(var(--accent))]"
+              className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
             />
           </label>
 
           <button
             type="submit"
             disabled={submitting || googleLoading}
-            className="w-full rounded-md bg-[hsl(var(--accent))] px-4 py-2 text-sm font-medium text-[hsl(var(--accent-fg))] transition hover:opacity-90 disabled:opacity-50"
+            className="w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? t("pleaseWait") : isRegister ? t("createAccountBtn") : t("signIn")}
           </button>
@@ -142,13 +142,13 @@ export function AuthPage() {
         <button
           type="button"
           onClick={() => setMode(isRegister ? "login" : "register")}
-          className="mt-4 w-full text-center text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+          className="mt-4 w-full text-center text-xs text-content-muted hover:text-content"
         >
           {isRegister ? t("alreadyHaveAccount") : t("needAccount")}
         </button>
 
-        <div className="mt-6 border-t border-[hsl(var(--border))] pt-5">
-          <p className="mb-3 text-center text-[11px] text-[hsl(var(--text-muted))]">
+        <div className="mt-6 border-t border-line pt-5">
+          <p className="mb-3 text-center text-[11px] text-content-muted">
             <Trans
               t={t}
               i18nKey="demoSectionLabel"
@@ -168,7 +168,7 @@ export function AuthPage() {
             <Sparkles className="h-4 w-4" />
             {demoLoading ? t("demoLoading") : t("demoBtn")}
           </button>
-          <p className="mt-2 text-center text-[10px] text-[hsl(var(--text-muted))]">
+          <p className="mt-2 text-center text-[10px] text-content-muted">
             {t("demoSectionDesc")}
           </p>
         </div>

@@ -88,28 +88,28 @@ function ResultView({ result, tool }: { result: string; tool: string }) {
           if (item.sentiment) meta.push(String(item.sentiment));
           const summary = (item.summary || item.description) as string | undefined;
           return (
-            <li key={i} className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2">
+            <li key={i} className="rounded border border-line bg-surface p-2">
               {title && (url
                 ? <a
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-medium text-[11px] text-[hsl(var(--text))] hover:text-accent hover:underline underline-offset-2"
+                    className="font-medium text-[11px] text-content hover:text-accent hover:underline underline-offset-2"
                   >
                     {title}
                   </a>
-                : <p className="font-medium text-[11px] text-[hsl(var(--text))]">{title}</p>
+                : <p className="font-medium text-[11px] text-content">{title}</p>
               )}
               {meta.length > 0 && (
-                <p className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                <p className="mt-0.5 text-[10px] text-content-muted">
                   {meta.join(" · ")}
                 </p>
               )}
               {!title && !summary && (
-                <p className="text-[10px] text-[hsl(var(--text-muted))]">{formatValue(item)}</p>
+                <p className="text-[10px] text-content-muted">{formatValue(item)}</p>
               )}
               {summary && (
-                <p className="mt-1 text-[10px] text-[hsl(var(--text-muted))] line-clamp-3">
+                <p className="mt-1 text-[10px] text-content-muted line-clamp-3">
                   {summary}
                 </p>
               )}
@@ -117,7 +117,7 @@ function ResultView({ result, tool }: { result: string; tool: string }) {
           );
         })}
         {parsed.length > 8 && (
-          <li className="text-[10px] text-[hsl(var(--text-muted))]">
+          <li className="text-[10px] text-content-muted">
             +{parsed.length - 8} more
           </li>
         )}
@@ -132,16 +132,16 @@ function ResultView({ result, tool }: { result: string; tool: string }) {
       <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
         {entries.slice(0, 24).map(([k, v]) => (
           <div key={k} className="contents">
-            <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <span className="text-[10px] uppercase tracking-wide text-content-muted">
               {k.replace(/_/g, " ")}
             </span>
-            <span className="text-[10px] text-[hsl(var(--text))] break-words">
+            <span className="text-[10px] text-content break-words">
               {formatValue(v)}
             </span>
           </div>
         ))}
         {entries.length > 24 && (
-          <span className="col-span-2 text-[10px] text-[hsl(var(--text-muted))]">
+          <span className="col-span-2 text-[10px] text-content-muted">
             +{entries.length - 24} more fields
           </span>
         )}
@@ -152,7 +152,7 @@ function ResultView({ result, tool }: { result: string; tool: string }) {
   // Fallback: plain text.
   void tool;
   return (
-    <p className="whitespace-pre-wrap break-words text-[10px] text-[hsl(var(--text))]">
+    <p className="whitespace-pre-wrap break-words text-[10px] text-content">
       {result}
     </p>
   );
@@ -164,8 +164,8 @@ function HotTrendsResult({ scanTime, trends }: { scanTime: unknown; trends: unkn
   return (
     <div className="space-y-2">
       {typeof scanTime === "string" && (
-        <p className="text-[10px] text-[hsl(var(--text-muted))]">
-          Scan time: <span className="text-[hsl(var(--text))]">{scanTime}</span>
+        <p className="text-[10px] text-content-muted">
+          Scan time: <span className="text-content">{scanTime}</span>
         </p>
       )}
       <div className="space-y-1.5">
@@ -176,22 +176,22 @@ function HotTrendsResult({ scanTime, trends }: { scanTime: unknown; trends: unkn
           const signals = Array.isArray(item.signals) ? item.signals.map(String) : [];
 
           return (
-            <div key={`${symbol}-${i}`} className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2">
+            <div key={`${symbol}-${i}`} className="rounded border border-line bg-surface p-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-mono text-[11px] font-semibold text-accent">{symbol}</span>
                 {mentions !== undefined && (
-                  <span className="text-[10px] text-[hsl(var(--text-muted))]">
+                  <span className="text-[10px] text-content-muted">
                     {String(mentions)} mentions
                   </span>
                 )}
               </div>
               {signals.length > 0 && (
-                <p className="mt-1 text-[10px] text-[hsl(var(--text))]">
+                <p className="mt-1 text-[10px] text-content">
                   {signals.slice(0, 3).join(" · ")}
                 </p>
               )}
               {sources.length > 0 && (
-                <p className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                <p className="mt-0.5 text-[10px] text-content-muted">
                   {sources.slice(0, 3).join(" · ")}
                 </p>
               )}
@@ -200,7 +200,7 @@ function HotTrendsResult({ scanTime, trends }: { scanTime: unknown; trends: unkn
         })}
       </div>
       {trends.length > items.length && (
-        <p className="text-[10px] text-[hsl(var(--text-muted))]">
+        <p className="text-[10px] text-content-muted">
           +{trends.length - items.length} more
         </p>
       )}
@@ -225,7 +225,7 @@ export function CitationChip({ citation }: { citation: Citation }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "inline-flex items-center gap-1 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-0.5 text-[10px] text-[hsl(var(--text-muted))] transition",
+          "inline-flex items-center gap-1 rounded-md border border-line bg-surface-raised px-2 py-0.5 text-[10px] text-content-muted transition",
           "hover:border-accent hover:text-accent",
           open && "border-accent text-accent"
         )}
@@ -233,18 +233,18 @@ export function CitationChip({ citation }: { citation: Citation }) {
         <Database className="h-2.5 w-2.5" />
         <span className="font-medium">{meta.label}</span>
         {preview && (
-          <span className="num text-[hsl(var(--text-muted))]/80">: {preview}</span>
+          <span className="num text-content-muted/80">: {preview}</span>
         )}
         <ChevronDown
           className={cn("h-2.5 w-2.5 transition-transform", open && "rotate-180")}
         />
       </button>
       {open && (
-        <div className="mt-1 max-w-md space-y-2 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-2">
+        <div className="mt-1 max-w-md space-y-2 rounded-md border border-line bg-surface-raised p-2">
           {hasResult ? (
             <>
               <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-widest text-content-muted">
                   <Sparkles className="h-2.5 w-2.5 text-accent" />
                   Result
                 </span>
@@ -254,13 +254,13 @@ export function CitationChip({ citation }: { citation: Citation }) {
                     e.stopPropagation();
                     setShowRaw((v) => !v);
                   }}
-                  className="text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))] hover:text-accent"
+                  className="text-[9px] uppercase tracking-widest text-content-muted hover:text-accent"
                 >
                   {showRaw ? "pretty" : "raw"}
                 </button>
               </div>
               {showRaw ? (
-                <pre className="max-h-64 overflow-auto rounded bg-[hsl(var(--surface))] p-1.5 font-mono text-[10px] text-[hsl(var(--text-muted))] whitespace-pre-wrap break-all">
+                <pre className="max-h-64 overflow-auto rounded bg-surface p-1.5 font-mono text-[10px] text-content-muted whitespace-pre-wrap break-all">
                   {citation.result}
                 </pre>
               ) : (
@@ -268,18 +268,18 @@ export function CitationChip({ citation }: { citation: Citation }) {
                   <ResultView result={citation.result!} tool={citation.tool} />
                 </div>
               )}
-              <details className="text-[9px] text-[hsl(var(--text-muted))]">
+              <details className="text-[9px] text-content-muted">
                 <summary className="cursor-pointer uppercase tracking-widest hover:text-accent">
                   <Code2 className="mr-1 inline h-2.5 w-2.5" />
                   Call
                 </summary>
-                <pre className="mt-1 overflow-x-auto rounded bg-[hsl(var(--surface))] p-1.5 font-mono text-[10px]">
+                <pre className="mt-1 overflow-x-auto rounded bg-surface p-1.5 font-mono text-[10px]">
                   {citation.tool}({JSON.stringify(citation.args, null, 2)})
                 </pre>
               </details>
             </>
           ) : (
-            <pre className="overflow-x-auto font-mono text-[10px] text-[hsl(var(--text-muted))]">
+            <pre className="overflow-x-auto font-mono text-[10px] text-content-muted">
               <Code2 className="mr-1 inline h-2.5 w-2.5" />
               {citation.tool}({JSON.stringify(citation.args, null, 2).slice(0, 400)})
             </pre>

@@ -27,10 +27,10 @@ export interface AgentNodeData {
 }
 
 const STATUS_STYLES: Record<AgentStatus, string> = {
-  idle: "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
+  idle: "border-line bg-surface text-content-muted",
   running: "border-accent bg-accent-muted text-accent shadow-glow",
-  done: "border-accent/40 bg-[hsl(var(--surface))] text-[hsl(var(--text))]",
-  error: "border-loss bg-[hsl(var(--surface))] text-loss",
+  done: "border-accent/40 bg-surface text-content",
+  error: "border-loss bg-surface text-loss",
 };
 
 export function AgentNode({ data }: { data: AgentNodeData }) {

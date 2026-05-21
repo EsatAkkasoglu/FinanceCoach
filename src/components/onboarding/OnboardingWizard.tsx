@@ -144,7 +144,7 @@ export function OnboardingWizard() {
   const isLast = step === STEP_KEYS.length - 1;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[hsl(var(--bg))] p-6">
+    <div className="flex min-h-screen items-center justify-center bg-bg p-6">
       <div className="w-full max-w-xl">
         {/* Progress dots */}
         <div className="mb-8 flex items-center justify-center gap-2">
@@ -155,7 +155,7 @@ export function OnboardingWizard() {
                   "flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium transition",
                   i < step && "border-accent bg-accent text-accent-fg",
                   i === step && "border-accent text-accent shadow-glow",
-                  i > step && "border-[hsl(var(--border))] text-[hsl(var(--text-muted))]"
+                  i > step && "border-line text-content-muted"
                 )}
               >
                 {i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}
@@ -164,7 +164,7 @@ export function OnboardingWizard() {
                 <div
                   className={cn(
                     "h-px w-6 transition",
-                    i < step ? "bg-accent" : "bg-[hsl(var(--border))]"
+                    i < step ? "bg-accent" : "bg-default"
                   )}
                 />
               )}
@@ -233,14 +233,14 @@ export function OnboardingWizard() {
             type="button"
             onClick={() => setStep((s) => Math.max(0, s - 1))}
             disabled={step === 0}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[hsl(var(--text-muted))] disabled:opacity-30 hover:text-[hsl(var(--text))]"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-content-muted disabled:opacity-30 hover:text-content"
           >
             <ArrowLeft className="h-4 w-4" />
             {t("back")}
           </button>
 
           {step === 2 && (
-            <span className="text-xs text-[hsl(var(--text-muted))]">
+            <span className="text-xs text-content-muted">
               {t("stepOptional")}
             </span>
           )}

@@ -1,6 +1,10 @@
 import type { Config } from "tailwindcss";
 import typography from "@tailwindcss/typography";
 
+// Bridges a `--var` holding space-separated HSL channels (e.g. "224 14% 9%")
+// into a Tailwind color that supports opacity modifiers: bg-surface, bg-surface/40.
+const hslVar = (name: string) => `hsl(var(--${name}) / <alpha-value>)`;
+
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   darkMode: "class",
@@ -17,6 +21,23 @@ export default {
         gain: "#22C55E",
         loss: "#EF4444",
         warning: "#F59E0B",
+        // Surface & text scale — single source of truth lives in index.css :root.
+        // Maps HSL vars into real tokens: bg-surface / text-content-muted / border-line.
+        bg: hslVar("bg"),
+        surface: {
+          DEFAULT: hslVar("surface"),
+          raised: hslVar("surface-2"),
+        },
+        content: {
+          DEFAULT: hslVar("text"),
+          muted: hslVar("text-muted"),
+        },
+      },
+      borderColor: {
+        line: hslVar("border"),
+      },
+      divideColor: {
+        line: hslVar("border"),
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],

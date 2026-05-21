@@ -152,7 +152,7 @@ export function TransactionFormModal({ open, onClose, onSaved, editing, accounts
             list="tx-categories"
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value })}
-            className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            className="w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
           <datalist id="tx-categories">
             {COMMON_CATEGORIES.map((c) => <option key={c} value={c} />)}

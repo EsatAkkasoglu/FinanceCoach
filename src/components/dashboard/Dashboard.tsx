@@ -31,6 +31,7 @@ import {
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { useFxRates } from "@/lib/fx";
 import { cn } from "@/lib/cn";
+import { assetColor, pnlColor, chartTooltipContentStyle, chartTooltipItemStyle } from "@/lib/chartColors";
 import { useDashboardStore, useUserStore, useAuthStore } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
 import { Disclaimer } from "@/components/ui/Disclaimer";
@@ -44,14 +45,6 @@ const ICONS: Record<BriefingItem["icon"], LucideIcon> = {
   flame: Flame,
   newspaper: Newspaper,
   coins: Coins,
-};
-
-const ASSET_COLORS: Record<string, string> = {
-  stock: "#14B8A6",   // teal — non-brand so it doesn't read as interactive
-  etf: "#8B5CF6",     // violet — was #3FCB95, too close to stock green
-  crypto: "#F59E0B",  // amber
-  bond: "#3B82F6",    // blue
-  cash: "#9CA3AF",    // gray
 };
 
 // Cache verisi 5 dakika taze kabul edilir
@@ -147,8 +140,8 @@ export function Dashboard() {
   return (
     <div>
       {/* Top bar — anchors page title vs page content */}
-      <div className="mb-6 flex items-center justify-between border-b border-[hsl(var(--border))] pb-3">
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+      <div className="mb-6 flex items-center justify-between border-b border-line pb-3">
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-content-muted">
           {t("title")}
         </span>
         <RiskBadge cls={badgeCls} label={badgeLabel} explanation={riskExplain} title={t("riskExplanation.title")} />
@@ -235,13 +228,13 @@ function DashboardHero({
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-[32px] font-semibold leading-tight tracking-tight">{greeting}</h1>
         {showDelta ? (
-          <p className="mt-2 flex flex-wrap items-baseline gap-x-2 text-sm text-[hsl(var(--text-muted))]">
-            <span className="num font-medium text-[hsl(var(--text))]">
+          <p className="mt-2 flex flex-wrap items-baseline gap-x-2 text-sm text-content-muted">
+            <span className="num font-medium text-content">
               {formatCurrency(totalValue, displayCcy)}
             </span>
             <span className="opacity-50">·</span>
             {todayDelta === 0 ? (
-              <span className="text-[hsl(var(--text-muted))]">{fallbackSubtitle}</span>
+              <span className="text-content-muted">{fallbackSubtitle}</span>
             ) : (
               <span className={cn("num font-medium", positive ? "text-gain" : "text-loss")}>
                 {positive ? "▲" : "▼"} {formatCurrency(Math.abs(todayDelta), displayCcy)} today
@@ -249,7 +242,7 @@ function DashboardHero({
             )}
           </p>
         ) : (
-          <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{fallbackSubtitle}</p>
+          <p className="mt-2 text-sm text-content-muted">{fallbackSubtitle}</p>
         )}
       </div>
     </div>
@@ -288,10 +281,10 @@ function NetWorthCard({
   }
   return (
     <div className="card lg:col-span-2">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("netWorth")}</div>
+      <div className="text-xs uppercase tracking-wide text-content-muted">{t("netWorth")}</div>
       {loading ? (
         <div className="mt-2 flex h-12 items-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+          <Loader2 className="h-5 w-5 animate-spin text-content-muted" />
         </div>
       ) : totals && totals.count > 0 ? (
         <>
@@ -308,14 +301,14 @@ function NetWorthCard({
                   <Line
                     type="monotone"
                     dataKey="value"
-                    stroke={pnl >= 0 ? "#10B981" : "#EF4444"}
+                    stroke={pnlColor(pnl)}
                     strokeWidth={1.5}
                     dot={false}
                     isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
-              <p className="text-[10px] text-[hsl(var(--text-muted))]">
+              <p className="text-[10px] text-content-muted">
                 {t("lastNDays", { count: history.length })}
               </p>
             </div>
@@ -324,7 +317,7 @@ function NetWorthCard({
       ) : (
         <>
           <div className="num mt-2 text-3xl font-semibold">{formatCurrency(0, displayCcy)}</div>
-          <div className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+          <div className="mt-1 text-xs text-content-muted">
             {t("noHoldings")}
           </div>
         </>
@@ -371,17 +364,17 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
 
   return (
     <div className="card lg:col-span-2">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("thisMonth")}</div>
+      <div className="text-xs uppercase tracking-wide text-content-muted">{t("thisMonth")}</div>
       {loading ? (
         <div className="mt-2 flex h-12 items-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+          <Loader2 className="h-5 w-5 animate-spin text-content-muted" />
         </div>
       ) : budget == null ? (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{t("noBudgetData")}</p>
+        <p className="mt-3 text-sm text-content-muted">{t("noBudgetData")}</p>
       ) : (
         <div className="mt-3 space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+            <span className="flex items-center gap-1.5 text-content-muted">
               <ArrowUpRight className="h-3.5 w-3.5 text-gain" />
               {t("income")}
             </span>
@@ -390,7 +383,7 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
             </span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+            <span className="flex items-center gap-1.5 text-content-muted">
               <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
               {t("expenses")}
             </span>
@@ -399,8 +392,8 @@ function BudgetSnapshotCard({ budget, loading }: { budget: BudgetSummary | null;
             </span>
           </div>
           {savingsRate != null && (
-            <div className="flex items-center justify-between border-t border-[hsl(var(--border))] pt-2 text-sm">
-              <span className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+            <div className="flex items-center justify-between border-t border-line pt-2 text-sm">
+              <span className="flex items-center gap-1.5 text-content-muted">
                 <PiggyBank className="h-3.5 w-3.5 text-accent" />
                 {t("savingsRate")}
               </span>
@@ -440,10 +433,10 @@ function BriefingCard({
 
   return (
     <div className="card lg:col-span-2 flex flex-col">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("todaysBrief")}</div>
+      <div className="text-xs uppercase tracking-wide text-content-muted">{t("todaysBrief")}</div>
       {loading ? (
         <div className="mt-3 flex h-16 items-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+          <Loader2 className="h-5 w-5 animate-spin text-content-muted" />
         </div>
       ) : items && items.length > 0 ? (
         <ul className="mt-3 space-y-3">
@@ -458,7 +451,7 @@ function BriefingCard({
               <li key={i} className="flex items-start gap-3 text-sm">
                 <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", tone)} />
                 <div>
-                  <span className="text-[hsl(var(--text-muted))] mr-1">{it.label}:</span>
+                  <span className="text-content-muted mr-1">{it.label}:</span>
                   <span>{it.text}</span>
                 </div>
               </li>
@@ -466,10 +459,10 @@ function BriefingCard({
           })}
         </ul>
       ) : (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{t("briefUnavailable")}</p>
+        <p className="mt-3 text-sm text-content-muted">{t("briefUnavailable")}</p>
       )}
       {fetchedAt && (
-        <div className="mt-auto flex items-center justify-between pt-3 text-[10px] text-[hsl(var(--text-muted))]">
+        <div className="mt-auto flex items-center justify-between pt-3 text-[10px] text-content-muted">
           <span className="truncate">{t("briefSource")}</span>
           <span className="shrink-0 pl-2">{t("briefUpdated", { time: relativeTime() })}</span>
         </div>
@@ -494,13 +487,13 @@ function PortfolioCard({ holdings, loading }: { holdings: Holding[]; loading: bo
   const hasData = data.length > 0;
   return (
     <div className="card lg:col-span-2">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("allocation")}</div>
+      <div className="text-xs uppercase tracking-wide text-content-muted">{t("allocation")}</div>
       {loading ? (
         <div className="mt-3 flex h-44 items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+          <Loader2 className="h-5 w-5 animate-spin text-content-muted" />
         </div>
       ) : !hasData ? (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{t("addHoldingsForBreakdown")}</p>
+        <p className="mt-3 text-sm text-content-muted">{t("addHoldingsForBreakdown")}</p>
       ) : (
         <div className="mt-2 h-44">
           <ResponsiveContainer width="100%" height="100%">
@@ -514,23 +507,18 @@ function PortfolioCard({ holdings, loading }: { holdings: Holding[]; loading: bo
                 strokeWidth={0}
               >
                 {data.map((d) => (
-                  <Cell key={d.name} fill={ASSET_COLORS[d.name] ?? "#666"} />
+                  <Cell key={d.name} fill={assetColor(d.name)} />
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{
-                  background: "hsl(224 14% 9%)",
-                  border: "1px solid hsl(224 14% 18%)",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
+                contentStyle={chartTooltipContentStyle}
                 formatter={(v: number, name: string) => [
                   formatCurrency(v, displayCcy),
                   name.charAt(0).toUpperCase() + name.slice(1),
                 ]}
                 labelFormatter={() => ""}
                 separator=": "
-                itemStyle={{ color: "hsl(var(--text))" }}
+                itemStyle={chartTooltipItemStyle}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -543,11 +531,11 @@ function PortfolioCard({ holdings, loading }: { holdings: Holding[]; loading: bo
               <span className="flex items-center gap-2 capitalize">
                 <span
                   className="inline-block h-2 w-2 rounded-full"
-                  style={{ background: ASSET_COLORS[d.name] ?? "#666" }}
+                  style={{ background: assetColor(d.name) }}
                 />
                 {d.name}
               </span>
-              <span className="num text-[hsl(var(--text-muted))]">{formatCurrency(d.value, displayCcy)}</span>
+              <span className="num text-content-muted">{formatCurrency(d.value, displayCcy)}</span>
             </li>
           ))}
         </ul>
@@ -584,11 +572,11 @@ function RiskBadge({
         <Info className="h-3 w-3 opacity-70" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3 text-left shadow-2xl">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-surface p-3 text-left shadow-2xl">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-content-muted">
             {title}
           </p>
-          <p className="text-xs leading-relaxed text-[hsl(var(--text))]">{explanation}</p>
+          <p className="text-xs leading-relaxed text-content">{explanation}</p>
         </div>
       )}
     </div>
@@ -662,27 +650,27 @@ function NextStepCard({
             <span className="text-[10px] font-semibold uppercase tracking-widest text-accent">
               {t("nextStep.title")}
             </span>
-            <span className="text-[10px] text-[hsl(var(--text-muted))]">·</span>
-            <span className="text-[10px] text-[hsl(var(--text-muted))]">
+            <span className="text-[10px] text-content-muted">·</span>
+            <span className="text-[10px] text-content-muted">
               {t("nextStep.subtitle")}
             </span>
           </div>
           <h3 className="mt-1 text-lg font-semibold tracking-tight">
             {allDone ? t("nextStep.allDone") : meta?.title}
           </h3>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <p className="mt-1 text-sm text-content-muted">
             {allDone ? t("nextStep.allDoneDesc") : meta?.desc}
           </p>
 
           {/* Progress bar */}
           <div className="mt-3 flex items-center gap-3">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-raised">
               <div
                 className="h-full rounded-full bg-accent transition-all duration-500"
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <span className="shrink-0 text-[10px] font-medium text-[hsl(var(--text-muted))]">
+            <span className="shrink-0 text-[10px] font-medium text-content-muted">
               {completedCount}/{steps.length} · {pct}% {t("profileCompletion.complete")}
             </span>
           </div>
@@ -724,20 +712,20 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
   }
   return (
     <div className="card lg:col-span-4">
-      <div className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("holdings")}</div>
+      <div className="text-xs uppercase tracking-wide text-content-muted">{t("holdings")}</div>
       {loading ? (
         <div className="mt-3 flex h-32 items-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+          <Loader2 className="h-5 w-5 animate-spin text-content-muted" />
         </div>
       ) : holdings.length === 0 ? (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">
+        <p className="mt-3 text-sm text-content-muted">
           {t("noHoldingsDesc")}
         </p>
       ) : (
         <div className="mt-3 overflow-x-auto">
           <table className="num min-w-full text-sm">
-            <thead className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              <tr className="border-b border-[hsl(var(--border))]">
+            <thead className="text-xs uppercase tracking-wide text-content-muted">
+              <tr className="border-b border-line">
                 <th className="py-3 pr-4 text-left font-normal">{t("table.ticker")}</th>
                 <th className="py-3 pr-4 text-right font-normal">{t("table.qty")}</th>
                 <th className="py-3 pr-4 text-right font-normal">{t("table.price")}</th>
@@ -747,7 +735,7 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
             </thead>
             <tbody>
               {holdings.map((h) => (
-                <tr key={h.ticker} className="border-b border-[hsl(var(--border))] last:border-0">
+                <tr key={h.ticker} className="border-b border-line last:border-0">
                   <td className="py-3 pr-4 font-semibold">{h.ticker}</td>
                   <td className="py-3 pr-4 text-right">{h.quantity}</td>
                   <td className="py-3 pr-4 text-right">{fmt(h.current_price ?? h.cost_basis, h)}</td>

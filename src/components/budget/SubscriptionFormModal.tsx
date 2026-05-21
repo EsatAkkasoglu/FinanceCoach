@@ -179,7 +179,7 @@ export function SubscriptionFormModal({
 
         {!isEdit && (
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-content-muted">
               Quick add
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -189,7 +189,7 @@ export function SubscriptionFormModal({
                   type="button"
                   onClick={() => applyPreset(p)}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2.5 py-1 text-xs transition",
+                    "flex items-center gap-1.5 rounded-full border border-line bg-surface-raised px-2.5 py-1 text-xs transition",
                     "hover:border-accent hover:bg-accent-muted",
                   )}
                 >
@@ -286,14 +286,14 @@ function DirectionToggle({
         "flex-1 rounded-lg border px-3 py-2.5 text-left transition",
         active
           ? "border-accent bg-accent-muted"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] hover:border-[hsl(var(--text-muted))]",
+          : "border-line bg-surface-raised hover:border-content-muted",
       )}
     >
       <div className="flex items-center gap-1.5">
-        <span className={cn(active ? "text-accent" : "text-[hsl(var(--text-muted))]")}>{icon}</span>
+        <span className={cn(active ? "text-accent" : "text-content-muted")}>{icon}</span>
         <span className={cn("text-sm font-medium", active ? "text-accent" : "")}>{label}</span>
       </div>
-      <p className="mt-0.5 text-[11px] text-[hsl(var(--text-muted))]">{hint}</p>
+      <p className="mt-0.5 text-[11px] text-content-muted">{hint}</p>
     </button>
   );
 }

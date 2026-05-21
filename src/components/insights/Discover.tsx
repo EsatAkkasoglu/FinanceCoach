@@ -19,6 +19,7 @@ import {
   type Holding,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { chartTooltip, GAIN, LOSS } from "@/lib/chartColors";
 import { TickerDrawer } from "./TickerDrawer";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -88,11 +89,11 @@ export function Discover() {
       {/* Header */}
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-[hsl(var(--text-muted))]">{t("subtitle")}</p>
+        <p className="text-sm text-content-muted">{t("subtitle")}</p>
       </header>
 
       {loading ? (
-        <div className="card flex h-40 items-center justify-center text-[hsl(var(--text-muted))]">
+        <div className="card flex h-40 items-center justify-center text-content-muted">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       ) : (
@@ -135,7 +136,7 @@ function PersonalizedBanner({ profile }: { profile: UserProfile }) {
   const { t } = useTranslation("discover");
   const tip = t(`riskTip.${profile.risk_profile}`);
   return (
-    <div className="card flex items-start gap-4 border-l-4 border-l-accent bg-gradient-to-r from-[hsl(var(--surface-2))] to-[hsl(var(--surface-1))]">
+    <div className="card flex items-start gap-4 border-l-4 border-l-accent bg-gradient-to-r from-surface-raised to-surface-raised">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/10 text-lg font-bold text-accent">
         {profile.name?.[0]?.toUpperCase() ?? "?"}
       </div>
@@ -144,7 +145,7 @@ function PersonalizedBanner({ profile }: { profile: UserProfile }) {
           <span className="text-sm font-semibold">{t("personalizedFor", { name: profile.name })}</span>
           <RiskBadge profile={profile.risk_profile} />
         </div>
-        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{tip}</p>
+        <p className="mt-1 text-xs text-content-muted">{tip}</p>
       </div>
     </div>
   );
@@ -184,15 +185,15 @@ function GlobalCryptoBar({
       <div className="flex flex-wrap items-center gap-4">
         {stats.map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="flex items-center gap-2 min-w-[110px]">
-            <Icon className={cn("h-4 w-4 shrink-0 text-[hsl(var(--text-muted))]", color)} />
+            <Icon className={cn("h-4 w-4 shrink-0 text-content-muted", color)} />
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))]">{label}</p>
+              <p className="text-[10px] uppercase tracking-widest text-content-muted">{label}</p>
               <p className={cn("text-sm font-semibold num", color)}>{value}</p>
             </div>
           </div>
         ))}
         {asOf && (
-          <span className="ml-auto text-[10px] text-[hsl(var(--text-muted))]">
+          <span className="ml-auto text-[10px] text-content-muted">
             {t("updatedAt", { time: asOf })}
           </span>
         )}
@@ -241,14 +242,13 @@ function MoversCard({
             <XAxis type="number" tickFormatter={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}%`} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
             <Tooltip
               formatter={(v: number) => [`${v > 0 ? "+" : ""}${v.toFixed(2)}%`, ""]}
-              contentStyle={{ background: "hsl(var(--surface-2))", border: "1px solid hsl(var(--border))", borderRadius: 6, fontSize: 12 }}
-              labelStyle={{ color: "hsl(var(--text-primary))" }}
+              {...chartTooltip}
             />
             <Bar dataKey="pct" radius={[0, 4, 4, 0]} maxBarSize={18}>
               {chartData.map((entry, i) => (
                 <Cell
                   key={i}
-                  fill={entry.type === "gain" ? "hsl(var(--color-gain))" : "hsl(var(--color-loss))"}
+                  fill={entry.type === "gain" ? GAIN : LOSS}
                   fillOpacity={0.85}
                 />
               ))}
@@ -256,12 +256,12 @@ function MoversCard({
           </BarChart>
         </ResponsiveContainer>
       ) : (
-        <p className="text-xs text-[hsl(var(--text-muted))]">{t("noTrendData")}</p>
+        <p className="text-xs text-content-muted">{t("noTrendData")}</p>
       )}
 
       {/* XAxis label */}
       {chartData.length > 0 && (
-        <div className="mt-1 flex justify-between text-[10px] text-[hsl(var(--text-muted))]">
+        <div className="mt-1 flex justify-between text-[10px] text-content-muted">
           <span className="flex items-center gap-1">
             <span className="inline-block h-2 w-2 rounded-sm bg-gain/70" />
             {t("topGainers")}
@@ -293,18 +293,18 @@ function TrendingCryptoCard({
       <header className="mb-3 flex items-center gap-2">
         <Flame className="h-4 w-4 text-accent" />
         <h2 className="text-sm font-semibold">{t("trendingCrypto")}</h2>
-        <span className="ml-auto text-[10px] text-[hsl(var(--text-muted))]">{t("rankHint")}</span>
+        <span className="ml-auto text-[10px] text-content-muted">{t("rankHint")}</span>
       </header>
 
       {crypto.length === 0 ? (
-        <p className="text-xs text-[hsl(var(--text-muted))]">{t("noTrendData")}</p>
+        <p className="text-xs text-content-muted">{t("noTrendData")}</p>
       ) : (
         <ul className="grid grid-cols-2 gap-2">
           {crypto.map((c, i) => (
             <li key={c.symbol}>
               <button
                 onClick={() => onPick(`${c.symbol.toUpperCase()}-USD`)}
-                className="flex w-full items-center gap-2.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-left transition-colors hover:border-accent hover:bg-accent/5"
+                className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface-raised px-3 py-2 text-left transition-colors hover:border-accent hover:bg-accent/5"
               >
                 {/* Rank badge */}
                 <span className={cn(
@@ -312,13 +312,13 @@ function TrendingCryptoCard({
                   i === 0 ? "bg-yellow-500/20 text-yellow-300"
                     : i === 1 ? "bg-slate-400/20 text-slate-300"
                     : i === 2 ? "bg-orange-700/20 text-orange-400"
-                    : "bg-[hsl(var(--surface-1))] text-[hsl(var(--text-muted))]",
+                    : "bg-surface-raised text-content-muted",
                 )}>
                   {c.rank ?? i + 1}
                 </span>
                 <div className="min-w-0">
                   <p className="font-mono text-xs font-semibold uppercase leading-tight">{c.symbol}</p>
-                  <p className="truncate text-[10px] text-[hsl(var(--text-muted))]">{c.name}</p>
+                  <p className="truncate text-[10px] text-content-muted">{c.name}</p>
                 </div>
               </button>
             </li>
@@ -355,7 +355,7 @@ function PortfolioSpotlight({
       </header>
 
       {allHits.length === 0 ? (
-        <p className="text-xs text-[hsl(var(--text-muted))]">{t("noPortfolioOverlap")}</p>
+        <p className="text-xs text-content-muted">{t("noPortfolioOverlap")}</p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {allHits.map((h) => (
@@ -389,10 +389,10 @@ function NewsSection({ articles }: { articles: NewsArticle[] }) {
   return (
     <section className="card">
       <header className="mb-3 flex items-center gap-2">
-        <Newspaper className="h-4 w-4 text-[hsl(var(--text-muted))]" />
+        <Newspaper className="h-4 w-4 text-content-muted" />
         <h2 className="text-sm font-semibold">{t("latestNews")}</h2>
       </header>
-      <ul className="divide-y divide-[hsl(var(--border))]">
+      <ul className="divide-y divide-line">
         {articles.slice(0, 6).map((a, i) => (
           <li key={i} className="py-2.5">
             <a
@@ -401,17 +401,17 @@ function NewsSection({ articles }: { articles: NewsArticle[] }) {
               rel="noopener noreferrer"
               className="group flex items-start gap-2 text-xs hover:text-accent"
             >
-              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded bg-[hsl(var(--surface-2))] text-[9px] text-[hsl(var(--text-muted))]">
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded bg-surface-raised text-[9px] text-content-muted">
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="leading-snug group-hover:underline">{a.title}</p>
-                <p className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                <p className="mt-0.5 text-[10px] text-content-muted">
                   {a.source}
                   {a.published_at ? ` · ${new Date(a.published_at).toLocaleDateString([], { month: "short", day: "numeric" })}` : ""}
                 </p>
               </div>
-              <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100 text-[hsl(var(--text-muted))]" />
+              <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100 text-content-muted" />
             </a>
           </li>
         ))}
@@ -431,9 +431,9 @@ function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: strin
         <h2 className="text-sm font-semibold">{t("rumorMill")}</h2>
       </header>
       {rumors.length === 0 ? (
-        <p className="text-xs text-[hsl(var(--text-muted))]">{t("noRumors")}</p>
+        <p className="text-xs text-content-muted">{t("noRumors")}</p>
       ) : (
-        <ul className="divide-y divide-[hsl(var(--border))]">
+        <ul className="divide-y divide-line">
           {rumors.slice(0, 8).map((r, i) => {
             const isUp = r.sentiment_label === "Bullish" || r.sentiment_label === "Somewhat-Bullish";
             const isDown = r.sentiment_label === "Bearish" || r.sentiment_label === "Somewhat-Bearish";
@@ -443,7 +443,7 @@ function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: strin
                 <div className="flex items-start gap-2">
                   <span className={cn(
                     "rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider",
-                    r.category === "m&a" ? "bg-accent-muted text-accent" : "bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))]",
+                    r.category === "m&a" ? "bg-accent-muted text-accent" : "bg-surface-raised text-content-muted",
                   )}>
                     {r.category ?? "news"}
                   </span>
@@ -453,17 +453,17 @@ function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: strin
                     </button>
                   )}
                   {r.impact_score != null && (
-                    <span className="ml-auto text-[10px] text-[hsl(var(--text-muted))]">
+                    <span className="ml-auto text-[10px] text-content-muted">
                       {t("impact", { score: r.impact_score })}
                     </span>
                   )}
                 </div>
                 <a href={r.url} target="_blank" rel="noopener noreferrer" className="mt-1 flex items-start justify-between gap-2 hover:text-accent">
                   <span className="leading-snug">{r.title}</span>
-                  <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-[hsl(var(--text-muted))]" />
+                  <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-content-muted" />
                 </a>
                 {r.sentiment_label && SentIcon && (
-                  <p className="mt-1 text-[10px] text-[hsl(var(--text-muted))]">
+                  <p className="mt-1 text-[10px] text-content-muted">
                     <SentIcon className="inline h-3 w-3 mr-1" />
                     {r.sentiment_label}
                     {r.source ? ` · ${r.source}` : ""}

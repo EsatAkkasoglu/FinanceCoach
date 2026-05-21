@@ -86,10 +86,10 @@ function MessageAttachments({ attachments }: { attachments: MessageAttachment[] 
           onClick={() => openAttachment(a)}
           title={`${a.name} · ${humanSize(a.size)}`}
           className={cn(
-            "group/att flex items-center gap-2 rounded-lg border border-[hsl(var(--border))]",
-            "bg-[hsl(var(--surface-2))]/70 px-2.5 py-1.5 text-left",
+            "group/att flex items-center gap-2 rounded-lg border border-line",
+            "bg-surface-raised/70 px-2.5 py-1.5 text-left",
             "transition-all duration-200 ease-out",
-            "hover:-translate-y-0.5 hover:border-accent/60 hover:bg-[hsl(var(--surface-2))] hover:shadow-[0_0_0_1px_hsl(var(--accent)/0.25),0_4px_16px_-4px_hsl(var(--accent)/0.35)]",
+            "hover:-translate-y-0.5 hover:border-accent/60 hover:bg-surface-raised hover:shadow-[0_0_0_1px_hsl(var(--accent)/0.25),0_4px_16px_-4px_hsl(var(--accent)/0.35)]",
             "active:translate-y-0 active:scale-[0.98]"
           )}
         >
@@ -101,10 +101,10 @@ function MessageAttachments({ attachments }: { attachments: MessageAttachment[] 
             <KindIcon kind={a.kind === "binary" ? "other" : (a.kind as AttachmentKind)} className="h-4 w-4" />
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="truncate max-w-[200px] text-xs font-medium text-[hsl(var(--text-primary))]">
+            <span className="truncate max-w-[200px] text-xs font-medium text-content">
               {a.name}
             </span>
-            <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <span className="text-[10px] uppercase tracking-wide text-content-muted">
               {a.kind} · {humanSize(a.size)}
             </span>
           </span>
@@ -644,7 +644,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
         <div className="mb-6 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{t("coach")}</h1>
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm text-content-muted">
               {t("greeting")}
             </p>
           </div>
@@ -654,7 +654,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 type="button"
                 onClick={clearChat}
                 disabled={streaming}
-                className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:border-loss hover:text-loss disabled:opacity-30"
+                className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-content-muted hover:border-loss hover:text-loss disabled:opacity-30"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 {t("clearChat")}
@@ -666,13 +666,13 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
         <div className="flex-1 space-y-4 overflow-y-auto pr-2">
           {messages.length === 0 && (
             <div className="card-muted">
-              <p className="mb-3 text-sm text-[hsl(var(--text-muted))]">{t("tryOneOfThese")}</p>
+              <p className="mb-3 text-sm text-content-muted">{t("tryOneOfThese")}</p>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((s, i) => (
                   <button
                     key={i}
                     onClick={() => send(s)}
-                    className="rounded-full border border-[hsl(var(--border))] px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
+                    className="rounded-full border border-line px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
                   >
                     {s}
                   </button>
@@ -721,7 +721,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                     "relative rounded-2xl border p-4 text-sm shadow-sm",
                     m.role === "user"
                       ? "rounded-tr-md border-accent/30 bg-accent/15"
-                      : "rounded-tl-md border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]"
+                      : "rounded-tl-md border-line bg-surface-raised"
                   )}
                 >
                   {/* Badge only when there are no steps */}
@@ -750,8 +750,8 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                     </div>
                   )}
                   {isAssistant && m.suggestions && m.suggestions.length > 0 && (
-                    <div className="mt-3 flex flex-col gap-1.5 border-t border-[hsl(var(--border))] pt-3">
-                      <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    <div className="mt-3 flex flex-col gap-1.5 border-t border-line pt-3">
+                      <span className="text-[10px] uppercase tracking-wide text-content-muted">
                         {t("tryNext")}
                       </span>
                       <div className="flex flex-wrap gap-1.5">
@@ -761,7 +761,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                             type="button"
                             disabled={streaming}
                             onClick={() => send(s)}
-                            className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-[11px] text-[hsl(var(--text-primary))] hover:border-accent hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            className="rounded-full border border-line bg-surface-raised px-3 py-1 text-[11px] text-content hover:border-accent hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           >
                             {s}
                           </button>
@@ -784,7 +784,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                     ) : (
                       <span />
                     )}
-                    <p className="text-[10px] text-[hsl(var(--text-muted))]/50 select-none">
+                    <p className="text-[10px] text-content-muted/50 select-none">
                       {timeStr}
                     </p>
                   </div>
@@ -797,8 +797,8 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
         </div>
 
         {stoppedPrompt && !streaming && (
-          <div className="mt-4 flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-xs">
-            <span className="text-[hsl(var(--text-muted))]">
+          <div className="mt-4 flex items-center justify-between rounded-lg border border-line bg-surface px-3 py-2 text-xs">
+            <span className="text-content-muted">
               {t("responseStopped")}
             </span>
             <button
@@ -846,7 +846,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             }}
             className={cn(
               "flex items-end gap-2 rounded-lg transition-colors",
-              isDragging && "ring-2 ring-accent ring-offset-2 ring-offset-[hsl(var(--bg))]",
+              isDragging && "ring-2 ring-accent ring-offset-2 ring-offset-bg",
             )}
           >
             <div className="relative flex flex-1 items-end">
@@ -855,7 +855,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={streaming || attachments.length >= MAX_FILES}
                 title={t("attach.upload")}
-                className="absolute bottom-1.5 left-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-md text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="absolute bottom-1.5 left-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-md text-content-muted hover:bg-surface-raised hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <Paperclip className="h-4 w-4" />
               </button>
@@ -867,7 +867,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 onPaste={onPaste}
                 rows={1}
                 placeholder={t("placeholder")}
-                className="num-0 flex-1 resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] py-3 pl-11 pr-4 text-sm leading-5 outline-none focus:border-accent"
+                className="num-0 flex-1 resize-none rounded-lg border border-line bg-surface py-3 pl-11 pr-4 text-sm leading-5 outline-none focus:border-accent"
                 disabled={streaming}
               />
             </div>
@@ -893,12 +893,12 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           </form>
 
           {isDragging && (
-            <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-accent bg-[hsl(var(--surface))]/95 backdrop-blur-sm">
+            <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-accent bg-surface/95 backdrop-blur-sm">
               <UploadCloud className="h-7 w-7 text-accent" />
-              <p className="text-sm font-medium text-[hsl(var(--text-primary))]">
+              <p className="text-sm font-medium text-content">
                 {t("attach.dropHere")}
               </p>
-              <p className="text-[11px] text-[hsl(var(--text-muted))]">
+              <p className="text-[11px] text-content-muted">
                 {t("attach.limits", { max: humanSize(MAX_FILE_SIZE), count: MAX_FILES })}
               </p>
             </div>
@@ -974,7 +974,7 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
 
   if (typeof data === "string") {
     return (
-      <p className="text-[11px] leading-relaxed text-[hsl(var(--text-muted))]">
+      <p className="text-[11px] leading-relaxed text-content-muted">
         {data.length > 300 ? data.slice(0, 300) + "…" : data}
       </p>
     );
@@ -983,7 +983,7 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
   if (Array.isArray(data)) {
     if (data.length === 0) {
       return (
-        <p className="text-[11px] italic text-[hsl(var(--text-muted))]">{t("noResults")}</p>
+        <p className="text-[11px] italic text-content-muted">{t("noResults")}</p>
       );
     }
     // Array of objects → render as headline-style list (news, search hits, etc.)
@@ -1004,33 +1004,33 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
             return (
               <li
                 key={i}
-                className="rounded border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2"
+                className="rounded border border-line bg-surface p-2"
               >
                 {title && (url
                   ? <a
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[11px] font-medium leading-snug text-[hsl(var(--text-primary))] hover:text-accent hover:underline underline-offset-2"
+                      className="text-[11px] font-medium leading-snug text-content hover:text-accent hover:underline underline-offset-2"
                     >
                       {title}
                     </a>
-                  : <p className="text-[11px] font-medium leading-snug text-[hsl(var(--text-primary))]">
+                  : <p className="text-[11px] font-medium leading-snug text-content">
                       {title}
                     </p>
                 )}
                 {meta.length > 0 && (
-                  <p className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                  <p className="mt-0.5 text-[10px] text-content-muted">
                     {meta.join(" · ")}
                   </p>
                 )}
                 {summary && (
-                  <p className="mt-1 text-[10px] leading-snug text-[hsl(var(--text-muted))] line-clamp-2">
+                  <p className="mt-1 text-[10px] leading-snug text-content-muted line-clamp-2">
                     {summary}
                   </p>
                 )}
                 {!title && !summary && (
-                  <p className="text-[10px] text-[hsl(var(--text-muted))]">
+                  <p className="text-[10px] text-content-muted">
                     {JSON.stringify(item).slice(0, 120)}
                   </p>
                 )}
@@ -1038,7 +1038,7 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
             );
           })}
           {data.length > items.length && (
-            <li className="text-[10px] text-[hsl(var(--text-muted))]">
+            <li className="text-[10px] text-content-muted">
               +{data.length - items.length} more
             </li>
           )}
@@ -1051,13 +1051,13 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
         {(data as unknown[]).slice(0, 12).map((v, i) => (
           <span
             key={i}
-            className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] text-[hsl(var(--text-primary))]"
+            className="rounded-md border border-line bg-surface px-2 py-0.5 text-[10px] text-content"
           >
             {String(v)}
           </span>
         ))}
         {data.length > 12 && (
-          <span className="text-[10px] text-[hsl(var(--text-muted))] self-center">
+          <span className="text-[10px] text-content-muted self-center">
             +{data.length - 12} more
           </span>
         )}
@@ -1067,7 +1067,7 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
 
   if (typeof data !== "object") {
     return (
-      <p className="font-mono text-[11px] text-[hsl(var(--text-muted))]">
+      <p className="font-mono text-[11px] text-content-muted">
         {String(data).slice(0, 300)}
       </p>
     );
@@ -1101,13 +1101,13 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
             const isNumeric = typeof v === "number";
             return (
               <div key={k} className="flex flex-col gap-0.5">
-                <span className="text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                <span className="text-[9px] uppercase tracking-widest text-content-muted">
                   {k.replace(/_/g, " ")}
                 </span>
                 <span
                   className={cn(
                     "text-[11px] font-medium leading-tight",
-                    isNumeric ? "tabular-nums text-[hsl(var(--text-primary))]" : "text-[hsl(var(--text-primary))]"
+                    isNumeric ? "tabular-nums text-content" : "text-content"
                   )}
                 >
                   {display}
@@ -1122,7 +1122,7 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
         const items = (v as unknown[]).slice(0, 6);
         return (
           <div key={k}>
-            <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+            <p className="mb-1.5 text-[9px] uppercase tracking-widest text-content-muted">
               {k.replace(/_/g, " ")}
             </p>
             <div className="flex flex-wrap gap-1">
@@ -1140,14 +1140,14 @@ function ResultView({ data, tool }: { data: unknown; tool?: string }) {
                 return (
                   <span
                     key={i}
-                    className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] text-[hsl(var(--text-primary))]"
+                    className="rounded-md border border-line bg-surface px-2 py-0.5 text-[10px] text-content"
                   >
                     {label}
                   </span>
                 );
               })}
               {(v as unknown[]).length > 6 && (
-                <span className="text-[10px] text-[hsl(var(--text-muted))] self-center">
+                <span className="text-[10px] text-content-muted self-center">
                   +{(v as unknown[]).length - 6} more
                 </span>
               )}
@@ -1170,15 +1170,15 @@ function QuoteCard({ quote }: { quote: Record<string, unknown> }) {
   const barPct = Math.min(Math.abs(changePct) / 10, 1) * 100;
 
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3">
+    <div className="rounded-lg border border-line bg-surface p-3">
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+          <p className="text-[10px] uppercase tracking-widest text-content-muted">
             {ticker || "Quote"}
           </p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-[hsl(var(--text-primary))]">
+          <p className="mt-0.5 text-lg font-semibold tabular-nums text-content">
             {price.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-            <span className="ml-1 text-[10px] font-normal text-[hsl(var(--text-muted))]">
+            <span className="ml-1 text-[10px] font-normal text-content-muted">
               {currency}
             </span>
           </p>
@@ -1192,7 +1192,7 @@ function QuoteCard({ quote }: { quote: Record<string, unknown> }) {
           {up ? "▲" : "▼"} {changePct.toFixed(2)}%
         </div>
       </div>
-      <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+      <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface-raised">
         <div
           className={cn("h-full", up ? "bg-gain" : "bg-loss")}
           style={{ width: `${barPct}%` }}
@@ -1219,13 +1219,13 @@ function EightDimView({ result }: { result: Record<string, unknown> }) {
   return (
     <div className="space-y-3">
       {(score !== null || recommendation) && (
-        <div className="flex items-center gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2">
+        <div className="flex items-center gap-3 rounded-lg border border-line bg-surface p-2">
           {score !== null && (
             <div>
-              <p className="text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+              <p className="text-[9px] uppercase tracking-widest text-content-muted">
                 Score
               </p>
-              <p className="text-base font-semibold tabular-nums text-[hsl(var(--text-primary))]">
+              <p className="text-base font-semibold tabular-nums text-content">
                 {score.toFixed(1)}
               </p>
             </div>
@@ -1237,7 +1237,7 @@ function EightDimView({ result }: { result: Record<string, unknown> }) {
                   "rounded-md px-2 py-1 text-[11px] font-semibold uppercase",
                   recommendation === "BUY" && "bg-gain/15 text-gain",
                   recommendation === "SELL" && "bg-loss/15 text-loss",
-                  recommendation === "HOLD" && "bg-[hsl(var(--surface-2))] text-[hsl(var(--text-primary))]"
+                  recommendation === "HOLD" && "bg-surface-raised text-content"
                 )}
               >
                 {recommendation}
@@ -1252,10 +1252,10 @@ function EightDimView({ result }: { result: Record<string, unknown> }) {
           const pct = s === null ? 0 : Math.max(0, Math.min(100, s));
           return (
             <div key={name} className="grid grid-cols-[110px_1fr_36px] items-center gap-2">
-              <span className="text-[10px] capitalize text-[hsl(var(--text-muted))]">
+              <span className="text-[10px] capitalize text-content-muted">
                 {name.replace(/_/g, " ")}
               </span>
-              <div className="h-1.5 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+              <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
                 <div
                   className={cn(
                     "h-full",
@@ -1264,7 +1264,7 @@ function EightDimView({ result }: { result: Record<string, unknown> }) {
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              <span className="text-right text-[10px] tabular-nums text-[hsl(var(--text-muted))]">
+              <span className="text-right text-[10px] tabular-nums text-content-muted">
                 {s === null ? "—" : s.toFixed(0)}
               </span>
             </div>
@@ -1283,10 +1283,10 @@ function HotTrendsView({ scanTime, trends }: { scanTime: unknown; trends: unknow
     <div className="space-y-2">
       {typeof scanTime === "string" && (
         <div className="flex flex-col gap-0.5">
-          <span className="text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+          <span className="text-[9px] uppercase tracking-widest text-content-muted">
             Scan time
           </span>
-          <span className="text-[11px] font-medium text-[hsl(var(--text-primary))]">
+          <span className="text-[11px] font-medium text-content">
             {scanTime}
           </span>
         </div>
@@ -1302,17 +1302,17 @@ function HotTrendsView({ scanTime, trends }: { scanTime: unknown; trends: unknow
             ? "border-gain/30 bg-gain/10 text-gain"
             : signalText.toLowerCase().includes("bearish") || signalText.toLowerCase().includes("dump")
               ? "border-loss/30 bg-loss/10 text-loss"
-              : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]";
+              : "border-line bg-surface text-content-muted";
 
           return (
             <div
               key={`${symbol}-${i}`}
-              className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2"
+              className="rounded-md border border-line bg-surface p-2"
             >
               <div className="flex items-center gap-2">
                 <span className="font-mono text-[12px] font-semibold text-accent">{symbol}</span>
                 {mentions !== undefined && (
-                  <span className="rounded bg-[hsl(var(--surface-2))] px-1.5 py-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                  <span className="rounded bg-surface-raised px-1.5 py-0.5 text-[10px] text-content-muted">
                     {String(mentions)} mentions
                   </span>
                 )}
@@ -1327,7 +1327,7 @@ function HotTrendsView({ scanTime, trends }: { scanTime: unknown; trends: unknow
                 </div>
               )}
               {sources.length > 0 && (
-                <p className="mt-1 text-[10px] leading-snug text-[hsl(var(--text-muted))]">
+                <p className="mt-1 text-[10px] leading-snug text-content-muted">
                   {sources.slice(0, 3).join(" · ")}
                 </p>
               )}
@@ -1336,7 +1336,7 @@ function HotTrendsView({ scanTime, trends }: { scanTime: unknown; trends: unknow
         })}
       </div>
       {trends.length > items.length && (
-        <p className="text-[10px] text-[hsl(var(--text-muted))]">
+        <p className="text-[10px] text-content-muted">
           +{trends.length - items.length} more
         </p>
       )}
@@ -1358,9 +1358,9 @@ function ArgPills({ args }: { args: Record<string, unknown> }) {
       {entries.map(([k, v]) => (
         <span
           key={k}
-          className="rounded bg-[hsl(var(--surface))] border border-[hsl(var(--border))] px-1.5 py-0.5 text-[10px] text-[hsl(var(--text-muted))]"
+          className="rounded bg-surface border border-line px-1.5 py-0.5 text-[10px] text-content-muted"
         >
-          <span className="font-medium text-[hsl(var(--text-primary))]">{k}</span>
+          <span className="font-medium text-content">{k}</span>
           {" "}
           {String(v).slice(0, 40)}
         </span>
@@ -1381,7 +1381,7 @@ function ToolRow({ activity }: { activity: ToolActivity }) {
   );
 
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] overflow-hidden">
+    <div className="rounded-lg border border-line bg-surface-raised overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -1400,26 +1400,26 @@ function ToolRow({ activity }: { activity: ToolActivity }) {
 
         {/* icon + label */}
         <span className="text-sm leading-none">{meta.icon}</span>
-        <span className="text-[12px] font-medium text-[hsl(var(--text-primary))]">{meta.label}</span>
+        <span className="text-[12px] font-medium text-content">{meta.label}</span>
 
         {/* primary arg chip */}
         {primaryArg !== undefined && (
-          <span className="rounded bg-[hsl(var(--surface))] border border-[hsl(var(--border))] px-1.5 py-0.5 text-[10px] font-mono text-accent">
+          <span className="rounded bg-surface border border-line px-1.5 py-0.5 text-[10px] font-mono text-accent">
             {String(primaryArg).slice(0, 30)}
           </span>
         )}
 
-        <span className="ml-auto shrink-0 text-[hsl(var(--text-muted))]">
+        <span className="ml-auto shrink-0 text-content-muted">
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </span>
       </button>
 
       {open && (
-        <div className="border-t border-[hsl(var(--border))] px-3 py-3 space-y-3">
+        <div className="border-t border-line px-3 py-3 space-y-3">
           {/* args */}
           {Object.keys(activity.args).length > 0 && (
             <div>
-              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-content-muted">
                 {t("input")}
               </p>
               <ArgPills args={activity.args} />
@@ -1429,13 +1429,13 @@ function ToolRow({ activity }: { activity: ToolActivity }) {
           {/* result */}
           {parsed !== null ? (
             <div>
-              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-[hsl(var(--text-muted))]">
+              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-content-muted">
                 {t("result")}
               </p>
               <ResultView data={parsed} tool={activity.tool} />
             </div>
           ) : activity.status === "running" ? (
-            <p className="text-[11px] italic text-[hsl(var(--text-muted))]">{t("fetching")}</p>
+            <p className="text-[11px] italic text-content-muted">{t("fetching")}</p>
           ) : null}
         </div>
       )}
@@ -1459,11 +1459,11 @@ function AgentActivity({
       {/* header */}
       <div className="flex items-center gap-2">
         <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
-        <span className="text-[12px] font-medium text-[hsl(var(--text-primary))]">
+        <span className="text-[12px] font-medium text-content">
           {agent ?? t("thinking")}
         </span>
         {activities.length > 0 && (
-          <span className="ml-auto text-[10px] text-[hsl(var(--text-muted))]">
+          <span className="ml-auto text-[10px] text-content-muted">
             {runningCount > 0
               ? t("toolsProgress", { done: doneCount, total: activities.length })
               : t("toolsDone", { count: doneCount })}
@@ -1504,14 +1504,14 @@ function StepsPanel({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text-primary))] transition-colors py-0.5"
+          className="flex items-center gap-1.5 text-[11px] text-content-muted hover:text-content transition-colors py-0.5"
         >
           {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           {agent && <AgentBadge name={agent} className="scale-90 origin-left" />}
           <span className="tabular-nums">{t("toolsProgress", { done: doneCount, total: steps.length })}</span>
         </button>
         {open && (
-          <div className="mt-2 w-full space-y-1 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/40 p-2 overflow-x-auto">
+          <div className="mt-2 w-full space-y-1 rounded-lg border border-line bg-surface/40 p-2 overflow-x-auto">
             {steps.map((a) => (
               <ToolRow key={a.runId} activity={a} />
             ))}
@@ -1525,8 +1525,8 @@ function StepsPanel({
     <div
       className={cn(
         compact
-          ? "rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]"
-          : "mt-3 border-t border-[hsl(var(--border))] pt-3"
+          ? "rounded-lg border border-line bg-surface-raised"
+          : "mt-3 border-t border-line pt-3"
       )}
     >
       <button
@@ -1536,7 +1536,7 @@ function StepsPanel({
           "flex w-full items-center gap-2 transition-colors",
           compact
             ? "px-3 py-2 text-left hover:bg-white/5"
-            : "text-[10px] text-[hsl(var(--text-muted))] hover:text-accent"
+            : "text-[10px] text-content-muted hover:text-accent"
         )}
       >
         <span className="flex items-center gap-1">
@@ -1551,14 +1551,14 @@ function StepsPanel({
         <span
           className={cn(
             "rounded-full px-1.5 py-0.5",
-            compact ? "bg-[hsl(var(--surface))]" : "bg-[hsl(var(--surface-2))]"
+            compact ? "bg-surface" : "bg-surface-raised"
           )}
         >
           {t("toolsProgress", { done: doneCount, total: steps.length })}
         </span>
       </button>
       {open && (
-        <div className={cn("space-y-1", compact ? "border-t border-[hsl(var(--border))] p-2" : "mt-2 pl-1")}>
+        <div className={cn("space-y-1", compact ? "border-t border-line p-2" : "mt-2 pl-1")}>
           {steps.map((a) => (
             <ToolRow key={a.runId} activity={a} />
           ))}
@@ -1612,7 +1612,7 @@ function MessageActions({
   }
 
   const btn =
-    "flex h-7 w-7 items-center justify-center rounded-md text-[hsl(var(--text-muted))] transition-colors hover:bg-[hsl(var(--surface-2))] disabled:opacity-30 disabled:cursor-not-allowed";
+    "flex h-7 w-7 items-center justify-center rounded-md text-content-muted transition-colors hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed";
 
   return (
     <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -1621,7 +1621,7 @@ function MessageActions({
         title={t("helpful")}
         onClick={() => rate("up")}
         disabled={busy || streaming}
-        className={cn(btn, rating === "up" && "text-gain bg-[hsl(var(--surface-2))]")}
+        className={cn(btn, rating === "up" && "text-gain bg-surface-raised")}
       >
         <ThumbsUp className="h-3.5 w-3.5" />
       </button>
@@ -1630,7 +1630,7 @@ function MessageActions({
         title={t("notHelpful")}
         onClick={() => rate("down")}
         disabled={busy || streaming}
-        className={cn(btn, rating === "down" && "text-loss bg-[hsl(var(--surface-2))]")}
+        className={cn(btn, rating === "down" && "text-loss bg-surface-raised")}
       >
         <ThumbsDown className="h-3.5 w-3.5" />
       </button>
@@ -1659,7 +1659,7 @@ function AttachmentStrip({
 }) {
   const { t } = useTranslation("chat");
   return (
-    <div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]/60 p-2">
+    <div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-line bg-surface-raised/60 p-2">
       {attachments.map((a) => {
         const isUploading = a.status === "uploading";
         const isError = a.status === "error";
@@ -1667,19 +1667,19 @@ function AttachmentStrip({
           <div
             key={a.id}
             className={cn(
-              "group relative flex max-w-[260px] items-center gap-2 overflow-hidden rounded-md border bg-[hsl(var(--surface))] px-2 py-1.5 text-xs transition-colors",
+              "group relative flex max-w-[260px] items-center gap-2 overflow-hidden rounded-md border bg-surface px-2 py-1.5 text-xs transition-colors",
               isError
                 ? "border-loss/40"
-                : "border-[hsl(var(--border))] hover:border-accent/40",
+                : "border-line hover:border-accent/40",
             )}
             title={a.error || a.summary || a.name}
           >
             {!isError && !isUploading && (
               <div className="group/hint absolute -right-1 -top-1 z-10">
-                <div className="flex h-4 w-4 cursor-default items-center justify-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[9px] font-bold text-[hsl(var(--text-muted))] transition-colors group-hover/hint:border-accent/50 group-hover/hint:bg-accent/10 group-hover/hint:text-accent">
+                <div className="flex h-4 w-4 cursor-default items-center justify-center rounded-full border border-line bg-surface-raised text-[9px] font-bold text-content-muted transition-colors group-hover/hint:border-accent/50 group-hover/hint:bg-accent/10 group-hover/hint:text-accent">
                   !
                 </div>
-                <div className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-52 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2.5 py-2 text-[10px] leading-snug text-[hsl(var(--text-muted))] opacity-0 shadow-lg transition-opacity group-hover/hint:opacity-100">
+                <div className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-52 rounded-lg border border-line bg-surface-raised px-2.5 py-2 text-[10px] leading-snug text-content-muted opacity-0 shadow-lg transition-opacity group-hover/hint:opacity-100">
                   {t("attach.tempStorage")}
                 </div>
               </div>
@@ -1703,11 +1703,11 @@ function AttachmentStrip({
               )}
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate text-[11px] font-medium text-[hsl(var(--text-primary))]">
+              <span className="truncate text-[11px] font-medium text-content">
                 {a.name}
               </span>
               {isUploading ? (
-                <div className="h-1 w-full overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+                <div className="h-1 w-full overflow-hidden rounded-full bg-surface-raised">
                   <div
                     className="h-full bg-accent transition-[width] duration-200"
                     style={{ width: `${a.progress}%` }}
@@ -1718,7 +1718,7 @@ function AttachmentStrip({
                   {t("attach.failed")}
                 </span>
               ) : (
-                <span className="truncate text-[10px] text-[hsl(var(--text-muted))]">
+                <span className="truncate text-[10px] text-content-muted">
                   {humanSize(a.size)}
                   {a.summary ? ` · ${a.summary}` : ""}
                 </span>
@@ -1729,7 +1729,7 @@ function AttachmentStrip({
                 type="button"
                 onClick={() => onRetry(a.id)}
                 title={t("attach.retry")}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-accent"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-content-muted hover:bg-surface-raised hover:text-accent"
               >
                 <RotateCcw className="h-3 w-3" />
               </button>
@@ -1738,7 +1738,7 @@ function AttachmentStrip({
               type="button"
               onClick={() => onRemove(a.id)}
               title={t("attach.remove")}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[hsl(var(--text-muted))] hover:bg-loss/10 hover:text-loss"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-content-muted hover:bg-loss/10 hover:text-loss"
             >
               <X className="h-3 w-3" />
             </button>
@@ -1767,7 +1767,7 @@ function CopyButton({ text }: { text: string }) {
       type="button"
       onClick={copy}
       title={t("copy")}
-      className="absolute right-2 top-2 rounded-md p-1.5 text-[hsl(var(--text-muted))] opacity-0 transition group-hover:opacity-100 hover:bg-[hsl(var(--surface-2))] hover:text-accent"
+      className="absolute right-2 top-2 rounded-md p-1.5 text-content-muted opacity-0 transition group-hover:opacity-100 hover:bg-surface-raised hover:text-accent"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-gain" /> : <Copy className="h-3.5 w-3.5" />}
     </button>

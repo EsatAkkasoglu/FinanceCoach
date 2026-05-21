@@ -11,12 +11,12 @@ interface FieldProps {
 export function Field({ label, hint, error, children }: FieldProps) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-[hsl(var(--text-muted))]">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-content-muted">{label}</span>
       {children}
       {error ? (
         <span className="mt-1 block text-xs text-loss">{error}</span>
       ) : hint ? (
-        <span className="mt-1 block text-xs text-[hsl(var(--text-muted))]">{hint}</span>
+        <span className="mt-1 block text-xs text-content-muted">{hint}</span>
       ) : null}
     </label>
   );
@@ -28,7 +28,7 @@ export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLIn
       <input
         ref={ref}
         className={cn(
-          "w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
+          "w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-content placeholder:text-content-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
           className,
         )}
         {...rest}
@@ -47,7 +47,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       <select
         ref={ref}
         className={cn(
-          "w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
+          "w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-content focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
           className,
         )}
         {...rest}

@@ -13,13 +13,13 @@ export function StepIncome({ monthlyIncome, spendingPace, onChange }: Props) {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">A bit about your cash flow</h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+        <p className="mt-1 text-sm text-content-muted">
           So I can ground budget advice in real numbers. Stays on your device.
         </p>
       </div>
 
       <label className="block">
-        <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <span className="text-xs uppercase tracking-wide text-content-muted">
           Monthly take-home (USD)
         </span>
         <input
@@ -29,16 +29,16 @@ export function StepIncome({ monthlyIncome, spendingPace, onChange }: Props) {
           value={monthlyIncome || ""}
           onChange={(e) => onChange({ monthlyIncome: Number(e.target.value) })}
           placeholder="7500"
-          className="num mt-2 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-base outline-none focus:border-accent"
+          className="num mt-2 w-full rounded-lg border border-line bg-surface px-4 py-3 text-base outline-none focus:border-accent"
         />
-        <span className="mt-1 block text-xs text-[hsl(var(--text-muted))]">
+        <span className="mt-1 block text-xs text-content-muted">
           {monthlyIncome > 0 ? `${formatCurrency(monthlyIncome)} per month` : "Just a ballpark"}
         </span>
       </label>
 
       <div>
         <div className="flex items-baseline justify-between">
-          <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <span className="text-xs uppercase tracking-wide text-content-muted">
             Spending pace
           </span>
           <span className="text-sm font-medium text-accent">{PACE_LABELS[spendingPace - 1]}</span>
@@ -52,7 +52,7 @@ export function StepIncome({ monthlyIncome, spendingPace, onChange }: Props) {
           onChange={(e) => onChange({ spendingPace: Number(e.target.value) })}
           className="mt-3 w-full accent-[#1FB57A]"
         />
-        <div className="mt-1 flex justify-between text-[10px] text-[hsl(var(--text-muted))]">
+        <div className="mt-1 flex justify-between text-[10px] text-content-muted">
           {PACE_LABELS.map((l) => (
             <span key={l}>{l}</span>
           ))}

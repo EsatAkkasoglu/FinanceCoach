@@ -32,14 +32,14 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="h-4 w-4 text-accent" />
-          <span className="text-xs uppercase tracking-widest text-[hsl(var(--text-muted))]">
+          <span className="text-xs uppercase tracking-widest text-content-muted">
             {t("welcome.title")}
           </span>
         </div>
         <h2 className="text-2xl font-semibold tracking-tight">
           {t("welcome.setupProfile")}
         </h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+        <p className="mt-1 text-sm text-content-muted">
           {t("welcome.subtitle")}
         </p>
       </div>
@@ -47,7 +47,7 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
       {/* Live preview card */}
       <motion.div
         layout
-        className="flex items-center gap-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-5 py-4"
+        className="flex items-center gap-4 rounded-xl border border-line bg-surface-raised px-5 py-4"
       >
         <motion.div
           key={avatar}
@@ -68,7 +68,7 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
           >
             {displayName}
           </motion.p>
-          <p className="text-xs text-[hsl(var(--text-muted))]">
+          <p className="text-xs text-content-muted">
             {selectedMeta.label} · {t("welcome.memberSince")}
           </p>
         </div>
@@ -76,7 +76,7 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
 
       {/* Name input */}
       <label className="block">
-        <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <span className="text-xs uppercase tracking-wide text-content-muted">
           {t("welcome.whatToCall")}
         </span>
         <input
@@ -86,7 +86,7 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
           onChange={(e) => onChange({ name: e.target.value })}
           placeholder={t("welcome.namePlaceholder")}
           maxLength={40}
-          className="mt-2 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-base outline-none transition focus:border-accent focus:ring-1 focus:ring-accent/30"
+          className="mt-2 w-full rounded-lg border border-line bg-surface px-4 py-3 text-base outline-none transition focus:border-accent focus:ring-1 focus:ring-accent/30"
         />
         {name.trim().length > 0 && (
           <span className="mt-1 block text-xs text-gain">
@@ -97,7 +97,7 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
 
       {/* Currency picker */}
       <div>
-        <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <span className="text-xs uppercase tracking-wide text-content-muted">
           {t("welcome.currency")}
         </span>
         <div className="mt-2 flex gap-2">
@@ -110,7 +110,7 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
                 "flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2.5 text-sm font-medium transition",
                 currency === c.id
                   ? "border-accent bg-accent/10 text-accent shadow-glow"
-                  : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:border-accent/50 hover:bg-[hsl(var(--surface-2))]"
+                  : "border-line text-content-muted hover:border-accent/50 hover:bg-surface-raised"
               )}
             >
               <span className="text-base leading-none">{c.symbol}</span>
@@ -118,14 +118,14 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
             </button>
           ))}
         </div>
-        <p className="mt-1.5 text-[10px] text-[hsl(var(--text-muted))]">
+        <p className="mt-1.5 text-[10px] text-content-muted">
           {t("welcome.currencyHint")}
         </p>
       </div>
 
       {/* Avatar picker */}
       <div>
-        <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <span className="text-xs uppercase tracking-wide text-content-muted">
           {t("welcome.pickAnimal")}
         </span>
         <div className="mt-3 grid grid-cols-4 gap-2">
@@ -142,11 +142,11 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
                   "relative flex flex-col items-center gap-1.5 rounded-xl border py-3 transition-all duration-150",
                   isSelected
                     ? "border-accent bg-accent/10 shadow-glow scale-[1.04]"
-                    : "border-[hsl(var(--border))] hover:border-accent/50 hover:bg-[hsl(var(--surface-2))]"
+                    : "border-line hover:border-accent/50 hover:bg-surface-raised"
                 )}
               >
                 <span className="text-3xl leading-none">{a.emoji}</span>
-                <span className="text-[10px] text-[hsl(var(--text-muted))]">{a.label}</span>
+                <span className="text-[10px] text-content-muted">{a.label}</span>
                 {isSelected && (
                   <motion.span
                     layoutId="avatar-ring"

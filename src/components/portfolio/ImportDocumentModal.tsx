@@ -272,14 +272,14 @@ function PickStep({
           "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-8 py-12 text-center transition",
           dragOver
             ? "border-accent bg-accent/5"
-            : "border-[hsl(var(--border))] hover:border-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))]",
+            : "border-line hover:border-content-muted hover:bg-surface-raised",
         )}
       >
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-muted">
           <Upload className="h-5 w-5 text-accent" />
         </div>
         <p className="text-sm font-medium">Drop a file here, or click to browse</p>
-        <p className="text-xs text-[hsl(var(--text-muted))]">PDF, image, docx, csv — up to 50 MB</p>
+        <p className="text-xs text-content-muted">PDF, image, docx, csv — up to 50 MB</p>
         <input
           ref={fileInputRef}
           type="file"
@@ -294,15 +294,15 @@ function PickStep({
       </div>
 
       {file && (
-        <div className="flex items-center gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2.5">
+        <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-raised px-3 py-2.5">
           <FileText className="h-4 w-4 shrink-0 text-accent" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{file.name}</p>
-            <p className="text-xs text-[hsl(var(--text-muted))]">{formatBytes(file.size)}</p>
+            <p className="text-xs text-content-muted">{formatBytes(file.size)}</p>
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); onClear(); }}
-            className="rounded p-1 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface))] hover:text-loss"
+            className="rounded p-1 text-content-muted hover:bg-surface hover:text-loss"
             aria-label="Remove file"
           >
             <X className="h-4 w-4" />
@@ -317,7 +317,7 @@ function PickStep({
         </div>
       )}
 
-      <p className="rounded-lg bg-[hsl(var(--surface-2))]/60 px-3 py-2 text-[11px] text-[hsl(var(--text-muted))]">
+      <p className="rounded-lg bg-surface-raised/60 px-3 py-2 text-[11px] text-content-muted">
         🔒 Files are sent to Gemini for analysis only. We don't store them.
       </p>
     </div>
@@ -327,7 +327,7 @@ function PickStep({
 function LoadingStep({ stage, filename }: { stage: Stage; filename: string }) {
   return (
     <div className="py-8">
-      <p className="mb-6 truncate text-center text-xs text-[hsl(var(--text-muted))]">{filename}</p>
+      <p className="mb-6 truncate text-center text-xs text-content-muted">{filename}</p>
       <div className="space-y-3">
         {STAGES.map((s, i) => {
           const currentIdx = STAGES.findIndex((x) => x.key === stage);
@@ -341,11 +341,11 @@ function LoadingStep({ stage, filename }: { stage: Stage; filename: string }) {
                 ) : isActive ? (
                   <Loader2 className="h-5 w-5 animate-spin text-accent" />
                 ) : (
-                  <span className="h-2 w-2 rounded-full bg-[hsl(var(--border))]" />
+                  <span className="h-2 w-2 rounded-full bg-default" />
                 )}
               </span>
               <span className={cn(
-                isActive ? "text-[hsl(var(--text))]" : isDone ? "text-gain" : "text-[hsl(var(--text-muted))]",
+                isActive ? "text-content" : isDone ? "text-gain" : "text-content-muted",
               )}>
                 {s.label}
               </span>
@@ -353,7 +353,7 @@ function LoadingStep({ stage, filename }: { stage: Stage; filename: string }) {
           );
         })}
       </div>
-      <p className="mt-6 text-center text-[11px] text-[hsl(var(--text-muted))]">
+      <p className="mt-6 text-center text-[11px] text-content-muted">
         Usually takes 5–15 seconds.
       </p>
     </div>
@@ -388,7 +388,7 @@ function ReviewStep({
             <p className="mt-1 text-xs">{extraction.needs_better_document}</p>
           </div>
         </div>
-        <p className="text-xs text-[hsl(var(--text-muted))]">{extraction.summary}</p>
+        <p className="text-xs text-content-muted">{extraction.summary}</p>
         <Button variant="secondary" onClick={onPickAnother} className="w-full">
           Try a different file
         </Button>
@@ -403,16 +403,16 @@ function ReviewStep({
         <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">
-            {docLabel} <span className="ml-2 text-xs text-[hsl(var(--text-muted))]">{conf}% confident</span>
+            {docLabel} <span className="ml-2 text-xs text-content-muted">{conf}% confident</span>
           </p>
-          <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{extraction.summary}</p>
+          <p className="mt-0.5 text-xs text-content-muted">{extraction.summary}</p>
         </div>
       </div>
 
       {/* Holdings */}
       {extraction.suggested_holdings.length > 0 && (
         <section>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-content-muted">
             Holdings ({extraction.suggested_holdings.length})
           </h3>
           <ul className="space-y-1.5">
@@ -432,7 +432,7 @@ function ReviewStep({
       {extraction.suggested_profile && (
         (extraction.suggested_profile.name || extraction.suggested_profile.monthly_income != null) && (
           <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-content-muted">
               Profile
             </h3>
             <div className="space-y-1.5">
@@ -461,7 +461,7 @@ function ReviewStep({
       {extraction.suggested_holdings.length === 0
         && (!extraction.suggested_profile
           || (!extraction.suggested_profile.name && extraction.suggested_profile.monthly_income == null)) && (
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
+        <div className="rounded-lg border border-line bg-surface-raised p-4 text-center text-xs text-content-muted">
           No portfolio data found in this document, but it was readable.
         </div>
       )}
@@ -472,7 +472,7 @@ function ReviewStep({
           <summary className="cursor-pointer font-medium text-warning">
             {extraction.missing_or_unclear.length} field{extraction.missing_or_unclear.length === 1 ? "" : "s"} need a closer look
           </summary>
-          <ul className="mt-2 space-y-1 pl-4 text-[hsl(var(--text-muted))] list-disc">
+          <ul className="mt-2 space-y-1 pl-4 text-content-muted list-disc">
             {extraction.missing_or_unclear.map((m, i) => <li key={i}>{m}</li>)}
           </ul>
         </details>
@@ -480,9 +480,9 @@ function ReviewStep({
 
       {/* Follow-ups */}
       {extraction.follow_up_questions.length > 0 && (
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-3">
+        <div className="rounded-lg border border-line bg-surface-raised p-3">
           <p className="mb-2 text-xs font-medium">The assistant suggests asking:</p>
-          <ul className="space-y-1.5 text-xs text-[hsl(var(--text-muted))]">
+          <ul className="space-y-1.5 text-xs text-content-muted">
             {extraction.follow_up_questions.map((q, i) => <li key={i}>• {q}</li>)}
           </ul>
         </div>
@@ -508,27 +508,27 @@ function HoldingRow({
         "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition",
         checked
           ? "border-accent bg-accent-muted/40"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] hover:border-[hsl(var(--text-muted))]",
+          : "border-line bg-surface-raised hover:border-content-muted",
         incomplete && "opacity-60",
       )}
     >
       <span className={cn(
         "flex h-4 w-4 shrink-0 items-center justify-center rounded border-2",
-        checked ? "border-accent bg-accent" : "border-[hsl(var(--border))]",
+        checked ? "border-accent bg-accent" : "border-line",
       )}>
         {checked && <CheckCircle2 className="h-3 w-3 text-white" />}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm font-semibold">{holding.ticker}</span>
-          <span className="rounded bg-[hsl(var(--surface))] px-1.5 py-0.5 text-[10px] uppercase text-[hsl(var(--text-muted))]">
+          <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase text-content-muted">
             {holding.asset_class}
           </span>
           {lowConf && !incomplete && (
             <span className="text-[10px] text-warning">low confidence</span>
           )}
         </div>
-        <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
+        <p className="mt-0.5 text-xs text-content-muted">
           {holding.quantity != null ? `${holding.quantity} units` : "quantity unknown"}
           {holding.cost_basis != null && ` · @ ${holding.cost_basis} ${holding.currency ?? ""}`}
         </p>
@@ -555,17 +555,17 @@ function CheckRow({
         "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition",
         checked
           ? "border-accent bg-accent-muted/40"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] hover:border-[hsl(var(--text-muted))]",
+          : "border-line bg-surface-raised hover:border-content-muted",
       )}
     >
       <span className={cn(
         "flex h-4 w-4 shrink-0 items-center justify-center rounded border-2",
-        checked ? "border-accent bg-accent" : "border-[hsl(var(--border))]",
+        checked ? "border-accent bg-accent" : "border-line",
       )}>
         {checked && <CheckCircle2 className="h-3 w-3 text-white" />}
       </span>
       <div className="min-w-0 flex-1 text-sm">
-        <span className="text-[hsl(var(--text-muted))]">{label}: </span>
+        <span className="text-content-muted">{label}: </span>
         <span className="font-medium">{value}</span>
       </div>
     </div>

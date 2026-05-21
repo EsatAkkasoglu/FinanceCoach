@@ -9,12 +9,13 @@
     --surface-2: 224 14% 12%;
     --border: 224 14% 18%;
     --text: 210 20% 96%;
+    --text-primary: 210 20% 96%; /* alias of --text — keep in sync */
     --text-muted: 215 14% 64%;
   }
 
   html, body, #root { height: 100%; }
   body {
-    @apply font-sans antialiased text-[hsl(var(--text))] bg-[hsl(var(--bg))];
+    @apply font-sans antialiased text-content bg-bg;
   }
 
   ::selection { background: rgba(31, 181, 122, 0.4); }
@@ -53,10 +54,10 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5;
+    @apply rounded-xl border border-line bg-surface p-5;
   }
   .card-muted {
-    @apply rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4;
+    @apply rounded-xl border border-line bg-surface-raised p-4;
   }
   .num { @apply font-mono tabular-nums; }
 }

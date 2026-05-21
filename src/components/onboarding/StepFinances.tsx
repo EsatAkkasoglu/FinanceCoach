@@ -133,7 +133,7 @@ export function StepFinances({ value, onChange }: Props) {
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">{t("finances.title")}</h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{t("finances.subtitle")}</p>
+        <p className="mt-1 text-sm text-content-muted">{t("finances.subtitle")}</p>
       </div>
 
       {/* Mode switcher */}
@@ -147,12 +147,12 @@ export function StepFinances({ value, onChange }: Props) {
               "flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition",
               mode === key
                 ? "border-accent bg-accent/10 shadow-glow"
-                : "border-[hsl(var(--border))] hover:border-accent/50 hover:bg-[hsl(var(--surface-2))]"
+                : "border-line hover:border-accent/50 hover:bg-surface-raised"
             )}
           >
-            <Icon className={cn("h-4 w-4", mode === key ? "text-accent" : "text-[hsl(var(--text-muted))]")} />
+            <Icon className={cn("h-4 w-4", mode === key ? "text-accent" : "text-content-muted")} />
             <span className="text-xs font-medium leading-tight">{label}</span>
-            <span className="text-[10px] leading-tight text-[hsl(var(--text-muted))]">{desc}</span>
+            <span className="text-[10px] leading-tight text-content-muted">{desc}</span>
           </button>
         ))}
       </div>
@@ -212,7 +212,7 @@ export function StepFinances({ value, onChange }: Props) {
       {value.incomeSources.length > 0 && (
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <p className="text-xs uppercase tracking-wide text-content-muted">
               {t("finances.incomeSection")}
             </p>
             <span className="num text-xs font-semibold text-gain">
@@ -225,7 +225,7 @@ export function StepFinances({ value, onChange }: Props) {
                 key={i}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-xs"
+                className="flex items-center justify-between rounded-lg border border-line bg-surface-raised px-3 py-2 text-xs"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <TrendingUp className="h-3.5 w-3.5 shrink-0 text-gain" />
@@ -235,7 +235,7 @@ export function StepFinances({ value, onChange }: Props) {
                   <span className="num font-semibold text-gain">
                     {src.amount.toLocaleString()} {src.currency}
                   </span>
-                  <button type="button" onClick={() => removeIncomeSource(i)} className="text-[hsl(var(--text-muted))] hover:text-loss">
+                  <button type="button" onClick={() => removeIncomeSource(i)} className="text-content-muted hover:text-loss">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -248,7 +248,7 @@ export function StepFinances({ value, onChange }: Props) {
       {/* Accounts list */}
       {value.accounts.length > 0 && (
         <div>
-          <p className="mb-2 text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <p className="mb-2 text-xs uppercase tracking-wide text-content-muted">
             {t("finances.accountSection")} ({value.accounts.length})
           </p>
           <ul className="space-y-1.5">
@@ -257,19 +257,19 @@ export function StepFinances({ value, onChange }: Props) {
                 key={i}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-xs"
+                className="flex items-center justify-between rounded-lg border border-line bg-surface-raised px-3 py-2 text-xs"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <Building2 className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--text-muted))]" />
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-content-muted" />
                   <div className="min-w-0">
                     <span className="font-medium">{acc.name}</span>
-                    <span className="ml-1.5 text-[hsl(var(--text-muted))]">{KIND_LABELS[acc.kind]}</span>
-                    {acc.institution && <span className="ml-1 text-[hsl(var(--text-muted))]">· {acc.institution}</span>}
+                    <span className="ml-1.5 text-content-muted">{KIND_LABELS[acc.kind]}</span>
+                    {acc.institution && <span className="ml-1 text-content-muted">· {acc.institution}</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="num font-semibold">{acc.balance.toLocaleString()} {acc.currency}</span>
-                  <button type="button" onClick={() => removeAccount(i)} className="text-[hsl(var(--text-muted))] hover:text-loss">
+                  <button type="button" onClick={() => removeAccount(i)} className="text-content-muted hover:text-loss">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -322,7 +322,7 @@ function ManualPanel({
       {/* Income source form */}
       <div>
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.incomeSection")}</span>
+          <span className="text-xs uppercase tracking-wide text-content-muted">{t("finances.incomeSection")}</span>
           <button type="button" onClick={() => setIncomeForm((f) => ({ ...f, open: !f.open }))}
             className="flex items-center gap-1 text-xs text-accent hover:underline">
             <Plus className="h-3 w-3" /> {t("finances.addIncome")}
@@ -334,42 +334,42 @@ function ManualPanel({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="mt-2 overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4 space-y-3"
+              className="mt-2 overflow-hidden rounded-xl border border-line bg-surface-raised p-4 space-y-3"
             >
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.sourceName")}</span>
+                <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.sourceName")}</span>
                 <input
                   autoFocus
                   value={incomeForm.label}
                   onChange={(e) => setIncomeForm((f) => ({ ...f, label: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && submitIncome()}
                   placeholder={t("finances.sourcePlaceholder")}
-                  className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent"
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.monthlyAmount")}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.monthlyAmount")}</span>
                   <input
                     type="number" min={0} step={100}
                     value={incomeForm.amount || ""}
                     onChange={(e) => setIncomeForm((f) => ({ ...f, amount: Number(e.target.value) }))}
                     onKeyDown={(e) => e.key === "Enter" && submitIncome()}
                     placeholder="15 000"
-                    className="num mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent"
+                    className="num mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.currency")}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.currency")}</span>
                   <select value={incomeForm.currency} onChange={(e) => setIncomeForm((f) => ({ ...f, currency: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent">
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent">
                     {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                 </label>
               </div>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setIncomeForm((f) => ({ ...f, open: false }))}
-                  className="rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]">{t("finances.cancel")}</button>
+                  className="rounded-lg px-3 py-1.5 text-xs text-content-muted hover:text-content">{t("finances.cancel")}</button>
                 <button type="button" onClick={submitIncome}
                   disabled={!incomeForm.label.trim() || incomeForm.amount <= 0}
                   className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-fg disabled:opacity-40">{t("finances.add")}</button>
@@ -382,7 +382,7 @@ function ManualPanel({
       {/* Account form */}
       <div>
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.accountSection")}</span>
+          <span className="text-xs uppercase tracking-wide text-content-muted">{t("finances.accountSection")}</span>
           <button type="button" onClick={() => setAccountForm((f) => ({ ...f, open: !f.open }))}
             className="flex items-center gap-1 text-xs text-accent hover:underline">
             <Plus className="h-3 w-3" /> {t("finances.addAccount")}
@@ -394,51 +394,51 @@ function ManualPanel({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="mt-2 overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4 space-y-3"
+              className="mt-2 overflow-hidden rounded-xl border border-line bg-surface-raised p-4 space-y-3"
             >
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.accountName")}</span>
+                <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.accountName")}</span>
                 <input
                   autoFocus
                   value={accountForm.name}
                   onChange={(e) => setAccountForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder={t("finances.accountPlaceholder")}
-                  className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent"
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.type")}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.type")}</span>
                   <select value={accountForm.kind} onChange={(e) => setAccountForm((f) => ({ ...f, kind: e.target.value as AccountKind }))}
-                    className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent">
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent">
                     {Object.entries(KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.institution")}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.institution")}</span>
                   <input value={accountForm.institution}
                     onChange={(e) => setAccountForm((f) => ({ ...f, institution: e.target.value }))}
                     placeholder="Garanti, Ziraat…"
-                    className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent" />
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent" />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">{t("finances.balance")}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.balance")}</span>
                   <input type="number" min={0} value={accountForm.balance || ""}
                     onChange={(e) => setAccountForm((f) => ({ ...f, balance: Number(e.target.value) }))}
                     placeholder="50 000"
-                    className="num mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent" />
+                    className="num mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent" />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Currency</span>
+                  <span className="text-[10px] uppercase tracking-wide text-content-muted">Currency</span>
                   <select value={accountForm.currency} onChange={(e) => setAccountForm((f) => ({ ...f, currency: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm outline-none focus:border-accent">
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent">
                     {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                 </label>
               </div>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setAccountForm((f) => ({ ...f, open: false }))}
-                  className="rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]">{t("finances.cancel")}</button>
+                  className="rounded-lg px-3 py-1.5 text-xs text-content-muted hover:text-content">{t("finances.cancel")}</button>
                 <button type="button" onClick={submitAccount}
                   disabled={!accountForm.name.trim()}
                   className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-accent-fg disabled:opacity-40">{t("finances.add")}</button>
@@ -488,7 +488,7 @@ function UploadPanel({ extracting, setExtracting, setExtraction, setExtractError
       onClick={() => !extracting && inputRef.current?.click()}
       className={cn(
         "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed py-8 transition cursor-pointer",
-        dragOver ? "border-accent bg-accent/10" : "border-[hsl(var(--border))] hover:border-accent/50",
+        dragOver ? "border-accent bg-accent/10" : "border-line hover:border-accent/50",
         extracting && "pointer-events-none opacity-60"
       )}
     >
@@ -497,16 +497,16 @@ function UploadPanel({ extracting, setExtracting, setExtraction, setExtractError
       {extracting ? (
         <>
           <Loader2 className="h-8 w-8 animate-spin text-accent" />
-          <p className="text-sm text-[hsl(var(--text-muted))]">Analyzing {fileName}…</p>
+          <p className="text-sm text-content-muted">Analyzing {fileName}…</p>
         </>
       ) : (
         <>
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[hsl(var(--surface-2))]">
-            <Upload className="h-5 w-5 text-[hsl(var(--text-muted))]" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-raised">
+            <Upload className="h-5 w-5 text-content-muted" />
           </div>
           <div className="text-center">
             <p className="text-sm font-medium">{t("finances.dropFile")}</p>
-            <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{t("finances.dropFormats")}</p>
+            <p className="mt-0.5 text-xs text-content-muted">{t("finances.dropFormats")}</p>
           </div>
           {fileName && <span className="text-xs text-gain">{t("finances.processed", { name: fileName })}</span>}
         </>
@@ -539,14 +539,14 @@ function DescribePanel({ extracting, setExtracting, setExtraction, setExtractErr
 
   return (
     <div className="space-y-3">
-      <ul className="space-y-1 text-xs text-[hsl(var(--text-muted))] list-disc list-inside">
+      <ul className="space-y-1 text-xs text-content-muted list-disc list-inside">
         <li>"Garanti Bank checking, ₺45,000 balance, salary ₺22,000/month"</li>
         <li>"Ziraat maaş hesabı 50.000 TL, kira geliri 5.000 TL/ay"</li>
       </ul>
       <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)}
         placeholder={t("finances.aiPlaceholder")}
         rows={4}
-        className="w-full resize-none rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 text-sm outline-none focus:border-accent" />
+        className="w-full resize-none rounded-xl border border-line bg-surface px-4 py-3 text-sm outline-none focus:border-accent" />
       <button type="button" onClick={handleExtract} disabled={!text.trim() || extracting}
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent py-2.5 text-sm font-medium text-accent-fg disabled:opacity-40">
         {extracting
@@ -629,10 +629,10 @@ function ExtractionPreview({
         <CheckCircle2 className="h-4 w-4 shrink-0 text-gain mt-0.5" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">{docLabel[extraction.doc_type] ?? "Document"} analyzed</p>
-          <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))] line-clamp-2">{extraction.summary}</p>
+          <p className="mt-0.5 text-xs text-content-muted line-clamp-2">{extraction.summary}</p>
         </div>
         {extraction.suggested_transactions.length > 0 && (
-          <span className="shrink-0 rounded-full bg-[hsl(var(--surface-2))] px-2 py-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+          <span className="shrink-0 rounded-full bg-surface-raised px-2 py-0.5 text-[10px] text-content-muted">
             {extraction.suggested_transactions.length} tx
           </span>
         )}
@@ -641,7 +641,7 @@ function ExtractionPreview({
       {/* Income selection */}
       {unique.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-[hsl(var(--text))]">
+          <p className="text-xs font-medium text-content">
             Select income sources to add to your profile:
           </p>
           <div className="space-y-1.5">
@@ -664,7 +664,7 @@ function ExtractionPreview({
                     "flex cursor-pointer items-center justify-between rounded-lg border px-3 py-3 transition",
                     checked[i]
                       ? "border-accent bg-accent/10"
-                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] opacity-60"
+                      : "border-line bg-surface-raised opacity-60"
                   )}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -672,19 +672,19 @@ function ExtractionPreview({
                       type="checkbox"
                       checked={checked[i]}
                       onChange={() => setChecked((prev) => prev.map((v, idx) => idx === i ? !v : v))}
-                      className="h-3.5 w-3.5 accent-[hsl(var(--accent))]"
+                      className="h-3.5 w-3.5 accent-accent"
                     />
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <CatIcon className={cn("h-3 w-3 shrink-0", checked[i] ? "text-gain" : "text-[hsl(var(--text-muted))]")} />
-                        <span className={cn("truncate text-xs font-medium", checked[i] ? "text-[hsl(var(--text))]" : "text-[hsl(var(--text-muted))]")}>
+                        <CatIcon className={cn("h-3 w-3 shrink-0", checked[i] ? "text-gain" : "text-content-muted")} />
+                        <span className={cn("truncate text-xs font-medium", checked[i] ? "text-content" : "text-content-muted")}>
                           {item.label}
                         </span>
                       </div>
-                      <span className="text-[10px] text-[hsl(var(--text-muted))] mt-0.5 block">{catLabel}</span>
+                      <span className="text-[10px] text-content-muted mt-0.5 block">{catLabel}</span>
                     </div>
                   </div>
-                  <span className={cn("num ml-3 shrink-0 text-xs font-semibold whitespace-nowrap", checked[i] ? "text-gain" : "text-[hsl(var(--text-muted))]")}>
+                  <span className={cn("num ml-3 shrink-0 text-xs font-semibold whitespace-nowrap", checked[i] ? "text-gain" : "text-content-muted")}>
                     {item.amount.toLocaleString()} {item.currency}/mo
                   </span>
                 </label>
@@ -692,19 +692,19 @@ function ExtractionPreview({
             })}
           </div>
           {selectedItems.length > 1 && (
-            <p className="text-right text-xs text-[hsl(var(--text-muted))]">
+            <p className="text-right text-xs text-content-muted">
               Total: <span className="num font-semibold text-gain">{selectedTotal.toLocaleString()} / month</span>
             </p>
           )}
         </div>
       ) : (
-        <p className="text-xs text-[hsl(var(--text-muted))]">
+        <p className="text-xs text-content-muted">
           {t("finances.noIncomeFound")}
         </p>
       )}
 
       {extraction.follow_up_questions.length > 0 && (
-        <p className="text-[10px] text-[hsl(var(--text-muted))] italic">💡 {extraction.follow_up_questions[0]}</p>
+        <p className="text-[10px] text-content-muted italic">💡 {extraction.follow_up_questions[0]}</p>
       )}
 
       <div className="flex gap-2">
@@ -716,7 +716,7 @@ function ExtractionPreview({
             : t("finances.applyWithout")}
         </button>
         <button type="button" onClick={onDiscard}
-          className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]">
+          className="rounded-lg border border-line px-3 py-2 text-xs text-content-muted hover:text-content">
           {t("finances.discard")}
         </button>
       </div>

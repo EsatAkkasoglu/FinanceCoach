@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { useFxRates, type UseFxRates } from "@/lib/fx";
+import { paletteAt, chartTooltipContentStyle } from "@/lib/chartColors";
 import { Button } from "@/components/ui/Button";
 import { AccountFormModal } from "./AccountFormModal";
 import { TransactionFormModal, COMMON_CATEGORIES } from "./TransactionFormModal";
@@ -173,7 +174,7 @@ export function Budget() {
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-          <p className="text-sm text-[hsl(var(--text-muted))]">
+          <p className="text-sm text-content-muted">
             {t("subtitle")}
           </p>
         </div>
@@ -449,20 +450,20 @@ function KPICard({
     <motion.div
       variants={item}
       className={cn(
-        "card relative overflow-hidden transition hover:border-[hsl(var(--text-muted))]/60",
+        "card relative overflow-hidden transition hover:border-content-muted/60",
         "before:pointer-events-none before:absolute before:-right-12 before:-top-12 before:h-32 before:w-32 before:rounded-full before:blur-2xl",
         toneRing,
       )}
     >
       <div className="relative flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-content-muted">
           <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg", iconWrap)}>{icon}</span>
           <span>{title}</span>
         </div>
       </div>
       <div className="relative mt-3">
         {entries.length === 0 ? (
-          <div className="text-2xl font-semibold tabular-nums text-[hsl(var(--text-muted))]">—</div>
+          <div className="text-2xl font-semibold tabular-nums text-content-muted">—</div>
         ) : fallback ? (
           <div className="space-y-0.5">
             {entries.map(([ccy, n]) => (
@@ -471,7 +472,7 @@ function KPICard({
                   value={n}
                   className="num text-2xl font-semibold tabular-nums"
                 />
-                <span className="text-xs text-[hsl(var(--text-muted))]">{ccy}</span>
+                <span className="text-xs text-content-muted">{ccy}</span>
               </div>
             ))}
           </div>
@@ -500,7 +501,7 @@ function KPICard({
         ) : (
           <span className={cn("h-1.5 w-1.5 rounded-full", dotColor, "opacity-70")} />
         )}
-        {subtitle && <span className="text-[hsl(var(--text-muted))]">{subtitle}</span>}
+        {subtitle && <span className="text-content-muted">{subtitle}</span>}
       </div>
     </motion.div>
   );
@@ -539,10 +540,6 @@ function AnimatedNumber({
 
 // ── Top categories donut ────────────────────────────────────────────────────
 
-const CATEGORY_COLORS = [
-  "#14B8A6", "#8B5CF6", "#F59E0B", "#3B82F6", "#EC4899", "#10B981", "#EF4444",
-];
-
 const CATEGORY_LABELS_TR: Record<string, string> = {
   rent: "Kira", housing: "Konut", dining: "Yemek", groceries: "Market",
   food: "Yiyecek", entertainment: "Eğlence", shopping: "Alışveriş",
@@ -578,7 +575,7 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
     return (
       <section className="card">
         <h2 className="text-sm font-semibold">{t("topCategories")}</h2>
-        <p className="mt-3 rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
+        <p className="mt-3 rounded-lg border border-dashed border-line p-4 text-center text-xs text-content-muted">
           {t("whereMoneyWent")}
         </p>
       </section>
@@ -588,7 +585,7 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
   return (
     <section className="card">
       <h2 className="text-sm font-semibold">{t("topCategories")}</h2>
-      <p className="text-[11px] text-[hsl(var(--text-muted))]">{t("whereMoneyWent")}</p>
+      <p className="text-[11px] text-content-muted">{t("whereMoneyWent")}</p>
 
       <div className="mt-4 flex gap-5">
         {/* Donut */}
@@ -597,11 +594,11 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
             <PieChart>
               <Pie data={items} dataKey="value" nameKey="name" innerRadius={42} outerRadius={64} paddingAngle={2}>
                 {items.map((_, i) => (
-                  <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} stroke="none" />
+                  <Cell key={i} fill={paletteAt(i)} stroke="none" />
                 ))}
               </Pie>
               <RechartsTooltip
-                contentStyle={{ background: "hsl(var(--surface))", border: "1px solid hsl(var(--border))", fontSize: 12, borderRadius: 8 }}
+                contentStyle={chartTooltipContentStyle}
                 formatter={(v: number, _: unknown, entry) => {
                   const name = typeof entry.payload?.name === "string" ? entry.payload.name : "";
                   return [
@@ -618,11 +615,11 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
         <ul className="flex-1 self-center space-y-2">
           {items.map((it, i) => {
             const pct = total ? (it.value / total) * 100 : 0;
-            const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+            const color = paletteAt(i);
             return (
               <li key={it.name} className="grid items-center gap-x-2 text-xs" style={{ gridTemplateColumns: "8px 1fr auto auto" }}>
                 <span className="h-2 w-2 rounded-full shrink-0" style={{ background: color }} />
-                <span className="truncate text-[hsl(var(--text))] capitalize">
+                <span className="truncate text-content capitalize">
                   {localizeCategory(it.name, i18n.language)}
                 </span>
                 <span className="num font-semibold tabular-nums">
@@ -662,17 +659,17 @@ function UpcomingCharges({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
       <header className="mb-2 flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold">{t("upcomingTitle")}</h2>
-          <p className="text-[11px] text-[hsl(var(--text-muted))]">
+          <p className="text-[11px] text-content-muted">
             {t("upcomingDesc")}
           </p>
         </div>
       </header>
       {upcoming.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
+        <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-content-muted">
           {t("upcomingEmpty")}
         </p>
       ) : (
-        <ul className="divide-y divide-[hsl(var(--border))]">
+        <ul className="divide-y divide-line">
           {upcoming.map((s) => {
             const days = s.next_charge_on ? daysUntil(s.next_charge_on) : null;
             const isIncome = s.direction === "income";
@@ -692,14 +689,14 @@ function UpcomingCharges({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
                 <SubscriptionAvatar icon={s.icon} name={s.name} category={s.category} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{s.name}</p>
-                  <p className="text-[11px] text-[hsl(var(--text-muted))]">{s.cycle} · {s.category}</p>
+                  <p className="text-[11px] text-content-muted">{s.cycle} · {s.category}</p>
                 </div>
                 <span
                   className={cn(
                     "rounded-full px-2 py-0.5 text-[10px]",
                     urgency === "imminent" && (isIncome ? "bg-gain/15 text-gain" : "bg-loss/15 text-loss"),
                     urgency === "soon" && (isIncome ? "bg-gain/10 text-gain" : "bg-warning/15 text-warning"),
-                    urgency === "later" && "bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))]",
+                    urgency === "later" && "bg-surface-raised text-content-muted",
                   )}
                 >
                   {label}
@@ -744,7 +741,7 @@ function CompletionHero({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut", delay: 0.1 }}
-      className="relative mt-6 overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent-muted/60 via-[hsl(var(--surface))] to-[hsl(var(--surface))] p-5 shadow-glow sm:p-6"
+      className="relative mt-6 overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent-muted/60 via-surface to-surface p-5 shadow-glow sm:p-6"
     >
       {/* Glow blobs */}
       <div className="pointer-events-none absolute -left-20 -top-20 h-56 w-56 rounded-full bg-accent/20 blur-3xl" />
@@ -763,7 +760,7 @@ function CompletionHero({
             <motion.span
               animate={{ rotate: [0, 15, -10, 0] }}
               transition={{ duration: 3, repeat: Infinity, repeatDelay: 2 }}
-              className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(var(--surface))] text-accent ring-2 ring-accent/40"
+              className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-surface text-accent ring-2 ring-accent/40"
             >
               <Sparkles className="h-4 w-4" />
             </motion.span>
@@ -772,11 +769,11 @@ function CompletionHero({
 
         {/* Copy */}
         <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-[hsl(var(--text))]">
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-content">
             {t("hero.title")}
             <Sparkles className="h-4 w-4 text-accent" />
           </h2>
-          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[hsl(var(--text-muted))]">
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-content-muted">
             {t("hero.subtitle")}
           </p>
 
@@ -787,7 +784,7 @@ function CompletionHero({
                 key={s.label}
                 className={cn(
                   "flex items-center gap-1.5",
-                  s.done ? "text-gain" : "text-[hsl(var(--text-muted))]",
+                  s.done ? "text-gain" : "text-content-muted",
                 )}
               >
                 <span
@@ -795,7 +792,7 @@ function CompletionHero({
                     "flex h-4 w-4 items-center justify-center rounded-full border",
                     s.done
                       ? "border-gain/60 bg-gain/20"
-                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]",
+                      : "border-line bg-surface-raised",
                   )}
                 >
                   {s.done && <Check className="h-2.5 w-2.5" />}
@@ -803,7 +800,7 @@ function CompletionHero({
                 <span>{s.label}</span>
               </li>
             ))}
-            <li className="text-[hsl(var(--text-muted))]">·  {t("hero.progress", { done, total: steps.length })}</li>
+            <li className="text-content-muted">·  {t("hero.progress", { done, total: steps.length })}</li>
           </ul>
         </div>
 
@@ -820,7 +817,7 @@ function CompletionHero({
           <button
             type="button"
             onClick={onAddManual}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/60 px-4 py-2.5 text-sm font-semibold text-[hsl(var(--text))] transition hover:border-accent/60 hover:bg-[hsl(var(--surface-2))] active:scale-[0.98]"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-surface/60 px-4 py-2.5 text-sm font-semibold text-content transition hover:border-accent/60 hover:bg-surface-raised active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
             {t("hero.manualCta")}
@@ -846,7 +843,7 @@ function ActionStrip({ onImport, onAddManual }: { onImport: () => void; onAddMan
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">{t("uploadDoc")}</p>
-          <p className="text-xs text-[hsl(var(--text-muted))]">
+          <p className="text-xs text-content-muted">
             {t("uploadDocDesc")}
           </p>
         </div>
@@ -854,14 +851,14 @@ function ActionStrip({ onImport, onAddManual }: { onImport: () => void; onAddMan
       </button>
       <button
         onClick={onAddManual}
-        className="group flex items-center gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] p-4 text-left transition hover:border-[hsl(var(--text-muted))]"
+        className="group flex items-center gap-3 rounded-xl border border-line bg-surface-raised p-4 text-left transition hover:border-content-muted"
       >
-        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[hsl(var(--surface))]">
+        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface">
           <Plus className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">{t("addManually")}</p>
-          <p className="text-xs text-[hsl(var(--text-muted))]">
+          <p className="text-xs text-content-muted">
             {t("addManuallyDesc")}
           </p>
         </div>
@@ -891,7 +888,7 @@ function AccountsPanel({
         </Button>
       </header>
       {accounts.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
+        <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-content-muted">
           {t("noAccountsYet")}
         </p>
       ) : (
@@ -902,7 +899,7 @@ function AccountsPanel({
             return (
               <li
                 key={a.id}
-                className="group flex items-center gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2.5 transition hover:border-[hsl(var(--text-muted))]"
+                className="group flex items-center gap-3 rounded-lg border border-line bg-surface-raised px-3 py-2.5 transition hover:border-content-muted"
               >
                 <span className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
@@ -912,7 +909,7 @@ function AccountsPanel({
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{a.name}</p>
-                  <p className="text-[11px] text-[hsl(var(--text-muted))]">
+                  <p className="text-[11px] text-content-muted">
                     {ACCOUNT_LABEL[a.kind]}{a.institution ? ` · ${a.institution}` : ""}
                   </p>
                 </div>
@@ -976,14 +973,14 @@ function RecurringPanel({
           </div>
           {totalEntries.length > 0 ? (
             hasFx && convertedMonthly != null ? (
-              <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">
+              <p className="mt-1 text-[11px] text-content-muted">
                 <span className={cn("font-semibold", tone === "income" ? "text-gain" : "")}>
                   {formatCurrency(convertedMonthly, fx.target)}
                 </span>
                 /mo · <span>{formatCurrency(convertedMonthly * 12, fx.target)}</span>/yr
               </p>
             ) : (
-              <p className="mt-1 flex flex-wrap gap-x-2 text-[11px] text-[hsl(var(--text-muted))]">
+              <p className="mt-1 flex flex-wrap gap-x-2 text-[11px] text-content-muted">
                 {totalEntries.map(([ccy, total]) => (
                   <span key={ccy}>
                     <span className={cn("font-mono font-semibold", tone === "income" ? "text-gain" : "")}>
@@ -995,7 +992,7 @@ function RecurringPanel({
               </p>
             )
           ) : (
-            <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">{subtitle}</p>
+            <p className="mt-1 text-[11px] text-content-muted">{subtitle}</p>
           )}
         </div>
         <Button variant="ghost" size="sm" onClick={onAdd}>
@@ -1004,7 +1001,7 @@ function RecurringPanel({
       </header>
 
       {subscriptions.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4 text-center text-xs text-[hsl(var(--text-muted))]">
+        <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-content-muted">
           {emptyHint}
         </p>
       ) : (
@@ -1045,15 +1042,15 @@ function SubscriptionCard({
 
   return (
     <div className={cn(
-      "group relative rounded-xl border bg-[hsl(var(--surface-2))] p-3 transition hover:border-[hsl(var(--text-muted))]",
-      isIncome ? "border-gain/30" : "border-[hsl(var(--border))]",
+      "group relative rounded-xl border bg-surface-raised p-3 transition hover:border-content-muted",
+      isIncome ? "border-gain/30" : "border-line",
     )}>
       {/* Top row: icon + name/subtitle only — no amount competing for width */}
       <div className="flex items-center gap-2.5">
         <SubscriptionAvatar icon={sub.icon} name={sub.name} category={sub.category} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{sub.name}</p>
-          <p className="truncate text-[11px] text-[hsl(var(--text-muted))]">
+          <p className="truncate text-[11px] text-content-muted">
             {sub.cycle} · {sub.category}
           </p>
         </div>
@@ -1068,7 +1065,7 @@ function SubscriptionCard({
               urgency === "overdue" && (isIncome ? "bg-warning/15 text-warning" : "bg-loss/15 text-loss"),
               urgency === "imminent" && (isIncome ? "bg-gain/15 text-gain" : "bg-loss/10 text-loss"),
               urgency === "soon" && (isIncome ? "bg-gain/10 text-gain" : "bg-warning/15 text-warning"),
-              urgency === "later" && "bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
+              urgency === "later" && "bg-surface text-content-muted",
             )}>
               <Calendar className="h-3 w-3" />
               {urgency === "overdue"
@@ -1078,7 +1075,7 @@ function SubscriptionCard({
                 : `in ${days}d`}
             </span>
           ) : (
-            <span className="text-[hsl(var(--text-muted))]">no date</span>
+            <span className="text-content-muted">no date</span>
           )}
           <div className="hidden gap-0.5 group-hover:flex">
             <IconButton onClick={onEdit} aria-label="Edit"><Pencil className="h-3 w-3" /></IconButton>
@@ -1117,7 +1114,7 @@ function SubscriptionAvatar({
     return (
       <span
         className={cn(
-          "flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
+          "flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface text-content-muted",
           boxClass,
         )}
       >
@@ -1133,7 +1130,7 @@ function SubscriptionAvatar({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[hsl(var(--surface))] text-center text-sm leading-none",
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface text-center text-sm leading-none",
         boxClass,
       )}
       title={isNamedKey ? raw : undefined}
@@ -1194,7 +1191,7 @@ function TransactionsPanel({
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">{tBudget("transactions.title")}</h2>
-          <p className="text-[11px] text-[hsl(var(--text-muted))]">
+          <p className="text-[11px] text-content-muted">
             {transactions.length !== allCount
               ? tBudget("transactions.showingFiltered", { visible: visibleTxs.length, total: transactions.length, all: allCount })
               : tBudget("transactions.showing", { visible: visibleTxs.length, total: transactions.length })}
@@ -1211,7 +1208,7 @@ function TransactionsPanel({
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1 text-xs"
+            className="rounded-lg border border-line bg-surface-raised px-2 py-1 text-xs"
           >
             <option value="all">{tBudget("transactions.allCategories")}</option>
             {allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -1223,14 +1220,14 @@ function TransactionsPanel({
       </header>
 
       {transactions.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-[hsl(var(--border))] py-8 text-center text-xs text-[hsl(var(--text-muted))]">
+        <p className="rounded-lg border border-dashed border-line py-8 text-center text-xs text-content-muted">
           {tBudget("transactions.noMatch")}
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="num min-w-full text-sm">
-            <thead className="text-xs text-[hsl(var(--text-muted))]">
-              <tr className="border-b border-[hsl(var(--border))]">
+            <thead className="text-xs text-content-muted">
+              <tr className="border-b border-line">
                 <th className="px-2 py-2 text-left font-normal">{tBudget("transactions.headers.date")}</th>
                 <th className="px-2 py-2 text-left font-normal">{tBudget("transactions.headers.description")}</th>
                 <th className="px-2 py-2 text-left font-normal">{tBudget("transactions.headers.category")}</th>
@@ -1244,25 +1241,25 @@ function TransactionsPanel({
                 const isIncome = t.type === "income";
                 const acc = t.account_id != null ? accountsById[t.account_id] : null;
                 return (
-                  <tr key={t.id} className="group border-b border-[hsl(var(--border))] last:border-0 hover:bg-[hsl(var(--surface-2))]/50">
-                    <td className="px-2 py-2.5 text-xs text-[hsl(var(--text-muted))]">{t.occurred_on}</td>
+                  <tr key={t.id} className="group border-b border-line last:border-0 hover:bg-surface-raised/50">
+                    <td className="px-2 py-2.5 text-xs text-content-muted">{t.occurred_on}</td>
                     <td className="px-2 py-2.5">
                       <div className="flex items-center gap-1.5">
                         <SourceBadge source={t.source} />
-                        <span className="truncate">{t.description || <span className="text-[hsl(var(--text-muted))]">{tBudget("transactions.noDescription")}</span>}</span>
+                        <span className="truncate">{t.description || <span className="text-content-muted">{tBudget("transactions.noDescription")}</span>}</span>
                       </div>
                     </td>
                     <td className="px-2 py-2.5">
-                      <span className="rounded bg-[hsl(var(--surface-2))] px-1.5 py-0.5 text-[11px] uppercase text-[hsl(var(--text-muted))]">
+                      <span className="rounded bg-surface-raised px-1.5 py-0.5 text-[11px] uppercase text-content-muted">
                         {t.category}
                       </span>
                     </td>
-                    <td className="px-2 py-2.5 text-xs text-[hsl(var(--text-muted))]">
+                    <td className="px-2 py-2.5 text-xs text-content-muted">
                       {acc ? acc.name : "—"}
                     </td>
                     <td className={cn(
                       "px-2 py-2.5 text-right font-semibold",
-                      isIncome ? "text-gain" : "text-[hsl(var(--text))]",
+                      isIncome ? "text-gain" : "text-content",
                     )}>
                       <AmountCell
                         amount={t.amount}
@@ -1296,7 +1293,7 @@ function TransactionsPanel({
                 <button
                   type="button"
                   onClick={() => setVisibleCount((n) => n + VISIBLE_STEP)}
-                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                  className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs text-content-muted hover:text-content"
                 >
                   {tBudget("transactions.showMore")}
                 </button>
@@ -1305,7 +1302,7 @@ function TransactionsPanel({
                 <button
                   type="button"
                   onClick={() => setVisibleCount(transactions.length)}
-                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                  className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs text-content-muted hover:text-content"
                 >
                   {tBudget("transactions.showAll")}
                 </button>
@@ -1314,7 +1311,7 @@ function TransactionsPanel({
                 <button
                   type="button"
                   onClick={() => setVisibleCount(VISIBLE_STEP)}
-                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                  className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs text-content-muted hover:text-content"
                 >
                   {tBudget("transactions.showLess")}
                 </button>
@@ -1337,7 +1334,7 @@ function SourceBadge({ source }: { source: Transaction["source"] }) {
   };
   const { icon: Icon, title } = map[source] ?? map.manual;
   return (
-    <span title={title} className="text-[hsl(var(--text-muted))]">
+    <span title={title} className="text-content-muted">
       <Icon className="h-3 w-3" />
     </span>
   );
@@ -1353,7 +1350,7 @@ function FilterChip({
         "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition",
         active
           ? "bg-accent text-white"
-          : "border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+          : "border border-line bg-surface-raised text-content-muted hover:text-content",
       )}
     >
       {children}
@@ -1380,7 +1377,7 @@ function AmountCell({
     return (
       <div className={cn("num tabular-nums", className)}>
         <span>{prefix}{amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-        <span className="ml-1 text-[10px] text-[hsl(var(--text-muted))]">{currency}</span>
+        <span className="ml-1 text-[10px] text-content-muted">{currency}</span>
       </div>
     );
   }
@@ -1388,7 +1385,7 @@ function AmountCell({
     <div className={cn("num tabular-nums", className)}>
       <div>{prefix}{formatCurrency(converted, fx.target)}</div>
       {showOriginal && (
-        <div className="text-[10px] font-normal text-[hsl(var(--text-muted))]">
+        <div className="text-[10px] font-normal text-content-muted">
           {amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} {currency}
         </div>
       )}
@@ -1402,7 +1399,7 @@ function IconButton({
   return (
     <button
       onClick={onClick}
-      className="rounded p-1 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--text))]"
+      className="rounded p-1 text-content-muted transition hover:bg-surface hover:text-content"
       {...rest}
     >
       {children}
@@ -1426,7 +1423,7 @@ function BudgetEmpty({
         <Banknote className="h-6 w-6 text-accent" />
       </div>
       <h2 className="text-lg font-semibold tracking-tight">{t("onboarding.title")}</h2>
-      <p className="mt-1 max-w-md text-sm text-[hsl(var(--text-muted))]">
+      <p className="mt-1 max-w-md text-sm text-content-muted">
         {t("onboarding.subtitle")}
       </p>
 
@@ -1471,17 +1468,17 @@ function CTACard({
         "flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition",
         accent
           ? "border-accent bg-accent-muted/30 hover:bg-accent-muted/50"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] hover:border-[hsl(var(--text-muted))]",
+          : "border-line bg-surface-raised hover:border-content-muted",
       )}
     >
       <span className={cn(
         "flex h-9 w-9 items-center justify-center rounded-lg",
-        accent ? "bg-accent text-white" : "bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
+        accent ? "bg-accent text-white" : "bg-surface text-content-muted",
       )}>
         {icon}
       </span>
       <span className="text-sm font-semibold">{title}</span>
-      <span className="text-xs text-[hsl(var(--text-muted))]">{description}</span>
+      <span className="text-xs text-content-muted">{description}</span>
     </button>
   );
 }
@@ -1492,13 +1489,13 @@ function BudgetSkeleton() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="card h-24 animate-pulse">
-            <div className="h-3 w-24 rounded bg-[hsl(var(--surface-2))]" />
-            <div className="mt-3 h-7 w-32 rounded bg-[hsl(var(--surface-2))]" />
+            <div className="h-3 w-24 rounded bg-surface-raised" />
+            <div className="mt-3 h-7 w-32 rounded bg-surface-raised" />
           </div>
         ))}
       </div>
       <div className="card flex h-24 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+        <Loader2 className="h-5 w-5 animate-spin text-content-muted" />
       </div>
     </div>
   );

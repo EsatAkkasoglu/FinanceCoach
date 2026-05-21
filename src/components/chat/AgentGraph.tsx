@@ -130,14 +130,14 @@ export function AgentGraph() {
         onClick={() => setUserExpanded(true)}
         className="card-muted flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5"
       >
-        <span className="flex items-center gap-2 text-xs text-[hsl(var(--text-primary))]">
+        <span className="flex items-center gap-2 text-xs text-content">
           <Activity className="h-3.5 w-3.5 text-accent" />
           <span className="font-medium">{label}</span>
-          <span className="text-[hsl(var(--text-muted))]">
+          <span className="text-content-muted">
             · {toolCount} {toolCount === 1 ? "tool" : "tools"} · {durationS}s
           </span>
         </span>
-        <ChevronDown className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+        <ChevronDown className="h-3.5 w-3.5 text-content-muted" />
       </button>
     );
   }
@@ -149,7 +149,7 @@ export function AgentGraph() {
           <button
             type="button"
             onClick={() => setUserExpanded(false)}
-            className="flex items-center gap-1 text-[10px] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text-primary))]"
+            className="flex items-center gap-1 text-[10px] text-content-muted hover:text-content"
             aria-label="Collapse agent graph"
           >
             <ChevronUp className="h-3 w-3" /> Collapse
@@ -178,10 +178,10 @@ export function AgentGraph() {
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="rgba(255,255,255,0.04)" />
         </ReactFlow>
       </div>
-      <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-[hsl(var(--text-muted))]">
+      <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-content-muted">
         <span>Live agent activity</span>
         <span className="flex gap-3">
-          <Legend color="bg-[hsl(var(--text-muted))]" label="idle" />
+          <Legend color="bg-content-muted" label="idle" />
           <Legend color="bg-accent" label="running" />
           <Legend color="bg-accent/40" label="done" />
         </span>

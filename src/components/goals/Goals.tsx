@@ -154,7 +154,7 @@ export function Goals() {
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-          <p className="text-sm text-[hsl(var(--text-muted))]">{t("subtitle")}</p>
+          <p className="text-sm text-content-muted">{t("subtitle")}</p>
         </div>
         <Button onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4" /> {t("addGoal")}
@@ -162,7 +162,7 @@ export function Goals() {
       </header>
 
       {loading ? (
-        <div className="card flex h-32 items-center justify-center text-[hsl(var(--text-muted))]">
+        <div className="card flex h-32 items-center justify-center text-content-muted">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       ) : goals && goals.length > 0 ? (
@@ -204,20 +204,20 @@ function SummaryBanner({
 }) {
   const ccy = useSettingsStore((s) => s.displayCurrency);
   return (
-    <div className="card grid grid-cols-3 divide-x divide-[hsl(var(--border))]">
+    <div className="card grid grid-cols-3 divide-x divide-line">
       <div className="px-4 py-3 first:pl-0 last:pr-0">
-        <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Toplam hedef</p>
+        <p className="text-[11px] uppercase tracking-wide text-content-muted">Toplam hedef</p>
         <p className="mt-0.5 text-lg font-semibold tabular-nums">{formatCurrency(stats.total, ccy)}</p>
       </div>
       <div className="px-4 py-3">
-        <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Biriktirilen</p>
+        <p className="text-[11px] uppercase tracking-wide text-content-muted">Biriktirilen</p>
         <p className="mt-0.5 text-lg font-semibold tabular-nums text-gain">{formatCurrency(stats.saved, ccy)}</p>
       </div>
       <div className="px-4 py-3">
-        <p className="text-[11px] uppercase tracking-wide text-[hsl(var(--text-muted))]">Tamamlanan</p>
+        <p className="text-[11px] uppercase tracking-wide text-content-muted">Tamamlanan</p>
         <p className="mt-0.5 text-lg font-semibold tabular-nums">
           {stats.completed} / {stats.count}
-          <span className="ml-1.5 text-sm font-normal text-[hsl(var(--text-muted))]">
+          <span className="ml-1.5 text-sm font-normal text-content-muted">
             (%{stats.pct.toFixed(0)})
           </span>
         </p>
@@ -292,7 +292,7 @@ function GoalCard({
               {completed && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-gain" />}
             </div>
             {goal.target_date && daysLeft != null && (
-              <p className="mt-0.5 text-[11px] text-[hsl(var(--text-muted))]">
+              <p className="mt-0.5 text-[11px] text-content-muted">
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   {daysLeft < 0
@@ -308,14 +308,14 @@ function GoalCard({
         <div className="flex shrink-0 gap-0.5">
           <button
             onClick={onEdit}
-            className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))] transition"
+            className="rounded p-1.5 text-content-muted hover:bg-surface-raised hover:text-content transition"
             aria-label="Düzenle"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={onDelete}
-            className="rounded p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-loss transition"
+            className="rounded p-1.5 text-content-muted hover:bg-surface-raised hover:text-loss transition"
             aria-label="Sil"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -329,13 +329,13 @@ function GoalCard({
           <span className="text-xl font-bold tabular-nums">
             {formatCurrency(current, ccy)}
           </span>
-          <span className="text-sm text-[hsl(var(--text-muted))] tabular-nums">
+          <span className="text-sm text-content-muted tabular-nums">
             / {formatCurrency(target, ccy)}
           </span>
         </div>
 
         {/* Progress bar */}
-        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-surface-raised">
           <div
             className={cn(
               "h-full rounded-full transition-all duration-500",
@@ -346,7 +346,7 @@ function GoalCard({
         </div>
 
         {/* Stats row */}
-        <div className="mt-2 flex items-center justify-between text-[11px] text-[hsl(var(--text-muted))]">
+        <div className="mt-2 flex items-center justify-between text-[11px] text-content-muted">
           <span className={cn("font-medium", completed ? "text-gain" : "")}>
             %{pct.toFixed(0)} tamamlandı
           </span>
@@ -358,11 +358,11 @@ function GoalCard({
 
       {/* Monthly savings hint */}
       {monthlyNeeded != null && !completed && (
-        <div className="flex items-center gap-2 rounded-lg bg-[hsl(var(--surface-2))] px-3 py-2 text-[11px]">
+        <div className="flex items-center gap-2 rounded-lg bg-surface-raised px-3 py-2 text-[11px]">
           <TrendingUp className="h-3.5 w-3.5 shrink-0 text-accent" />
-          <span className="text-[hsl(var(--text-muted))]">
+          <span className="text-content-muted">
             Hedefe ulaşmak için aylık{" "}
-            <span className="font-semibold text-[hsl(var(--text))]">
+            <span className="font-semibold text-content">
               {formatCurrency(monthlyNeeded, ccy)}
             </span>{" "}
             biriktirmeniz gerekiyor
@@ -381,7 +381,7 @@ function GoalCard({
                 value={customVal}
                 onChange={(e) => setCustomVal(e.target.value)}
                 placeholder={`Tutar (${ccy})`}
-                className="flex-1 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1.5 text-sm outline-none focus:border-accent"
+                className="flex-1 rounded-lg border border-line bg-surface-raised px-3 py-1.5 text-sm outline-none focus:border-accent"
               />
               <button
                 type="submit"
@@ -392,7 +392,7 @@ function GoalCard({
               <button
                 type="button"
                 onClick={() => { setCustomMode(false); setCustomVal(""); }}
-                className="rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] transition"
+                className="rounded-lg border border-line px-3 py-1.5 text-xs text-content-muted hover:bg-surface-raised transition"
               >
                 İptal
               </button>
@@ -403,20 +403,20 @@ function GoalCard({
                 <button
                   key={amt}
                   onClick={() => onContribute(amt)}
-                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:border-gain hover:bg-gain/10 hover:text-gain"
+                  className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs font-medium text-content-muted transition hover:border-gain hover:bg-gain/10 hover:text-gain"
                 >
                   +{formatCurrency(amt, ccy)}
                 </button>
               ))}
               <button
                 onClick={() => onContribute(-(quickAmounts[0]))}
-                className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-1 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:border-loss hover:bg-loss/10 hover:text-loss"
+                className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs font-medium text-content-muted transition hover:border-loss hover:bg-loss/10 hover:text-loss"
               >
                 -{formatCurrency(quickAmounts[0], ccy)}
               </button>
               <button
                 onClick={() => setCustomMode(true)}
-                className="rounded-full border border-dashed border-[hsl(var(--border))] px-3 py-1 text-xs text-[hsl(var(--text-muted))] transition hover:border-accent hover:text-accent"
+                className="rounded-full border border-dashed border-line px-3 py-1 text-xs text-content-muted transition hover:border-accent hover:text-accent"
               >
                 <Zap className="mr-1 inline h-3 w-3" />Özel tutar
               </button>
@@ -443,7 +443,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         <Target className="h-7 w-7" />
       </div>
       <h2 className="text-base font-semibold">Henüz hedef yok</h2>
-      <p className="mt-1 max-w-sm text-sm text-[hsl(var(--text-muted))]">
+      <p className="mt-1 max-w-sm text-sm text-content-muted">
         Birikim hedefinizi belirleyin — ev peşinatı, acil fon, tatil veya istediğiniz herhangi bir şey.
       </p>
       <Button className="mt-5" onClick={onCreate}>
@@ -583,7 +583,7 @@ function GoalFormModal({
                   "flex h-9 w-full items-center justify-center rounded-lg border transition",
                   form.icon === key
                     ? "border-accent bg-accent/15 text-accent"
-                    : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))] hover:border-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+                    : "border-line bg-surface-raised text-content-muted hover:border-content-muted hover:text-content",
                 )}
               >
                 {icon}
@@ -603,7 +603,7 @@ function GoalFormModal({
                   "flex-1 rounded-lg border py-1.5 text-xs font-medium transition",
                   form.currency === c
                     ? "border-accent bg-accent/15 text-accent"
-                    : "border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))] hover:border-[hsl(var(--text-muted))]",
+                    : "border-line bg-surface-raised text-content-muted hover:border-content-muted",
                 )}
               >
                 {c}
@@ -643,9 +643,9 @@ function GoalFormModal({
         {monthlyPreview != null && (
           <div className="flex items-start gap-2 rounded-lg bg-accent/10 px-3 py-2.5 text-xs">
             <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-            <span className="text-[hsl(var(--text-muted))]">
+            <span className="text-content-muted">
               Bu hedefe ulaşmak için aylık yaklaşık{" "}
-              <span className="font-semibold text-[hsl(var(--text))]">
+              <span className="font-semibold text-content">
                 {formatCurrency(monthlyPreview, form.currency)}
               </span>{" "}
               biriktirmeniz gerekecek.

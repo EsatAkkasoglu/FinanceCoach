@@ -13,8 +13,8 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-accent text-white hover:opacity-90 disabled:opacity-50",
-  secondary: "bg-[hsl(var(--surface-2))] text-[hsl(var(--text))] border border-[hsl(var(--border))] hover:border-[hsl(var(--text-muted))] disabled:opacity-50",
-  ghost: "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))] disabled:opacity-50",
+  secondary: "bg-surface-raised text-content border border-line hover:border-content-muted disabled:opacity-50",
+  ghost: "text-content-muted hover:bg-surface-raised hover:text-content disabled:opacity-50",
   danger: "border border-loss/40 bg-loss/10 text-loss hover:bg-loss hover:text-white disabled:opacity-50",
 };
 

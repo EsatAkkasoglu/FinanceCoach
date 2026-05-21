@@ -46,22 +46,22 @@ export function Modal({
     >
       <div
         className={cn(
-          "relative w-full overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-2xl",
+          "relative w-full overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl",
           SIZES[size]
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[hsl(var(--border))] px-6 py-4">
+        <header className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
           <div className="min-w-0">
             <h2 className="text-base font-semibold tracking-tight">{title}</h2>
             {description && (
-              <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{description}</p>
+              <p className="mt-0.5 text-xs text-content-muted">{description}</p>
             )}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="-mr-2 -mt-1 rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+            className="-mr-2 -mt-1 rounded-lg p-1.5 text-content-muted transition hover:bg-surface-raised hover:text-content"
           >
             <X className="h-4 w-4" />
           </button>
@@ -70,7 +70,7 @@ export function Modal({
         <div className="max-h-[70vh] overflow-y-auto px-6 py-5">{children}</div>
 
         {footer && (
-          <footer className="flex items-center justify-end gap-2 border-t border-[hsl(var(--border))] bg-[hsl(var(--surface-2))]/40 px-6 py-3">
+          <footer className="flex items-center justify-end gap-2 border-t border-line bg-surface-raised/40 px-6 py-3">
             {footer}
           </footer>
         )}

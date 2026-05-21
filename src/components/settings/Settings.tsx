@@ -53,7 +53,7 @@ function PanelHeader({ title, description }: { title: string; description?: stri
     <div className="mb-6">
       <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
       {description && (
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{description}</p>
+        <p className="mt-1 text-sm text-content-muted">{description}</p>
       )}
     </div>
   );
@@ -70,16 +70,16 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-medium text-[hsl(var(--text-muted))]">{label}</label>
+      <label className="block text-xs font-medium text-content-muted">{label}</label>
       {children}
-      {hint && <p className="text-xs text-[hsl(var(--text-muted))]">{hint}</p>}
+      {hint && <p className="text-xs text-content-muted">{hint}</p>}
     </div>
   );
 }
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5">
+    <div className="rounded-xl border border-line bg-surface p-5">
       {children}
     </div>
   );
@@ -99,9 +99,9 @@ function Toggle({
   return (
     <div className="flex items-center justify-between gap-4">
       <div>
-        <p className="text-sm font-medium text-[hsl(var(--text))]">{label}</p>
+        <p className="text-sm font-medium text-content">{label}</p>
         {description && (
-          <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{description}</p>
+          <p className="mt-0.5 text-xs text-content-muted">{description}</p>
         )}
       </div>
       <button
@@ -110,7 +110,7 @@ function Toggle({
         onClick={() => onChange(!checked)}
         className={cn(
           "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200",
-          checked ? "bg-accent" : "bg-[hsl(var(--border))]"
+          checked ? "bg-accent" : "bg-default"
         )}
       >
         <span
@@ -138,7 +138,7 @@ function SecretInput({
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
-      <Icon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+      <Icon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-content-muted" />
       <input
         type={visible ? "text" : "password"}
         value={value}
@@ -146,12 +146,12 @@ function SecretInput({
         placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"
-        className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] pl-9 pr-9 py-2 font-mono text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-accent"
+        className="w-full rounded-lg border border-line bg-surface-raised pl-9 pr-9 py-2 font-mono text-sm text-content placeholder:text-content-muted focus:outline-none focus:ring-1 focus:ring-accent"
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-content-muted hover:text-content"
         aria-label={visible ? "Hide" : "Reveal"}
       >
         {visible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -203,7 +203,7 @@ function AIPanel() {
             <Sparkles className="h-4 w-4 text-accent" />
             Gemini API Key
           </h3>
-          <p className="mb-4 text-xs text-[hsl(var(--text-muted))]">
+          <p className="mb-4 text-xs text-content-muted">
             Required. Get a free key at <span className="font-mono">aistudio.google.com</span>. Stored only on this device.
           </p>
 
@@ -226,7 +226,7 @@ function AIPanel() {
                     ? "bg-gain/10 text-gain"
                     : dirtyGemini && draftGemini.trim()
                     ? "bg-accent text-white hover:opacity-90"
-                    : "bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))] cursor-not-allowed opacity-50"
+                    : "bg-surface-raised text-content-muted cursor-not-allowed opacity-50"
                 )}
               >
                 {savedGemini ? <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Saved</span> : "Save"}
@@ -241,7 +241,7 @@ function AIPanel() {
                 Active · ends in <span className="font-mono">{geminiApiKey.slice(-4)}</span>
               </span>
             ) : (
-              <span className="text-[hsl(var(--text-muted))]">No key set — the app will fall back to demo data.</span>
+              <span className="text-content-muted">No key set — the app will fall back to demo data.</span>
             )}
           </div>
         </Card>
@@ -249,13 +249,13 @@ function AIPanel() {
         {/* News key */}
         <Card>
           <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold">
-            <Newspaper className="h-4 w-4 text-[hsl(var(--text-muted))]" />
+            <Newspaper className="h-4 w-4 text-content-muted" />
             News API Key
-            <span className="ml-1 rounded bg-[hsl(var(--surface-2))] px-1.5 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]">
+            <span className="ml-1 rounded bg-surface-raised px-1.5 py-0.5 text-[10px] font-medium text-content-muted">
               Optional
             </span>
           </h3>
-          <p className="mb-4 text-xs text-[hsl(var(--text-muted))]">
+          <p className="mb-4 text-xs text-content-muted">
             Powers headlines and sentiment analysis. Without it, the news agent stays idle.
           </p>
 
@@ -278,7 +278,7 @@ function AIPanel() {
                     ? "bg-gain/10 text-gain"
                     : dirtyNews
                     ? "bg-accent text-white hover:opacity-90"
-                    : "bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))] cursor-not-allowed opacity-50"
+                    : "bg-surface-raised text-content-muted cursor-not-allowed opacity-50"
                 )}
               >
                 {savedNews ? <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Saved</span> : "Save"}
@@ -290,7 +290,7 @@ function AIPanel() {
         {/* Model — fixed, no picker */}
         <Card>
           <h3 className="mb-1 text-sm font-semibold">Model</h3>
-          <p className="mb-4 text-xs text-[hsl(var(--text-muted))]">
+          <p className="mb-4 text-xs text-content-muted">
             FinCoach uses a single optimised model for all requests.
           </p>
 
@@ -303,8 +303,8 @@ function AIPanel() {
                     {ACTIVE_MODEL.badge}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{ACTIVE_MODEL.description}</p>
-                <p className="mt-1.5 font-mono text-[10px] text-[hsl(var(--text-muted))]">{ACTIVE_MODEL.id}</p>
+                <p className="mt-1 text-xs text-content-muted">{ACTIVE_MODEL.description}</p>
+                <p className="mt-1.5 font-mono text-[10px] text-content-muted">{ACTIVE_MODEL.id}</p>
               </div>
               <span className="shrink-0 rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
                 {ACTIVE_MODEL.speed}
@@ -314,14 +314,14 @@ function AIPanel() {
             {/* Pricing */}
             <div className="mt-3 flex flex-wrap gap-3 border-t border-accent/20 pt-3">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-[hsl(var(--text-muted))]">Input</span>
-                <span className="font-mono text-[11px] font-semibold text-[hsl(var(--text))]">
+                <span className="text-[10px] text-content-muted">Input</span>
+                <span className="font-mono text-[11px] font-semibold text-content">
                   {ACTIVE_MODEL.pricing.input}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-[hsl(var(--text-muted))]">Output</span>
-                <span className="font-mono text-[11px] font-semibold text-[hsl(var(--text))]">
+                <span className="text-[10px] text-content-muted">Output</span>
+                <span className="font-mono text-[11px] font-semibold text-content">
                   {ACTIVE_MODEL.pricing.output}
                 </span>
               </div>
@@ -337,7 +337,7 @@ function AIPanel() {
         {/* Temperature */}
         <Card>
           <h3 className="mb-1 text-sm font-semibold">Creativity (temperature)</h3>
-          <p className="mb-4 text-xs text-[hsl(var(--text-muted))]">
+          <p className="mb-4 text-xs text-content-muted">
             Lower values stay factual. Higher values explore more.
           </p>
           <div className="flex items-center gap-4">
@@ -352,7 +352,7 @@ function AIPanel() {
             />
             <span className="w-10 text-right font-mono text-sm tabular-nums">{temperature.toFixed(1)}</span>
           </div>
-          <div className="mt-1 flex justify-between text-[10px] text-[hsl(var(--text-muted))]">
+          <div className="mt-1 flex justify-between text-[10px] text-content-muted">
             <span>Precise</span>
             <span>Balanced</span>
             <span>Creative</span>
@@ -373,12 +373,12 @@ function AppearancePanel() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             {theme === "dark"
-              ? <Moon className="h-4 w-4 text-[hsl(var(--text-muted))]" />
-              : <Sun className="h-4 w-4 text-[hsl(var(--text-muted))]" />
+              ? <Moon className="h-4 w-4 text-content-muted" />
+              : <Sun className="h-4 w-4 text-content-muted" />
             }
             <div>
               <p className="text-sm font-medium">{theme === "dark" ? t("appearance.dark") : t("appearance.light")}</p>
-              <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
+              <p className="mt-0.5 text-xs text-content-muted">
                 {theme === "dark" ? "Easier on the eyes at night." : "Bright and high-contrast."}
               </p>
             </div>
@@ -389,7 +389,7 @@ function AppearancePanel() {
             onClick={toggleTheme}
             className={cn(
               "relative h-5 w-9 rounded-full transition-colors duration-200",
-              theme === "dark" ? "bg-accent" : "bg-[hsl(var(--border))]"
+              theme === "dark" ? "bg-accent" : "bg-default"
             )}
           >
             <span
@@ -416,7 +416,7 @@ function LanguageSwitcher() {
     <div className="flex items-center justify-between gap-4">
       <div>
         <p className="text-sm font-medium">{t("language.title")}</p>
-        <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{t("language.subtitle")}</p>
+        <p className="mt-0.5 text-xs text-content-muted">{t("language.subtitle")}</p>
       </div>
       <div className="flex gap-2">
         {(["en", "tr"] as const).map((lang) => (
@@ -427,7 +427,7 @@ function LanguageSwitcher() {
               "rounded-lg border px-3 py-1.5 text-xs font-medium transition",
               i18n.language === lang
                 ? "border-accent bg-accent-muted text-accent"
-                : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                : "border-line text-content-muted hover:text-content"
             )}
           >
             {tCommon(lang === "en" ? "languageEn" : "languageTr")}
@@ -455,7 +455,7 @@ function BehaviourPanel() {
         </Card>
         <Card>
           <div className="flex items-start gap-3">
-            <Flame className={cn("mt-0.5 h-4 w-4 shrink-0", roastMode ? "text-orange-400" : "text-[hsl(var(--text-muted))]")} />
+            <Flame className={cn("mt-0.5 h-4 w-4 shrink-0", roastMode ? "text-orange-400" : "text-content-muted")} />
             <div className="flex-1">
               <Toggle
                 checked={roastMode}
@@ -516,7 +516,7 @@ function ProfilePanel() {
         <div className="card flex h-32 items-center justify-center">
           {error
             ? <p className="text-sm text-loss">{error}</p>
-            : <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />}
+            : <Loader2 className="h-5 w-5 animate-spin text-content-muted" />}
         </div>
       </>
     );
@@ -578,7 +578,7 @@ function ProfilePanel() {
                     "flex h-12 w-12 items-center justify-center rounded-xl border-2 text-2xl leading-none transition",
                     active
                       ? "border-accent bg-accent-muted"
-                      : "border-[hsl(var(--border))] hover:border-[hsl(var(--text-muted))]",
+                      : "border-line hover:border-content-muted",
                   )}
                   title={a.label}
                   aria-label={a.label}
@@ -598,7 +598,7 @@ function ProfilePanel() {
               <input
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                className="w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
             </Field>
           </div>
@@ -609,7 +609,7 @@ function ProfilePanel() {
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="mb-1 text-sm font-semibold">{t("profile.riskProfile")}</h3>
-              <p className="text-xs text-[hsl(var(--text-muted))]">
+              <p className="text-xs text-content-muted">
                 {t("profile.riskProfileHint")}
               </p>
             </div>
@@ -631,11 +631,11 @@ function ProfilePanel() {
                     "rounded-lg border p-3 text-left transition",
                     active
                       ? "border-accent bg-accent-muted"
-                      : "border-[hsl(var(--border))] hover:border-[hsl(var(--text-muted))]",
+                      : "border-line hover:border-content-muted",
                   )}
                 >
                   <p className={cn("text-sm font-medium", active && "text-accent")}>{r.label}</p>
-                  <p className="mt-0.5 text-[11px] text-[hsl(var(--text-muted))]">{r.description}</p>
+                  <p className="mt-0.5 text-[11px] text-content-muted">{r.description}</p>
                 </button>
               );
             })}
@@ -656,11 +656,11 @@ function ProfilePanel() {
         {/* Sticky save bar */}
         {dirty && (
           <div className="sticky bottom-2 flex items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent-muted/40 px-4 py-2.5 backdrop-blur-sm">
-            <span className="text-xs text-[hsl(var(--text))]">{t("profile.unsavedChanges")}</span>
+            <span className="text-xs text-content">{t("profile.unsavedChanges")}</span>
             <div className="flex gap-2">
               <button
                 onClick={discard}
-                className="rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))]"
+                className="rounded-lg px-3 py-1.5 text-xs text-content-muted hover:bg-surface-raised"
               >
                 {tCommon("cancel")}
               </button>
@@ -749,7 +749,7 @@ function DangerPanel() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium">{t("danger.resetOnboarding")}</p>
-            <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
+            <p className="mt-0.5 text-xs text-content-muted">
               {t("danger.resetOnboardingDesc")}
             </p>
           </div>
@@ -805,7 +805,7 @@ export function Settings() {
                     ? isDanger
                       ? "bg-loss/10 text-loss"
                       : "bg-accent-muted text-accent"
-                    : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+                    : "text-content-muted hover:bg-surface-raised hover:text-content"
                 )}
               >
                 <Icon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -814,7 +814,7 @@ export function Settings() {
                   <p
                     className={cn(
                       "mt-0.5 truncate text-[11px]",
-                      isActive ? "opacity-80" : "text-[hsl(var(--text-muted))]"
+                      isActive ? "opacity-80" : "text-content-muted"
                     )}
                   >
                     {description}

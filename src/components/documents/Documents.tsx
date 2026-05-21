@@ -80,7 +80,7 @@ export function Documents() {
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-          <p className="text-sm text-[hsl(var(--text-muted))]">
+          <p className="text-sm text-content-muted">
             {t("subtitle")}
           </p>
         </div>
@@ -111,7 +111,7 @@ export function Documents() {
           <p className="text-sm font-semibold">
             {parsing ? t("parsing") : t("dropPrompt")}
           </p>
-          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+          <p className="mt-1 text-xs text-content-muted">
             {t("fileHint")}
           </p>
         </div>
@@ -120,7 +120,7 @@ export function Documents() {
       {/* Results stack */}
       {parsed.length > 0 && (
         <section className="space-y-4">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-content-muted">
             {t("thisSession")}
           </p>
           {parsed.map((doc, idx) => (
@@ -134,7 +134,7 @@ export function Documents() {
         </section>
       )}
 
-      <p className="pt-2 text-[10px] text-[hsl(var(--text-muted))]">
+      <p className="pt-2 text-[10px] text-content-muted">
         {t("disclaimer")}
       </p>
     </div>
@@ -161,22 +161,22 @@ function ParsedDocCard({
       {/* Header */}
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--surface-2))] text-[hsl(var(--text-muted))]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-raised text-content-muted">
             <FileText className="h-5 w-5" />
           </span>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-sm font-semibold">{doc.filename}</h2>
-              <span className="rounded-full bg-[hsl(var(--surface-2))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]">
+              <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-content-muted">
                 {docTypeLabel} · {confidencePct}%
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">{sizeKb} KB</p>
+            <p className="mt-0.5 text-xs text-content-muted">{sizeKb} KB</p>
           </div>
         </div>
         <button
           onClick={onDismiss}
-          className="rounded p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+          className="rounded p-1.5 text-content-muted transition hover:bg-surface-raised hover:text-content"
           aria-label="Dismiss"
         >
           <X className="h-3.5 w-3.5" />
@@ -184,7 +184,7 @@ function ParsedDocCard({
       </header>
 
       {/* Summary */}
-      <p className="rounded-lg bg-[hsl(var(--surface-2))] px-3 py-2.5 text-sm text-[hsl(var(--text))]">
+      <p className="rounded-lg bg-surface-raised px-3 py-2.5 text-sm text-content">
         {r.summary}
       </p>
 
@@ -209,7 +209,7 @@ function ParsedDocCard({
       {/* Follow-up questions — the headline feature of this page */}
       {r.follow_up_questions.length > 0 && (
         <div className="space-y-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-content-muted">
             <Sparkles className="h-3.5 w-3.5 text-accent" />
             {t("coachWantsToKnow")}
           </p>
@@ -217,7 +217,7 @@ function ParsedDocCard({
             {r.follow_up_questions.map((q, i) => (
               <li
                 key={i}
-                className="flex items-start justify-between gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-3 py-2.5"
+                className="flex items-start justify-between gap-3 rounded-lg border border-line bg-surface-raised px-3 py-2.5"
               >
                 <span className="text-sm">{q}</span>
                 <Button size="sm" variant="ghost" onClick={() => onAskCoach(q)}>
@@ -233,7 +233,7 @@ function ParsedDocCard({
       {/* Risk signals */}
       {r.suggested_profile?.risk_signals && r.suggested_profile.risk_signals.length > 0 && (
         <div className="space-y-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-content-muted">
             <Shield className="h-3.5 w-3.5 text-accent" />
             {t("riskSignals")}
           </p>
@@ -253,11 +253,11 @@ function ParsedDocCard({
       {/* Missing or unclear */}
       {r.missing_or_unclear.length > 0 && (
         <div className="space-y-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-content-muted">
             <AlertTriangle className="h-3.5 w-3.5 text-warning" />
             {t("unclear")}
           </p>
-          <ul className="space-y-1 text-xs text-[hsl(var(--text-muted))]">
+          <ul className="space-y-1 text-xs text-content-muted">
             {r.missing_or_unclear.map((m, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning" />
@@ -274,7 +274,7 @@ function ParsedDocCard({
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="card-muted">
-      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-content-muted">
         {label}
       </p>
       <p className="mt-1 font-mono text-lg font-semibold tabular-nums">

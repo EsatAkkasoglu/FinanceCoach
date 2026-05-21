@@ -20,9 +20,10 @@ import {
   type FundHistoryPoint,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { paletteAt, chartTooltip } from "@/lib/chartColors";
 
 function ReturnCell({ value }: { value: number | null | undefined }) {
-  if (value == null) return <td className="px-3 py-2 text-right text-[hsl(var(--text-muted))]">—</td>;
+  if (value == null) return <td className="px-3 py-2 text-right text-content-muted">—</td>;
   const cls = value >= 0 ? "text-gain" : "text-loss";
   return (
     <td className={cn("px-3 py-2 text-right num tabular-nums", cls)}>
@@ -81,7 +82,7 @@ export function Funds() {
     <div className="flex flex-col gap-4">
       <header>
         <h1 className="text-xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-[hsl(var(--text-muted))]">
+        <p className="text-sm text-content-muted">
           {t("subtitle")}
         </p>
       </header>
@@ -95,7 +96,7 @@ export function Funds() {
               "rounded-full border px-3 py-1 text-xs transition",
               category === c.key && !query
                 ? "border-accent bg-accent-muted text-accent"
-                : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+                : "border-line text-content-muted hover:text-content",
             )}
           >
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -108,26 +109,26 @@ export function Funds() {
             "rounded-full border px-3 py-1 text-xs transition",
             !category && !query
               ? "border-accent bg-accent-muted text-accent"
-              : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+              : "border-line text-content-muted hover:text-content",
           )}
         >
           {t("allBest")}
         </button>
 
         <div className="ml-auto relative w-full max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-content-muted" />
           <input
             value={query}
             onChange={(e) => { setQuery(e.target.value); }}
             placeholder={t("searchPlaceholder")}
-            className="w-full rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] py-1.5 pl-8 pr-3 text-xs outline-none focus:border-accent"
+            className="w-full rounded-full border border-line bg-surface-raised py-1.5 pl-8 pr-3 text-xs outline-none focus:border-accent"
           />
         </div>
       </div>
 
       <div className="card overflow-hidden p-0">
         {loading && (
-          <div className="flex h-32 items-center justify-center text-[hsl(var(--text-muted))]">
+          <div className="flex h-32 items-center justify-center text-content-muted">
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         )}
@@ -135,13 +136,13 @@ export function Funds() {
           <div className="p-4 text-sm text-warning">{error}</div>
         )}
         {!loading && !error && rows.length === 0 && (
-          <div className="p-6 text-center text-sm text-[hsl(var(--text-muted))]">
+          <div className="p-6 text-center text-sm text-content-muted">
             {t("noResults")}
           </div>
         )}
         {!loading && !error && rows.length > 0 && (
           <table className="w-full text-sm">
-            <thead className="bg-[hsl(var(--surface-2))] text-[10px] uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <thead className="bg-surface-raised text-[10px] uppercase tracking-wide text-content-muted">
               <tr>
                 <th className="px-3 py-2 text-left">{t("table.code")}</th>
                 <th className="px-3 py-2 text-left">{t("table.name")}</th>
@@ -158,16 +159,16 @@ export function Funds() {
                   key={r.code}
                   onClick={() => setSelected(r)}
                   className={cn(
-                    "cursor-pointer border-t border-[hsl(var(--border))] transition hover:bg-[hsl(var(--surface-2))]",
+                    "cursor-pointer border-t border-line transition hover:bg-surface-raised",
                     selected?.code === r.code && "bg-accent-muted/40",
                   )}
                 >
                   <td className="px-3 py-2 font-mono text-emerald-300">{r.code}</td>
                   <td className="px-3 py-2 truncate max-w-[20rem]">{r.title ?? "—"}</td>
-                  <td className="px-3 py-2 truncate max-w-[14rem] text-[11px] text-[hsl(var(--text-muted))]">
+                  <td className="px-3 py-2 truncate max-w-[14rem] text-[11px] text-content-muted">
                     {r.category?.replace(/\s*Şemsiye Fonu\s*$/i, "") ?? "—"}
                   </td>
-                  <td className="px-3 py-2 text-right text-[hsl(var(--text-muted))]">{r.risk ?? "—"}</td>
+                  <td className="px-3 py-2 text-right text-content-muted">{r.risk ?? "—"}</td>
                   <ReturnCell value={r.return_1m} />
                   <ReturnCell value={r.return_6m} />
                   <ReturnCell value={r.return_1y} />
@@ -239,7 +240,7 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-mono text-lg text-emerald-300">{fund.code}</div>
-          <div className="text-xs text-[hsl(var(--text-muted))] max-w-md">{fund.title}</div>
+          <div className="text-xs text-content-muted max-w-md">{fund.title}</div>
         </div>
         <div className="flex items-center gap-2">
           {[30, 90, 180, 365].map((d) => (
@@ -250,7 +251,7 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
                 "rounded-full border px-2.5 py-0.5 text-[10px] transition",
                 days === d
                   ? "border-accent bg-accent-muted text-accent"
-                  : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+                  : "border-line text-content-muted hover:text-content",
               )}
             >
               {d}d
@@ -258,7 +259,7 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
           ))}
           <button
             onClick={onClose}
-            className="rounded-full border border-[hsl(var(--border))] px-2.5 py-0.5 text-[10px] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+            className="rounded-full border border-line px-2.5 py-0.5 text-[10px] text-content-muted hover:text-content"
           >
             {t("close")}
           </button>
@@ -268,12 +269,12 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
       {stats && (
         <div className="mt-2 flex gap-4 text-xs">
           <span>
-            <span className="text-[hsl(var(--text-muted))]">{t("daysReturn", { days })} </span>
+            <span className="text-content-muted">{t("daysReturn", { days })} </span>
             <span className={cn("num font-semibold", stats.totalReturn >= 0 ? "text-gain" : "text-loss")}>
               {stats.totalReturn >= 0 ? "+" : ""}{stats.totalReturn.toFixed(2)}%
             </span>
           </span>
-          <span className="text-[hsl(var(--text-muted))]">
+          <span className="text-content-muted">
             {t("minMax", { min: stats.min.toFixed(4), max: stats.max.toFixed(4) })}
           </span>
         </div>
@@ -281,11 +282,11 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
 
       <div className="mt-3 h-64">
         {loading ? (
-          <div className="flex h-full items-center justify-center text-[hsl(var(--text-muted))]">
+          <div className="flex h-full items-center justify-center text-content-muted">
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : points.length < 2 ? (
-          <div className="flex h-full items-center justify-center text-xs text-[hsl(var(--text-muted))]">
+          <div className="flex h-full items-center justify-center text-xs text-content-muted">
             {t("noHistoricalData")}
           </div>
         ) : (
@@ -318,14 +319,13 @@ function FundDetailCard({ fund, onClose }: { fund: FundRow; onClose: () => void 
                 tickMargin={6}
               />
               <RechartsTooltip
-                contentStyle={{ background: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-                labelStyle={{ color: "hsl(var(--text-muted))" }}
+                {...chartTooltip}
                 formatter={(v: number) => [formatTick(v), "Price"]}
               />
               <Line
                 type="monotone"
                 dataKey="price"
-                stroke="#14B8A6"
+                stroke={paletteAt(0)}
                 strokeWidth={2}
                 dot={false}
                 isAnimationActive

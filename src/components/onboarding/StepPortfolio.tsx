@@ -29,11 +29,11 @@ export function StepPortfolio({ holdings, onChange }: Props) {
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">{t("portfolio.title")}</h2>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{t("portfolio.subtitle")}</p>
+        <p className="mt-1 text-sm text-content-muted">{t("portfolio.subtitle")}</p>
       </div>
 
       {holdings.length === 0 && (
-        <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-8 text-center text-sm text-[hsl(var(--text-muted))]">
+        <div className="rounded-lg border border-dashed border-line p-8 text-center text-sm text-content-muted">
           {t("portfolio.empty")}
         </div>
       )}
@@ -42,13 +42,13 @@ export function StepPortfolio({ holdings, onChange }: Props) {
         {holdings.map((h, i) => (
           <div
             key={i}
-            className="flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3"
+            className="flex items-center gap-2 rounded-lg border border-line bg-surface p-3"
           >
             <input
               value={h.ticker}
               onChange={(e) => update(i, { ticker: e.target.value.toUpperCase() })}
               placeholder={t("portfolio.ticker")}
-              className="num w-0 min-w-0 flex-1 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1.5 text-sm outline-none focus:border-accent"
+              className="num w-0 min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm outline-none focus:border-accent"
             />
             <input
               type="number"
@@ -56,7 +56,7 @@ export function StepPortfolio({ holdings, onChange }: Props) {
               value={h.quantity || ""}
               onChange={(e) => update(i, { quantity: Number(e.target.value) })}
               placeholder={t("portfolio.quantity")}
-              className="num w-20 shrink-0 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1.5 text-sm outline-none focus:border-accent"
+              className="num w-20 shrink-0 rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm outline-none focus:border-accent"
             />
             <input
               type="number"
@@ -64,12 +64,12 @@ export function StepPortfolio({ holdings, onChange }: Props) {
               value={h.costBasis || ""}
               onChange={(e) => update(i, { costBasis: Number(e.target.value) })}
               placeholder={t("portfolio.costBasis")}
-              className="num w-24 shrink-0 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1.5 text-sm outline-none focus:border-accent"
+              className="num w-24 shrink-0 rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm outline-none focus:border-accent"
             />
             <select
               value={h.assetClass}
               onChange={(e) => update(i, { assetClass: e.target.value as HoldingDraft["assetClass"] })}
-              className="w-24 shrink-0 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] px-2 py-1.5 text-sm outline-none"
+              className="w-24 shrink-0 rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm outline-none"
             >
               {(["stock", "crypto", "etf", "cash"] as const).map((cls) => (
                 <option key={cls} value={cls}>
@@ -80,7 +80,7 @@ export function StepPortfolio({ holdings, onChange }: Props) {
             <button
               type="button"
               onClick={() => remove(i)}
-              className="shrink-0 rounded-md p-2 text-[hsl(var(--text-muted))] hover:text-loss"
+              className="shrink-0 rounded-md p-2 text-content-muted hover:text-loss"
               aria-label="Remove"
             >
               <Trash2 className="h-4 w-4" />
@@ -92,16 +92,16 @@ export function StepPortfolio({ holdings, onChange }: Props) {
       <button
         type="button"
         onClick={add}
-        className="flex items-center gap-2 rounded-md border border-dashed border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--text-muted))] hover:border-accent hover:text-accent"
+        className="flex items-center gap-2 rounded-md border border-dashed border-line px-3 py-2 text-sm text-content-muted hover:border-accent hover:text-accent"
       >
         <Plus className="h-4 w-4" />
         {t("portfolio.addRow")}
       </button>
 
       {total > 0 && (
-        <div className="text-right text-sm text-[hsl(var(--text-muted))]">
+        <div className="text-right text-sm text-content-muted">
           {t("portfolio.totalCost")}:{" "}
-          <span className="num text-[hsl(var(--text))]">{formatCurrency(total)}</span>
+          <span className="num text-content">{formatCurrency(total)}</span>
         </div>
       )}
     </div>

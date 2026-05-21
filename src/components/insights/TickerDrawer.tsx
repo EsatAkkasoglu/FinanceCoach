@@ -50,19 +50,19 @@ export function TickerDrawer({ ticker, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-5 shadow-2xl animate-in slide-in-from-right">
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-line bg-bg p-5 shadow-2xl animate-in slide-in-from-right">
         <header className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))]">{t("drawer.tickerAnalysis")}</p>
+            <p className="text-[10px] uppercase tracking-widest text-content-muted">{t("drawer.tickerAnalysis")}</p>
             <h2 className="font-mono text-3xl font-semibold text-emerald-300">{ticker}</h2>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]" aria-label={t("drawer.close")}>
+          <button onClick={onClose} className="rounded-lg p-2 text-content-muted hover:bg-surface-raised hover:text-content" aria-label={t("drawer.close")}>
             <X className="h-4 w-4" />
           </button>
         </header>
 
         {loading && (
-          <div className="flex h-32 items-center justify-center text-[hsl(var(--text-muted))]">
+          <div className="flex h-32 items-center justify-center text-content-muted">
             <Loader2 className="h-5 w-5 animate-spin" />
             <span className="ml-2 text-sm">{t("drawer.analyzing", { ticker })}</span>
           </div>
@@ -95,7 +95,7 @@ function EightDimSection({ result }: { result: EightDimResult }) {
   const recTone =
     rec === "BUY" ? "text-gain"
     : rec === "SELL" ? "text-loss"
-    : "text-[hsl(var(--text-muted))]";
+    : "text-content-muted";
   return (
     <section className="card mb-3">
       <div className="flex items-center justify-between">
@@ -103,17 +103,17 @@ function EightDimSection({ result }: { result: EightDimResult }) {
         <div className="text-right">
           <p className={cn("text-lg font-semibold", recTone)}>{rec}</p>
           {result.final_score != null && (
-            <p className="text-[10px] text-[hsl(var(--text-muted))]">{t("drawer.score", { value: (result.final_score * 100).toFixed(0) })}</p>
+            <p className="text-[10px] text-content-muted">{t("drawer.score", { value: (result.final_score * 100).toFixed(0) })}</p>
           )}
         </div>
       </div>
       <ul className="mt-3 space-y-1.5">
         {dims.map((d) => (
           <li key={d.key} className="flex items-center gap-2 text-xs">
-            <span className="w-32 uppercase text-[10px] tracking-wide text-[hsl(var(--text-muted))]">
+            <span className="w-32 uppercase text-[10px] tracking-wide text-content-muted">
               {t(`drawer.dimensions.${d.key}`, { defaultValue: d.key.replace(/_/g, " ") })}
             </span>
-            <div className="flex-1 h-1.5 overflow-hidden rounded-full bg-[hsl(var(--surface-2))]">
+            <div className="flex-1 h-1.5 overflow-hidden rounded-full bg-surface-raised">
               <div
                 className={cn(
                   "h-full",
@@ -124,7 +124,7 @@ function EightDimSection({ result }: { result: EightDimResult }) {
                 style={{ width: `${Math.max(0, Math.min(100, d.score * 100))}%` }}
               />
             </div>
-            <span className="num w-8 text-right text-[10px] text-[hsl(var(--text-muted))]">
+            <span className="num w-8 text-right text-[10px] text-content-muted">
               {(d.score * 100).toFixed(0)}
             </span>
           </li>
@@ -140,7 +140,7 @@ function TechnicalsSection({ result }: { result: TechnicalsResult }) {
     return (
       <section className="card mb-3">
         <h3 className="text-sm font-semibold">{t("drawer.technicalsTitle")}</h3>
-        <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">{result.error ?? t("drawer.noTechnicals")}</p>
+        <p className="mt-2 text-xs text-content-muted">{result.error ?? t("drawer.noTechnicals")}</p>
       </section>
     );
   }
@@ -150,13 +150,13 @@ function TechnicalsSection({ result }: { result: TechnicalsResult }) {
       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
         {result.rsi && (
           <div>
-            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.rsiPeriod", { period: result.rsi.period })}</p>
+            <p className="text-[10px] uppercase text-content-muted">{t("drawer.rsiPeriod", { period: result.rsi.period })}</p>
             <p className="num text-xl font-semibold">{result.rsi.value?.toFixed(1) ?? "—"}</p>
             <p className={cn(
               "text-[10px]",
               result.rsi.signal === "overbought" && "text-warning",
               result.rsi.signal === "oversold" && "text-gain",
-              result.rsi.signal === "neutral" && "text-[hsl(var(--text-muted))]",
+              result.rsi.signal === "neutral" && "text-content-muted",
             )}>
               {result.rsi.signal && result.rsi.signal !== "n/a"
                 ? t(`drawer.rsiSignal.${result.rsi.signal}`, { defaultValue: result.rsi.signal })
@@ -166,7 +166,7 @@ function TechnicalsSection({ result }: { result: TechnicalsResult }) {
         )}
         {result.sma && (
           <div>
-            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.smaPeriod", { period: result.sma.period })}</p>
+            <p className="text-[10px] uppercase text-content-muted">{t("drawer.smaPeriod", { period: result.sma.period })}</p>
             <p className="num text-xl font-semibold">{result.sma.value?.toFixed(2) ?? "—"}</p>
             <p className={cn(
               "text-[10px]",
@@ -195,18 +195,18 @@ function DividendSection({ result }: { result: DividendResult }) {
       <h3 className="text-sm font-semibold">{t("drawer.dividendTitle")}</h3>
       <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
         <div>
-          <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.dividendYield")}</p>
+          <p className="text-[10px] uppercase text-content-muted">{t("drawer.dividendYield")}</p>
           <p className="num text-xl font-semibold text-gain">{yld.toFixed(2)}%</p>
         </div>
         {result.safety_score != null && (
           <div>
-            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.dividendSafety")}</p>
+            <p className="text-[10px] uppercase text-content-muted">{t("drawer.dividendSafety")}</p>
             <p className="num text-xl font-semibold">{Math.round(result.safety_score)}/100</p>
           </div>
         )}
         {result.income_rating && (
           <div>
-            <p className="text-[10px] uppercase text-[hsl(var(--text-muted))]">{t("drawer.dividendRating")}</p>
+            <p className="text-[10px] uppercase text-content-muted">{t("drawer.dividendRating")}</p>
             <p className="text-xl font-semibold">
               {t(`drawer.dividendRatingValue.${result.income_rating}`, { defaultValue: result.income_rating })}
             </p>
@@ -214,7 +214,7 @@ function DividendSection({ result }: { result: DividendResult }) {
         )}
       </div>
       {result.consecutive_increases != null && result.consecutive_increases > 0 && (
-        <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
+        <p className="mt-2 text-[11px] text-content-muted">
           {t("drawer.dividendStreak", { years: result.consecutive_increases })}
         </p>
       )}
@@ -227,7 +227,7 @@ function NewsSection({ articles }: { articles: NewsArticle[] }) {
   return (
     <section className="card">
       <h3 className="text-sm font-semibold">{t("drawer.newsTitle")}</h3>
-      <ul className="mt-2 divide-y divide-[hsl(var(--border))]">
+      <ul className="mt-2 divide-y divide-line">
         {articles.map((a, i) => (
           <li key={i} className="py-2">
             <a
@@ -238,11 +238,11 @@ function NewsSection({ articles }: { articles: NewsArticle[] }) {
             >
               <span>
                 <p className="font-medium leading-snug">{a.title}</p>
-                <p className="mt-0.5 text-[10px] text-[hsl(var(--text-muted))]">
+                <p className="mt-0.5 text-[10px] text-content-muted">
                   {a.source}{a.published_at ? ` · ${a.published_at.slice(0, 10)}` : ""}
                 </p>
               </span>
-              <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-[hsl(var(--text-muted))] group-hover:text-accent" />
+              <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-content-muted group-hover:text-accent" />
             </a>
           </li>
         ))}

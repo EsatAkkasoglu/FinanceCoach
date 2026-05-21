@@ -33,7 +33,7 @@ export function DemoTour() {
       <div className="pointer-events-none fixed inset-0 z-40 bg-black/20" />
 
       {/* Tour card */}
-      <div className="fixed bottom-6 right-6 z-50 w-80 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-2xl">
+      <div className="fixed bottom-6 right-6 z-50 w-80 rounded-2xl border border-line bg-surface shadow-2xl">
         {/* Header */}
         <div className="flex items-center gap-2 rounded-t-2xl bg-accent/10 px-4 py-3">
           <Map className="h-4 w-4 shrink-0 text-accent" />
@@ -42,7 +42,7 @@ export function DemoTour() {
           </span>
           <button
             onClick={skip}
-            className="rounded-md p-0.5 text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))]"
+            className="rounded-md p-0.5 text-content-muted transition hover:text-content"
             title="Turu kapat"
           >
             <X className="h-3.5 w-3.5" />
@@ -51,8 +51,8 @@ export function DemoTour() {
 
         {/* Body */}
         <div className="px-4 py-4">
-          <h3 className="mb-2 text-sm font-semibold text-[hsl(var(--text))]">{current.title}</h3>
-          <p className="text-xs leading-relaxed text-[hsl(var(--text-muted))]">{current.body}</p>
+          <h3 className="mb-2 text-sm font-semibold text-content">{current.title}</h3>
+          <p className="text-xs leading-relaxed text-content-muted">{current.body}</p>
         </div>
 
         {/* Progress dots */}
@@ -62,7 +62,7 @@ export function DemoTour() {
               key={i}
               className={cn(
                 "h-1.5 rounded-full transition-all",
-                i === step ? "w-4 bg-accent" : "w-1.5 bg-[hsl(var(--border))]"
+                i === step ? "w-4 bg-accent" : "w-1.5 bg-default"
               )}
             />
           ))}
@@ -73,7 +73,7 @@ export function DemoTour() {
           <button
             onClick={prev}
             disabled={isFirst}
-            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))] disabled:opacity-30"
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs text-content-muted transition hover:bg-surface-raised hover:text-content disabled:opacity-30"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
             Geri
@@ -81,7 +81,7 @@ export function DemoTour() {
 
           <button
             onClick={skip}
-            className="text-[10px] text-[hsl(var(--text-muted))] underline underline-offset-2 transition hover:text-[hsl(var(--text))]"
+            className="text-[10px] text-content-muted underline underline-offset-2 transition hover:text-content"
           >
             Turu atla
           </button>
@@ -108,7 +108,7 @@ export function TourReplayButton() {
     <button
       onClick={start}
       title="Turu tekrar başlat"
-      className="flex h-8 w-8 items-center justify-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-2))] text-[10px] font-bold text-[hsl(var(--text-muted))] shadow transition hover:border-accent hover:text-accent"
+      className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-surface-raised text-[10px] font-bold text-content-muted shadow transition hover:border-accent hover:text-accent"
     >
       ?
     </button>
