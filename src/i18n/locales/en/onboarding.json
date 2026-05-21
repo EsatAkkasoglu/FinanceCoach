@@ -51,7 +51,7 @@
   },
   "finances": {
     "title": "Your finances",
-    "subtitle": "Tell me about your accounts and income — I'll set up your budget automatically.",
+    "subtitle": "If you'd like, share your account and income details — I'll prepare your budget automatically for you.",
     "modes": {
       "manual": "Enter manually",
       "manualDesc": "Add income sources and accounts",

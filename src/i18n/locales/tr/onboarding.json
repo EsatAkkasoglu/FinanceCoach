@@ -51,7 +51,7 @@
   },
   "finances": {
     "title": "Finanslarınız",
-    "subtitle": "Hesaplarınız ve geliriniz hakkında bilgi verin — bütçenizi otomatik kuracağım.",
+    "subtitle": "İsterseniz hesap ve gelir bilgilerinizi paylaşın — bütçenizi sizin için otomatik hazırlayayım.",
     "modes": {
       "manual": "Manuel giriş",
       "manualDesc": "Gelir kaynakları ve hesapları tek tek ekle",

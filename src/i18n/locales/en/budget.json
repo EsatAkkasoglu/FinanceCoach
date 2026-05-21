@@ -97,7 +97,7 @@
     "uploadStatement": "Upload statement",
     "uploadStatementDesc": "Drop a bank PDF and we'll extract everything.",
     "addAccount": "Add an account",
-    "addAccountDesc": "Tell us where your money lives.",
+    "addAccountDesc": "Add your accounts so we can see where your money sits, all in one place.",
     "logTransaction": "Log a transaction",
     "logTransactionDesc": "Quick-enter a single income or expense."
   },
