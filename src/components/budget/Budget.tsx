@@ -235,7 +235,7 @@ export function Budget() {
 
           {summary && (
             <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <CategoriesDonut summary={summary} fx={fx} />
+              <CategoriesDonut summary={summary} fx={fx} trend={trend} />
               <UpcomingCharges summary={summary} fx={fx} />
             </div>
           )}
@@ -504,7 +504,7 @@ function TrendBand({
                     contentStyle={chartTooltipContentStyle}
                     formatter={(v: number, name: string) => [
                       fx.rates ? formatCurrency(v, fx.target) : v.toFixed(0),
-                      t(`trend.${name}`),
+                      name === "income" ? t("trend.income") : t("trend.expense"),
                     ]}
                     labelFormatter={(l: string) => monthLabel(l)}
                   />
@@ -722,8 +722,13 @@ function localizeCategory(name: string, lang: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
 }
 
-function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRates }) {
+function CategoriesDonut({ summary, fx, trend }: { summary: BudgetSummary; fx: UseFxRates; trend?: BudgetTrend | null }) {
   const { t, i18n } = useTranslation("budget");
+  const momByCat = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const c of trend?.category_mom ?? []) m.set(c.category, c.change_pct);
+    return m;
+  }, [trend]);
   const items = useMemo(() => {
     const list = (summary.top_categories ?? []).map((c) => {
       const value = fx.rates
@@ -781,8 +786,9 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
           {items.map((it, i) => {
             const pct = total ? (it.value / total) * 100 : 0;
             const swatch = categorySwatch(i);
+            const mom = momByCat.get(it.name);
             return (
-              <li key={it.name} className="grid grid-cols-[8px_minmax(0,1fr)_auto_auto] items-center gap-x-2 text-xs">
+              <li key={it.name} className="grid grid-cols-[8px_minmax(0,1fr)_auto_auto_auto] items-center gap-x-2 text-xs">
                 <span className={cn("h-2 w-2 shrink-0 rounded-full", swatch.dot)} />
                 <span className="truncate text-content capitalize">
                   {localizeCategory(it.name, i18n.language)}
@@ -790,6 +796,13 @@ function CategoriesDonut({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
                 <span className="num font-semibold tabular-nums">
                   {fx.rates ? formatCurrency(it.value, fx.target) : `${it.raw.toFixed(0)} ${it.currency}`}
                 </span>
+                {mom != null && Number.isFinite(mom) ? (
+                  <span className={cn("num text-[10px] tabular-nums", mom > 0 ? "text-loss" : "text-gain")}>
+                    {mom > 0 ? "+" : ""}{Math.round(mom)}%
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-content-muted">—</span>
+                )}
                 <span
                   className={cn(
                     "min-w-[2.5rem] rounded-full px-1.5 py-0.5 text-right text-[10px] font-medium tabular-nums",

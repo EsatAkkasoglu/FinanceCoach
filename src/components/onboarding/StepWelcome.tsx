@@ -137,7 +137,6 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
                 type="button"
                 onClick={() => onChange({ avatar: a.id })}
                 aria-label={a.label}
-                aria-pressed={isSelected}
                 className={cn(
                   "relative flex flex-col items-center gap-1.5 rounded-xl border py-3 transition-all duration-150",
                   isSelected

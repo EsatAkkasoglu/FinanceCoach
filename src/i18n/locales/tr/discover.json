@@ -14,6 +14,18 @@
   "updatedAt": "Güncellendi: {{time}}",
   "portfolioSpotlight": "Portföyünüzde Bugün",
   "noPortfolioOverlap": "Portföyünüzdeki varlıklar bugün kazanan/kaybeden listesinde değil.",
+  "marketPulse": "Piyasa nabzı",
+  "mostActive": "En aktif",
+  "watchlist": "İzleme listen",
+  "watchlistHint": "puan + RSI",
+  "watchlistEmpty": "Canlı analiz için varlık ekle.",
+  "scoreLabel": "Puan",
+  "recommendation": {
+    "buy": "al",
+    "hold": "tut",
+    "sell": "sat"
+  },
+  "scoring": "Puanlanıyor…",
   "latestNews": "Son Haberler",
   "rumorMill": "Söylenti değirmeni",
   "noRumors": "Şu an taze M&A veya işlem yapılabilir söylenti yok.",

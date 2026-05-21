@@ -1,25 +1,23 @@
 /**
- * Discover — personalized market overview with infographics.
- * Sections: personalized header, global crypto bar, movers chart,
- * trending crypto, portfolio spotlight, latest news, rumor mill.
+ * Discover — terminal-grade market view.
+ * Sections: market-pulse strip, watchlist grid (8-dim score + RSI, lazy-loaded),
+ * diverging movers, most active, trending crypto, sentiment-weighted news, rumors.
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Flame, AlertTriangle, Loader2, ExternalLink,
   TrendingUp, TrendingDown, Newspaper, Zap,
-  Globe, Shield, Target,
+  Globe, Shield, Target, Activity,
 } from "lucide-react";
 import {
-  BarChart, Bar, Cell, XAxis, Tooltip, ResponsiveContainer,
-} from "recharts";
-import {
   getTrends, getRumors, listPortfolio, getProfile, searchNews,
+  analyzeEightDim, getTechnicals,
   type TrendsResult, type RumorItem, type UserProfile, type NewsArticle,
-  type Holding,
+  type Holding, type EightDimResult, type TechnicalsResult,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { chartTooltip, GAIN, LOSS } from "@/lib/chartColors";
+import { DivergingBar, RsiGauge, ProgressTrack } from "@/components/ui/dataviz";
 import { TickerDrawer } from "./TickerDrawer";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -85,7 +83,7 @@ export function Discover() {
     : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
@@ -101,21 +99,18 @@ export function Discover() {
           {/* Personalized banner */}
           {profile && <PersonalizedBanner profile={profile} />}
 
-          {/* Global crypto macro bar */}
-          {trends?.crypto_global && (
-            <GlobalCryptoBar global={trends.crypto_global} asOf={asOf} />
-          )}
+          {/* Market-pulse strip */}
+          <MarketPulse trends={trends} asOf={asOf} />
 
-          <MarketSnapshot
-            trends={trends}
-            holdings={holdings}
-            rumors={rumors}
-            news={news}
-          />
-
-          {/* Movers + trending crypto */}
+          {/* Watchlist (8-dim + RSI) + movers */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            <Watchlist holdings={holdings} onPick={setActive} />
             <MoversCard trends={trends} onPick={setActive} />
+          </div>
+
+          {/* Most active + trending crypto */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <MostActiveCard trends={trends} onPick={setActive} />
             <TrendingCryptoCard trends={trends} onPick={setActive} />
           </div>
 
@@ -124,11 +119,9 @@ export function Discover() {
             <PortfolioSpotlight holdings={holdings} trends={trends} onPick={setActive} />
           )}
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            {/* News feed */}
+          {/* News + rumors */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {news.length > 0 && <NewsSection articles={news} />}
-
-            {/* Rumor mill */}
             <RumorsCard rumors={rumors} onPick={setActive} />
           </div>
         </>
@@ -160,166 +153,235 @@ function PersonalizedBanner({ profile }: { profile: UserProfile }) {
   );
 }
 
-// ── GlobalCryptoBar ───────────────────────────────────────────────────────────
+// ── MarketPulse strip ─────────────────────────────────────────────────────────
 
-function GlobalCryptoBar({
-  global,
-  asOf,
-}: {
-  global: NonNullable<TrendsResult["crypto_global"]>;
-  asOf: string | null;
-}) {
+function MarketPulse({ trends, asOf }: { trends: TrendsResult | null; asOf: string | null }) {
   const { t } = useTranslation("discover");
-  const change = global.market_cap_change_pct_24h;
+  const g = trends?.crypto_global;
+  const change = g?.market_cap_change_pct_24h;
   const isUp = (change ?? 0) >= 0;
+  const gainers = trends?.top_gainers ?? [];
+  const losers = trends?.top_losers ?? [];
+  const breadth = gainers.length + losers.length > 0
+    ? Math.round((gainers.length / (gainers.length + losers.length)) * 100)
+    : null;
 
   const stats = [
-    { label: t("globalMarketCap"), value: fmtB(global.market_cap_usd), icon: Globe, color: undefined as string | undefined },
-    {
-      label: t("btcDominance"),
-      value: global.btc_dominance != null ? `${global.btc_dominance.toFixed(1)}%` : "—",
-      icon: Flame,
-      color: undefined as string | undefined,
-    },
-    {
-      label: t("marketChange24h"),
-      value: change != null ? `${isUp ? "+" : ""}${change.toFixed(2)}%` : "—",
-      icon: isUp ? TrendingUp : TrendingDown,
-      color: isUp ? "text-gain" : "text-loss",
-    },
+    { label: t("globalMarketCap"), value: fmtB(g?.market_cap_usd), icon: Globe, color: undefined as string | undefined },
+    { label: t("btcDominance"), value: g?.btc_dominance != null ? `${g.btc_dominance.toFixed(1)}%` : "—", icon: Flame, color: undefined },
+    { label: t("marketChange24h"), value: change != null ? `${isUp ? "+" : ""}${change.toFixed(2)}%` : "—", icon: isUp ? TrendingUp : TrendingDown, color: isUp ? "text-gain" : "text-loss" },
+    { label: t("topGainers"), value: String(gainers.length), icon: TrendingUp, color: "text-gain" },
+    { label: t("hotToday"), value: breadth != null ? `${breadth}%` : "—", icon: Activity, color: breadth != null && breadth >= 50 ? "text-gain" : "text-loss" },
   ];
 
   return (
     <div className="card">
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {stats.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="flex items-center gap-2 min-w-[110px]">
+          <div key={label} className="flex items-center gap-2">
             <Icon className={cn("h-4 w-4 shrink-0 text-content-muted", color)} />
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-content-muted">{label}</p>
-              <p className={cn("text-sm font-semibold num", color)}>{value}</p>
+            <div className="min-w-0">
+              <p className="truncate text-[10px] uppercase tracking-widest text-content-muted">{label}</p>
+              <p className={cn("num text-sm font-semibold", color)}>{value}</p>
             </div>
           </div>
         ))}
-        {asOf && (
-          <span className="ml-auto text-[10px] text-content-muted">
-            {t("updatedAt", { time: asOf })}
-          </span>
-        )}
       </div>
+      {asOf && (
+        <p className="mt-2 text-right text-[10px] text-content-muted">{t("updatedAt", { time: asOf })}</p>
+      )}
     </div>
   );
 }
 
-// ── MarketSnapshot ──────────────────────────────────────────────────────────
+// ── Watchlist (8-dim score + RSI, lazily fetched per row) ─────────────────────
 
-function MarketSnapshot({
-  trends,
-  holdings,
-  rumors,
-  news,
-}: {
-  trends: TrendsResult | null;
-  holdings: Holding[];
-  rumors: RumorItem[];
-  news: NewsArticle[];
-}) {
-  const { t } = useTranslation("discover");
-  const gainers = trends?.top_gainers?.length ?? 0;
-  const losers = trends?.top_losers?.length ?? 0;
-  const portfolioHits = new Set(holdings.map((h) => h.ticker.toUpperCase()));
-  const overlap = (trends?.top_gainers ?? []).filter((g) => portfolioHits.has(g.ticker.toUpperCase())).length
-    + (trends?.top_losers ?? []).filter((g) => portfolioHits.has(g.ticker.toUpperCase())).length;
-
-  const stats = [
-    { label: t("hotToday"), value: `${gainers + losers}`, hint: t("topGainers") },
-    { label: t("portfolioSpotlight"), value: `${overlap}`, hint: t("rankHint") },
-    { label: t("latestNews"), value: `${news.length}`, hint: news.length > 0 ? news[0].source : t("noTrendData") },
-    { label: t("rumorMill"), value: `${rumors.length}`, hint: t("noRumors") },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {stats.map((item) => (
-        <div key={item.label} className="card border border-line/80 bg-surface-raised/60 p-4">
-          <p className="text-[10px] uppercase tracking-widest text-content-muted">{item.label}</p>
-          <div className="mt-2 text-2xl font-semibold tabular-nums">{item.value}</div>
-          <p className="mt-1 text-[11px] text-content-muted">{item.hint}</p>
-        </div>
-      ))}
-    </div>
-  );
+interface RowAnalysis {
+  loading: boolean;
+  score: number | null;            // 0-100
+  recommendation: string | null;   // buy / hold / sell-ish
+  rsi: number | null;
 }
 
-// ── MoversCard ────────────────────────────────────────────────────────────────
-
-function MoversCard({
-  trends,
-  onPick,
-}: {
-  trends: TrendsResult | null;
-  onPick: (t: string) => void;
-}) {
+function Watchlist({ holdings, onPick }: { holdings: Holding[]; onPick: (t: string) => void }) {
   const { t } = useTranslation("discover");
-  const gainers = (trends?.top_gainers ?? []).slice(0, 5);
-  const losers = (trends?.top_losers ?? []).slice(0, 5);
+  // De-dupe equities/ETFs (8-dim is meaningless for cash); cap to keep it snappy.
+  const tickers = Array.from(
+    new Set(
+      holdings
+        .filter((h) => h.asset_class === "stock" || h.asset_class === "etf")
+        .map((h) => h.ticker.toUpperCase()),
+    ),
+  ).slice(0, 6);
 
-  const chartData = [
-    ...gainers.map((g) => ({ ticker: g.ticker, pct: g.change_pct ?? 0, type: "gain" as const })),
-    ...losers.map((g) => ({ ticker: g.ticker, pct: g.change_pct ?? 0, type: "loss" as const })),
-  ].sort((a, b) => b.pct - a.pct);
+  const [byTicker, setByTicker] = useState<Record<string, RowAnalysis>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    if (tickers.length === 0) return;
+    setByTicker(Object.fromEntries(tickers.map((tk) => [tk, { loading: true, score: null, recommendation: null, rsi: null }])));
+    tickers.forEach(async (tk) => {
+      const [dim, tech] = await Promise.all([
+        analyzeEightDim(tk, true).catch(() => null) as Promise<EightDimResult | null>,
+        getTechnicals(tk).catch(() => null) as Promise<TechnicalsResult | null>,
+      ]);
+      if (cancelled) return;
+      setByTicker((prev) => ({
+        ...prev,
+        [tk]: {
+          loading: false,
+          score: dim?.final_score ?? null,
+          recommendation: dim?.recommendation ?? null,
+          rsi: tech?.rsi?.value ?? null,
+        },
+      }));
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickers.join(",")]);
 
   return (
     <section className="card lg:col-span-7">
       <header className="mb-3 flex items-center gap-2">
+        <Activity className="h-4 w-4 text-accent" />
+        <h2 className="text-sm font-semibold">{t("watchlist")}</h2>
+        <span className="ml-auto text-[10px] text-content-muted">{t("watchlistHint")}</span>
+      </header>
+
+      {tickers.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-content-muted">
+          {t("watchlistEmpty")}
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {tickers.map((tk) => {
+            const a = byTicker[tk];
+            return (
+              <li key={tk}>
+                <button
+                  onClick={() => onPick(tk)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-line bg-surface-raised px-3 py-2 text-left transition-colors hover:border-accent hover:bg-accent/5"
+                >
+                  <span className="num w-14 shrink-0 text-xs font-semibold">{tk}</span>
+                  {!a || a.loading ? (
+                    <span className="flex flex-1 items-center gap-2 text-[11px] text-content-muted">
+                      <Loader2 className="h-3 w-3 animate-spin" /> {t("scoring")}
+                    </span>
+                  ) : (
+                    <>
+                      <RecommendationBadge rec={a.recommendation} />
+                      <div className="flex flex-1 items-center gap-2">
+                        <ProgressTrack
+                          pct={a.score ?? 0}
+                          color={(a.score ?? 0) >= 60 ? "#22C55E" : (a.score ?? 0) >= 40 ? "#F59E0B" : "#EF4444"}
+                        />
+                        <span className="num w-8 shrink-0 text-right text-[11px] text-content-muted">
+                          {a.score != null ? Math.round(a.score) : "—"}
+                        </span>
+                      </div>
+                      <RsiGauge value={a.rsi} className="w-[72px] shrink-0 justify-end" />
+                    </>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function RecommendationBadge({ rec }: { rec: string | null }) {
+  const { t } = useTranslation("discover");
+  if (!rec) return <span className="w-12 shrink-0" />;
+  const r = rec.toLowerCase();
+  const kind = r.includes("buy") ? "buy" : r.includes("sell") ? "sell" : "hold";
+  const cls =
+    kind === "buy" ? "bg-gain/15 text-gain"
+    : kind === "sell" ? "bg-loss/15 text-loss"
+    : "bg-surface text-content-muted";
+  return (
+    <span className={cn("w-12 shrink-0 rounded-full px-2 py-0.5 text-center text-[10px] font-medium uppercase", cls)}>
+      {t(`recommendation.${kind}`)}
+    </span>
+  );
+}
+
+// ── MoversCard (diverging bars) ───────────────────────────────────────────────
+
+function MoversCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (t: string) => void }) {
+  const { t } = useTranslation("discover");
+  const gainers = (trends?.top_gainers ?? []).slice(0, 4);
+  const losers = (trends?.top_losers ?? []).slice(0, 4);
+  const rows = [
+    ...gainers.map((g) => ({ ticker: g.ticker, pct: g.change_pct ?? 0 })),
+    ...losers.map((g) => ({ ticker: g.ticker, pct: g.change_pct ?? 0 })),
+  ].sort((a, b) => b.pct - a.pct);
+  const max = Math.max(...rows.map((r) => Math.abs(r.pct)), 1);
+
+  return (
+    <section className="card lg:col-span-5">
+      <header className="mb-3 flex items-center gap-2">
         <Flame className="h-4 w-4 text-warning" />
         <h2 className="text-sm font-semibold">{t("hotToday")}</h2>
       </header>
-
-      {chartData.length > 0 ? (
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart
-            data={chartData}
-            layout="vertical"
-            margin={{ top: 0, right: 8, left: 4, bottom: 0 }}
-            onClick={(s) => {
-              const ticker = s?.activePayload?.[0]?.payload?.ticker;
-              if (ticker) onPick(ticker);
-            }}
-            style={{ cursor: "pointer" }}
-          >
-            <XAxis type="number" tickFormatter={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}%`} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-            <Tooltip
-              formatter={(v: number) => [`${v > 0 ? "+" : ""}${v.toFixed(2)}%`, ""]}
-              {...chartTooltip}
-            />
-            <Bar dataKey="pct" radius={[0, 4, 4, 0]} maxBarSize={18}>
-              {chartData.map((entry, i) => (
-                <Cell
-                  key={i}
-                  fill={entry.type === "gain" ? GAIN : LOSS}
-                  fillOpacity={0.85}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      ) : (
+      {rows.length === 0 ? (
         <p className="text-xs text-content-muted">{t("noTrendData")}</p>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((r) => (
+            <li key={r.ticker}>
+              <button
+                onClick={() => onPick(r.ticker)}
+                aria-label={`${r.ticker} ${r.pct >= 0 ? "+" : ""}${r.pct.toFixed(1)} percent`}
+                className="w-full text-left transition hover:opacity-80"
+              >
+                <DivergingBar pct={r.pct} max={max} label={r.ticker} />
+                <span className="sr-only">
+                  {r.ticker} {r.pct >= 0 ? "+" : ""}{r.pct.toFixed(1)} percent
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
+    </section>
+  );
+}
 
-      {/* XAxis label */}
-      {chartData.length > 0 && (
-        <div className="mt-1 flex justify-between text-[10px] text-content-muted">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-gain/70" />
-            {t("topGainers")}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-loss/70" />
-            {t("topLosers")}
-          </span>
-        </div>
+// ── MostActiveCard ────────────────────────────────────────────────────────────
+
+function MostActiveCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (t: string) => void }) {
+  const { t } = useTranslation("discover");
+  const active = (trends?.most_active ?? []).slice(0, 8);
+  return (
+    <section className="card">
+      <header className="mb-3 flex items-center gap-2">
+        <Activity className="h-4 w-4 text-accent" />
+        <h2 className="text-sm font-semibold">{t("mostActive")}</h2>
+      </header>
+      {active.length === 0 ? (
+        <p className="text-xs text-content-muted">{t("noTrendData")}</p>
+      ) : (
+        <ul className="grid grid-cols-2 gap-2">
+          {active.map((a) => {
+            const up = (a.change_pct ?? 0) >= 0;
+            return (
+              <li key={a.ticker}>
+                <button
+                  onClick={() => onPick(a.ticker)}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-line bg-surface-raised px-3 py-2 text-left transition-colors hover:border-accent hover:bg-accent/5"
+                >
+                  <span className="num text-xs font-semibold">{a.ticker}</span>
+                  <span className={cn("num text-[11px]", up ? "text-gain" : "text-loss")}>
+                    {up ? "+" : ""}{(a.change_pct ?? 0).toFixed(1)}%
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );
@@ -327,18 +389,12 @@ function MoversCard({
 
 // ── TrendingCryptoCard ────────────────────────────────────────────────────────
 
-function TrendingCryptoCard({
-  trends,
-  onPick,
-}: {
-  trends: TrendsResult | null;
-  onPick: (t: string) => void;
-}) {
+function TrendingCryptoCard({ trends, onPick }: { trends: TrendsResult | null; onPick: (t: string) => void }) {
   const { t } = useTranslation("discover");
   const crypto = trends?.crypto_trending?.slice(0, 8) ?? [];
 
   return (
-    <section className="card lg:col-span-5">
+    <section className="card">
       <header className="mb-3 flex items-center gap-2">
         <Flame className="h-4 w-4 text-accent" />
         <h2 className="text-sm font-semibold">{t("trendingCrypto")}</h2>
@@ -355,7 +411,6 @@ function TrendingCryptoCard({
                 onClick={() => onPick(`${c.symbol.toUpperCase()}-USD`)}
                 className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface-raised px-3 py-2 text-left transition-colors hover:border-accent hover:bg-accent/5"
               >
-                {/* Rank badge */}
                 <span className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold",
                   i === 0 ? "bg-yellow-500/20 text-yellow-300"
@@ -381,9 +436,7 @@ function TrendingCryptoCard({
 // ── PortfolioSpotlight ────────────────────────────────────────────────────────
 
 function PortfolioSpotlight({
-  holdings,
-  trends,
-  onPick,
+  holdings, trends, onPick,
 }: {
   holdings: Holding[];
   trends: TrendsResult | null;
@@ -431,12 +484,12 @@ function PortfolioSpotlight({
   );
 }
 
-// ── NewsSection ───────────────────────────────────────────────────────────────
+// ── NewsSection (sentiment-weighted) ──────────────────────────────────────────
 
 function NewsSection({ articles }: { articles: NewsArticle[] }) {
   const { t } = useTranslation("discover");
   return (
-    <section className="card lg:col-span-7">
+    <section className="card">
       <header className="mb-3 flex items-center gap-2">
         <Newspaper className="h-4 w-4 text-content-muted" />
         <h2 className="text-sm font-semibold">{t("latestNews")}</h2>
@@ -474,7 +527,7 @@ function NewsSection({ articles }: { articles: NewsArticle[] }) {
 function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: string) => void }) {
   const { t } = useTranslation("discover");
   return (
-    <section className="card lg:col-span-5">
+    <section className="card">
       <header className="mb-3 flex items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-warning" />
         <h2 className="text-sm font-semibold">{t("rumorMill")}</h2>
@@ -487,8 +540,9 @@ function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: strin
             const isUp = r.sentiment_label === "Bullish" || r.sentiment_label === "Somewhat-Bullish";
             const isDown = r.sentiment_label === "Bearish" || r.sentiment_label === "Somewhat-Bearish";
             const SentIcon = isUp ? TrendingUp : isDown ? TrendingDown : null;
+            const edge = isUp ? "border-l-gain" : isDown ? "border-l-loss" : "border-l-line";
             return (
-              <li key={i} className="py-2 text-xs">
+              <li key={i} className={cn("border-l-2 py-2 pl-2 text-xs", edge)}>
                 <div className="flex items-start gap-2">
                   <span className={cn(
                     "rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider",

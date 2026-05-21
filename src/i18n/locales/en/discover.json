@@ -14,6 +14,18 @@
   "updatedAt": "Updated: {{time}}",
   "portfolioSpotlight": "Your Portfolio Today",
   "noPortfolioOverlap": "None of your holdings appear in today's movers list.",
+  "marketPulse": "Market pulse",
+  "mostActive": "Most active",
+  "watchlist": "Your watchlist",
+  "watchlistHint": "score + RSI",
+  "watchlistEmpty": "Add holdings to see live analysis here.",
+  "scoreLabel": "Score",
+  "recommendation": {
+    "buy": "buy",
+    "hold": "hold",
+    "sell": "sell"
+  },
+  "scoring": "Scoring…",
   "latestNews": "Latest News",
   "rumorMill": "Rumor mill",
   "noRumors": "No fresh M&A or actionable rumors right now.",
