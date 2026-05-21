@@ -148,7 +148,9 @@ export default function App() {
     return onIdTokenChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const u = await fetchMe();
-        setUser(u);
+        if (u) setUser(u);
+        // if fetchMe fails (backend unreachable), keep the existing user state
+        // rather than logging out — the user is still authenticated with Firebase
       } else if (localStorage.getItem(DEMO_TOKEN_KEY)) {
         // Demo login: no Firebase user but we have a backend JWT
         const u = await fetchMe();
