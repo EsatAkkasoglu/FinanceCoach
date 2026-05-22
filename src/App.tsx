@@ -257,9 +257,15 @@ export default function App() {
     );
   }
   if (!user) {
+    const appPathForAuth = stripLanguagePrefix(location.pathname);
+    const isRegisterPath = appPathForAuth === "/register";
+    const isAuthPath = appPathForAuth === "/login" || appPathForAuth === "/register";
+    if (!isAuthPath) {
+      return <Navigate to={`/${activeLanguage}/login`} replace />;
+    }
     return (
       <>
-        <AuthPage />
+        <AuthPage initialMode={isRegisterPath ? "register" : "login"} />
         {languageSwitcher}
       </>
     );

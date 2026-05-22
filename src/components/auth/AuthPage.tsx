@@ -1,15 +1,23 @@
 import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
+import { useNavigate, useLocation } from "react-router-dom";
 import { login, register, loginWithGoogle, loginDemo } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
+import { getLanguageFromPath, buildLocalizedPath } from "@/lib/routing";
 
 type Mode = "login" | "register";
 
-export function AuthPage() {
+interface AuthPageProps {
+  initialMode?: Mode;
+}
+
+export function AuthPage({ initialMode = "login" }: AuthPageProps) {
   const { t } = useTranslation("auth");
-  const [mode, setMode] = useState<Mode>("login");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -141,7 +149,12 @@ export function AuthPage() {
 
         <button
           type="button"
-          onClick={() => setMode(isRegister ? "login" : "register")}
+          onClick={() => {
+            const next: Mode = isRegister ? "login" : "register";
+            setMode(next);
+            const lang = getLanguageFromPath(location.pathname) ?? "en";
+            navigate(buildLocalizedPath(lang, `/${next}`), { replace: true });
+          }}
           className="mt-4 w-full text-center text-xs text-content-muted hover:text-content"
         >
           {isRegister ? t("alreadyHaveAccount") : t("needAccount")}
