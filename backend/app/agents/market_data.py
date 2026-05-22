@@ -161,13 +161,13 @@ RISK_GUIDANCE = {
     "conservative": """
 RISK PROFILE: Conservative (0-50 score)
 RECOMMENDED ASSET CLASSES (prioritize in this order):
-- Blue-chip US stocks: AAPL, MSFT, JNJ, PG (low volatility, strong dividends)
-- Dividend-focused ETFs: VOY, VYM, SCHD (high dividend yield, stability)
-- Bond ETFs: BND, AGG, IEF (investment-grade bonds)
-- Defensive sectors: Utilities (XLU), Healthcare (XLV), Consumer Staples (XLP)
-- Turkish bond funds: stable government and corporate bonds
+- Large-cap equities with lower volatility and established cash flows
+- Dividend-focused equity funds and ETFs with stable distributions
+- High-quality bond funds and Treasury exposure
+- Defensive sectors such as utilities, healthcare, and consumer staples
+- Turkish bond funds with stable government and corporate exposure
 
-ANALYSIS PRIORITIES (for each stock):
+ANALYSIS PRIORITIES (for each asset class or instrument):
 - Dividend yield (emphasize consistent payers)
 - P/E ratio (lower = more stable)
 - Debt/equity ratio (lower is better)
@@ -177,13 +177,13 @@ AVOID: crypto, small-cap growth, emerging markets, speculative options""",
     "balanced": """
 RISK PROFILE: Balanced (51-90 score)
 RECOMMENDED ASSET CLASSES (balanced mix):
-- Growth + Value stocks: Mix of AAPL, NVDA, MSFT with TSM, GIS
-- Diversified ETFs: VOO, VTI (broad market), QQQ (tech-heavy but quality)
-- Bond ETFs: BND, VBTLX (40-60% stock allocation)
-- Sector rotation: Include 2-3 sector ETFs for diversification
-- Turkish equity + bond funds: Mixed balanced portfolios
+- A blend of growth and value equities across sectors
+- Broad-market diversified funds and ETFs
+- Bond funds for ballast alongside equity exposure
+- Sector diversification to reduce concentration risk
+- Turkish equity and bond funds in a mixed allocation
 
-ANALYSIS PRIORITIES (for each stock):
+ANALYSIS PRIORITIES (for each asset class or instrument):
 - Growth rate vs. P/E ratio (balance both)
 - Dividend yield + capital appreciation potential
 - Sector exposure (ensure diversity)
@@ -193,13 +193,13 @@ SUGGESTIONS: Rebalance when single asset class drifts >20% from target""",
     "aggressive": """
 RISK PROFILE: Aggressive (91-125 score)
 RECOMMENDED ASSET CLASSES (growth-focused):
-- Growth stocks: NVDA, AAPL (tech), TSLA, AMZN (disruptive)
-- Small-cap / micro-cap growth: QQQ, XLV sector rotation, emerging leaders
-- Crypto & alternative assets: BTC-USD, ETH-USD for diversification
-- High-growth sector ETFs: XLK (tech), FTEC (fintech), URTH (emerging markets)
-- Turkish small-cap / growth funds: Higher yield potential
+- Growth-oriented equities and disruptive businesses
+- Smaller-cap or high-beta exposures for tactical growth
+- Crypto and other alternative assets for diversification
+- High-growth sector funds and thematic exposures
+- Turkish small-cap and growth-oriented funds
 
-ANALYSIS PRIORITIES (for each stock):
+ANALYSIS PRIORITIES (for each asset class or instrument):
 - Revenue growth rate (prioritize rapid growth)
 - Profit margin trajectory (expansion is key)
 - Volatility & momentum (OK with higher 52-week swing)
