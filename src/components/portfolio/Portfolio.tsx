@@ -220,16 +220,17 @@ function HoldingsTable({
   return (
     <div className="card overflow-hidden p-0">
       <table className="num min-w-full text-sm">
+        <caption className="sr-only">{t("table.caption", { defaultValue: "Holdings overview" })}</caption>
         <thead className="text-xs text-content-muted">
           <tr className="border-b border-line">
-            <th className="px-4 py-3 text-left font-normal">{t("table.ticker")}</th>
-            <th className="px-3 py-3 text-left font-normal">{t("table.type")}</th>
-            <th className="px-3 py-3 text-right font-normal">{t("table.qty")}</th>
-            <th className="px-3 py-3 text-right font-normal">{t("table.cost")}</th>
-            <th className="px-3 py-3 text-right font-normal">{t("table.price")}</th>
-            <th className="px-3 py-3 text-right font-normal">{t("table.value")}</th>
-            <th className="px-3 py-3 text-right font-normal">{t("table.pnl")}</th>
-            <th className="px-2 py-3 w-20"></th>
+            <th scope="col" className="px-4 py-3 text-left font-normal">{t("table.ticker")}</th>
+            <th scope="col" className="px-3 py-3 text-left font-normal">{t("table.type")}</th>
+            <th scope="col" className="px-3 py-3 text-right font-normal">{t("table.qty")}</th>
+            <th scope="col" className="px-3 py-3 text-right font-normal">{t("table.cost")}</th>
+            <th scope="col" className="px-3 py-3 text-right font-normal">{t("table.price")}</th>
+            <th scope="col" className="px-3 py-3 text-right font-normal">{t("table.value")}</th>
+            <th scope="col" className="px-3 py-3 text-right font-normal">{t("table.pnl")}</th>
+            <th scope="col" className="px-2 py-3 w-20"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
@@ -267,28 +268,31 @@ function HoldingsTable({
                 <div className="flex items-center justify-end gap-0.5">
                   {(h.asset_class === "stock" || h.asset_class === "etf") && (
                     <button
+                      type="button"
                       onClick={() => onAnalyze(h.ticker)}
                       className="rounded p-1.5 text-content-muted hover:bg-surface hover:text-accent"
                       title={`8-dim analysis for ${h.ticker}`}
                       aria-label={`Analyze ${h.ticker}`}
                     >
-                      <Activity className="h-3.5 w-3.5" />
+                      <Activity aria-hidden="true" className="h-3.5 w-3.5" />
                     </button>
                   )}
-                  <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+                  <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                     <button
+                      type="button"
                       onClick={() => onEdit(h)}
                       className="rounded p-1.5 text-content-muted hover:bg-surface hover:text-accent"
                       aria-label={`Edit ${h.ticker}`}
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
                     </button>
                     <button
+                      type="button"
                       onClick={() => onDelete(h)}
                       className="rounded p-1.5 text-content-muted hover:bg-surface hover:text-loss"
                       aria-label={`Delete ${h.ticker}`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>

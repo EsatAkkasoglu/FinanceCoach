@@ -100,11 +100,12 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
         <span className="text-xs uppercase tracking-wide text-content-muted">
           {t("welcome.currency")}
         </span>
-        <div className="mt-2 flex gap-2">
+        <div role="group" aria-label={t("welcome.currency")} className="mt-2 flex gap-2">
           {CURRENCIES.map((c) => (
             <button
               key={c.id}
               type="button"
+              aria-pressed={currency === c.id}
               onClick={() => onChange({ currency: c.id })}
               className={cn(
                 "flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2.5 text-sm font-medium transition",
@@ -113,7 +114,7 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
                   : "border-line text-content-muted hover:border-accent/50 hover:bg-surface-raised"
               )}
             >
-              <span className="text-base leading-none">{c.symbol}</span>
+              <span aria-hidden="true" className="text-base leading-none">{c.symbol}</span>
               {c.label}
             </button>
           ))}
@@ -128,13 +129,14 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
         <span className="text-xs uppercase tracking-wide text-content-muted">
           {t("welcome.pickAnimal")}
         </span>
-        <div className="mt-3 grid grid-cols-4 gap-2">
+        <div role="group" aria-label={t("welcome.pickAnimal")} className="mt-3 grid grid-cols-4 gap-2">
           {AVATARS.map((a) => {
             const isSelected = avatar === a.id;
             return (
               <button
                 key={a.id}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => onChange({ avatar: a.id })}
                 aria-label={a.label}
                 className={cn(
@@ -144,8 +146,8 @@ export function StepWelcome({ name, avatar, currency, onChange }: Props) {
                     : "border-line hover:border-accent/50 hover:bg-surface-raised"
                 )}
               >
-                <span className="text-3xl leading-none">{a.emoji}</span>
-                <span className="text-[10px] text-content-muted">{a.label}</span>
+                <span aria-hidden="true" className="text-3xl leading-none">{a.emoji}</span>
+                <span aria-hidden="true" className="text-[10px] text-content-muted">{a.label}</span>
                 {isSelected && (
                   <motion.span
                     layoutId="avatar-ring"

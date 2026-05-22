@@ -146,31 +146,43 @@ export function OnboardingWizard() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-6">
       <div className="w-full max-w-xl">
-        {/* Progress dots */}
-        <div className="mb-8 flex items-center justify-center gap-2">
-          {STEP_KEYS.map((key, i) => (
-            <div key={key} className="flex items-center gap-2">
-              <div
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium transition",
-                  i < step && "border-accent bg-accent text-accent-fg",
-                  i === step && "border-accent text-accent shadow-glow",
-                  i > step && "border-line text-content-muted"
-                )}
-              >
-                {i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}
-              </div>
-              {i < STEP_KEYS.length - 1 && (
-                <div
-                  className={cn(
-                    "h-px w-6 transition",
-                    i < step ? "bg-accent" : "bg-default"
+        {/* Progress stepper */}
+        <nav aria-label={t("progressLabel", { defaultValue: "Setup progress" })}>
+          <ol role="list" className="mb-8 flex items-center justify-center gap-2">
+            {STEP_KEYS.map((key, i) => {
+              const stepAriaLabel = i < step
+                ? `Step ${i + 1} of ${STEP_KEYS.length}: ${key}, completed`
+                : i === step
+                  ? `Step ${i + 1} of ${STEP_KEYS.length}: ${key}, current`
+                  : `Step ${i + 1} of ${STEP_KEYS.length}: ${key}`;
+              return (
+                <li key={key} className="flex items-center gap-2">
+                  <div
+                    aria-current={i === step ? "step" : undefined}
+                    aria-label={stepAriaLabel}
+                    className={cn(
+                      "flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium transition",
+                      i < step && "border-accent bg-accent text-accent-fg",
+                      i === step && "border-accent text-accent shadow-glow",
+                      i > step && "border-line text-content-muted"
+                    )}
+                  >
+                    {i < step ? <Check aria-hidden="true" className="h-3.5 w-3.5" /> : i + 1}
+                  </div>
+                  {i < STEP_KEYS.length - 1 && (
+                    <div
+                      aria-hidden="true"
+                      className={cn(
+                        "h-px w-6 transition",
+                        i < step ? "bg-accent" : "bg-default"
+                      )}
+                    />
                   )}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
 
         {/* Step body */}
         <div className="card min-h-[420px]">

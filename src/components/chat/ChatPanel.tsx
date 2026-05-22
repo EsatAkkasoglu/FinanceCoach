@@ -663,13 +663,21 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           </div>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto pr-2">
+        <div
+          role="log"
+          aria-live="polite"
+          aria-atomic="false"
+          aria-relevant="additions"
+          aria-label="Conversation messages"
+          className="flex-1 space-y-4 overflow-y-auto pr-2"
+        >
           {messages.length === 0 && (
             <div className="card-muted">
               <p className="mb-3 text-sm text-content-muted">{t("tryOneOfThese")}</p>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((s, i) => (
                   <button
+                    type="button"
                     key={i}
                     onClick={() => send(s)}
                     className="rounded-full border border-line px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
