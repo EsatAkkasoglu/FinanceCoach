@@ -274,7 +274,7 @@ function ParsedDocCard({
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="card-muted">
-      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-content-muted">
+      <p className="text-overline uppercase text-content-muted">
         {label}
       </p>
       <p className="mt-1 font-mono text-lg font-semibold tabular-nums">

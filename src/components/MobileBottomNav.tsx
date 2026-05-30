@@ -13,9 +13,9 @@ import { useConversationStore } from "@/store";
 const TABS = [
   { path: "/dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard" as const },
   { path: "/portfolio", icon: Briefcase,       labelKey: "nav.portfolio" as const },
+  { path: "/chat",      icon: MessageSquare,   labelKey: null            },
   { path: "/discover",  icon: Compass,         labelKey: "nav.discover"  as const },
   { path: "/goals",     icon: Target,          labelKey: "nav.goals"     as const },
-  { path: "/chat",      icon: MessageSquare,   labelKey: null            },
 ] satisfies { path: string; icon: React.ElementType; labelKey: string | null }[];
 
 interface Props {
@@ -31,7 +31,7 @@ export function MobileBottomNav({ onChatPress }: Props) {
     "/portfolio":  t("nav.portfolio"),
     "/discover":   t("nav.discover"),
     "/goals":      t("nav.goals"),
-    "/chat":       "Coach",
+    "/chat":       t("nav.coach"),
   };
   const location = useLocation();
   const navigate = useNavigate();

@@ -2,7 +2,7 @@
  * Budget — single page. Top: 4 summary KPIs. Action strip with import / receipt / manual.
  * Below: accounts panel + subscriptions panel side-by-side, then transactions table.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Upload, Plus, Wallet, TrendingUp, TrendingDown, RefreshCcw,
@@ -21,6 +21,7 @@ import {
   type Account, type Transaction, type Subscription, type BudgetSummary,
   type SubDirection, type SubscriptionInput, type BudgetTrend,
 } from "@/lib/api";
+import { useBudgetStore } from "@/store";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { useFxRates, type UseFxRates } from "@/lib/fx";
@@ -83,15 +84,18 @@ const SUBSCRIPTION_ICON: Record<string, LucideIcon> = {
   bank: Landmark,
 };
 
+const STALE_MS = 3 * 60 * 1000;
+
 export function Budget() {
   const { t } = useTranslation("budget");
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [txs, setTxs] = useState<Transaction[]>([]);
-  const [subs, setSubs] = useState<Subscription[]>([]);
-  const [summary, setSummary] = useState<BudgetSummary | null>(null);
-  const [trend, setTrend] = useState<BudgetTrend | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { cache, loading, setCache, setLoading } = useBudgetStore();
   const [error, setError] = useState<string | null>(null);
+
+  const accounts = cache?.accounts ?? [];
+  const txs = cache?.txs ?? [];
+  const subs = cache?.subs ?? [];
+  const summary = cache?.summary ?? null;
+  const trend = cache?.trend ?? null;
 
   // Modals
   const [importOpen, setImportOpen] = useState(false);
@@ -130,8 +134,10 @@ export function Budget() {
     });
   }
 
-  async function refresh(silent = false) {
-    if (!silent) setLoading(true);
+  const refresh = useCallback(async (forceRefresh = false) => {
+    if (!forceRefresh && cache && Date.now() - cache.fetchedAt < STALE_MS) return;
+    if (!forceRefresh && loading) return;
+    setLoading(true);
     setError(null);
     try {
       const [a, t, s, sum, tr] = await Promise.all([
@@ -141,18 +147,14 @@ export function Budget() {
         getBudgetSummary(),
         getBudgetTrend(6).catch(() => null),
       ]);
-      setAccounts(a);
-      setTxs(t);
-      setSubs(s);
-      setSummary(sum);
-      setTrend(tr);
+      setCache({ accounts: a, txs: t, subs: s, summary: sum, trend: tr, fetchedAt: Date.now() });
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setLoading(false);
     }
-  }
-  useEffect(() => { void refresh(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { void refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredTxs = useMemo(() => {
     return txs.filter((t) => {
@@ -164,22 +166,23 @@ export function Budget() {
 
   async function handleDeleteAccount(a: Account) {
     if (!window.confirm(`Archive ${a.name}? Past transactions remain visible.`)) return;
-    try { await deleteAccount(a.id); toast.success("Account archived"); refresh(true); }
+    try { await deleteAccount(a.id); toast.success("Account archived"); void refresh(true); }
     catch (err) { toast.error((err as Error).message); }
   }
   async function handleDeleteTx(t: Transaction) {
     if (!window.confirm("Remove this transaction?")) return;
-    setTxs((prev) => prev.filter((x) => x.id !== t.id)); // optimistic
-    try { await deleteTransaction(t.id); refresh(true); }
-    catch (err) { toast.error((err as Error).message); refresh(true); }
+    // Optimistic update in cache
+    if (cache) setCache({ ...cache, txs: cache.txs.filter((x) => x.id !== t.id) });
+    try { await deleteTransaction(t.id); void refresh(true); }
+    catch (err) { toast.error((err as Error).message); void refresh(true); }
   }
   async function handleDeleteSub(s: Subscription) {
     if (!window.confirm(`Cancel ${s.name}? It will move to "Cancelled".`)) return;
-    try { await updateSubscription(s.id, { active: false }); toast.success(`${s.name} cancelled`); refresh(true); }
+    try { await updateSubscription(s.id, { active: false }); toast.success(`${s.name} cancelled`); void refresh(true); }
     catch (err) { toast.error((err as Error).message); }
   }
   async function handleHardDeleteSub(s: Subscription) {
-    try { await deleteSubscription(s.id); refresh(true); }
+    try { await deleteSubscription(s.id); void refresh(true); }
     catch (err) { toast.error((err as Error).message); }
   }
 
@@ -378,15 +381,16 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
       variants={container}
       initial="hidden"
       animate="show"
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
     >
       <KPICard
-        title={t("kpi.cashOnHand")}
-        icon={<Wallet className="h-4 w-4" />}
-        bag={cashByCcy}
+        title={t("kpi.netCashFlow")}
+        icon={<Activity className="h-4 w-4 text-accent" />}
+        bag={netBag}
         fx={fx}
-        subtitle={Object.keys(cashByCcy).length === 0 ? t("kpi.noAccounts") : t("kpi.cashOnHandHint")}
-        tone="neutral"
+        subtitle={netSubtitle}
+        tone={netValue == null ? "neutral" : netValue >= 0 ? "income" : "expense"}
+        forceConverted
       />
       <KPICard
         title={t("kpi.incomeThisMonth")}
@@ -409,13 +413,12 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
         tone="expense"
       />
       <KPICard
-        title={t("kpi.netCashFlow")}
-        icon={<Activity className="h-4 w-4 text-accent" />}
-        bag={netBag}
+        title={t("kpi.cashOnHand")}
+        icon={<Wallet className="h-4 w-4" />}
+        bag={cashByCcy}
         fx={fx}
-        subtitle={netSubtitle}
-        tone={netValue == null ? "neutral" : netValue >= 0 ? "income" : "expense"}
-        forceConverted
+        subtitle={Object.keys(cashByCcy).length === 0 ? t("kpi.noAccounts") : t("kpi.cashOnHandHint")}
+        tone="neutral"
       />
       <KPICard
         title={t("kpi.cardDebt")}
@@ -1145,7 +1148,7 @@ function RecurringPanel({
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold">{title}</h2>
             <span className={cn(
-              "rounded-full px-1.5 py-0.5 text-[10px] uppercase",
+              "rounded-full px-1.5 py-0.5 text-overline uppercase",
               tone === "income" ? "bg-gain/15 text-gain" : "bg-loss/10 text-loss",
             )}>
               {tone === "income" ? "incoming" : "outgoing"}
@@ -1434,7 +1437,7 @@ function TransactionsPanel({
                       </div>
                     </td>
                     <td className="px-2 py-2.5">
-                      <span className="rounded bg-surface-raised px-1.5 py-0.5 text-[11px] uppercase text-content-muted">
+                      <span className="rounded bg-surface-raised px-1.5 py-0.5 text-overline uppercase text-content-muted">
                         {t.category}
                       </span>
                     </td>

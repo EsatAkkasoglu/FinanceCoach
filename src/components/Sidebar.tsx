@@ -37,7 +37,10 @@ type NavItem = { path: string; key: string; icon: React.ElementType };
 const NAV_SECTIONS: { label: string | null; items: NavItem[] }[] = [
   {
     label: null,
-    items: [{ path: "/dashboard", key: "dashboard", icon: LayoutDashboard }],
+    items: [
+      { path: "/chat",      key: "coach",     icon: MessageSquare   },
+      { path: "/dashboard", key: "dashboard", icon: LayoutDashboard },
+    ],
   },
   {
     label: "Finance",
@@ -120,6 +123,7 @@ export function Sidebar({
   // ── Proper i18n nav label lookup (no cast needed) ──────────────────────────
   const navLabel = (key: string): string => {
     const labels: Record<string, string> = {
+      coach:     t("nav.coach"),
       dashboard: t("nav.dashboard"),
       portfolio: t("nav.portfolio"),
       budget:    t("nav.budget"),
@@ -210,7 +214,15 @@ export function Sidebar({
   }
 
   async function handleNavClick(path: string) {
-    if (!path.startsWith("/chat")) await pruneEmptyActive();
+    if (path === "/chat") {
+      // Resume the active conversation if there is one; otherwise let
+      // ChatRoute auto-create a fresh one. Avoids spawning a new conv per click.
+      const target = activeConvId ? `/chat/${activeConvId}` : "/chat";
+      navigate(buildLocalizedPath(currentLanguage, target));
+      onMobileClose?.();
+      return;
+    }
+    await pruneEmptyActive();
     navigate(buildLocalizedPath(currentLanguage, path));
     onMobileClose?.();
   }
@@ -281,7 +293,7 @@ export function Sidebar({
                 transition={{ duration: 0.15 }}
                 className="flex flex-1 items-center justify-between overflow-hidden"
               >
-                <span className="whitespace-nowrap text-[15px] font-bold tracking-tight">{t("appName")}</span>
+                <span className="whitespace-nowrap text-base font-bold tracking-tight">{t("appName")}</span>
                 <button onClick={onMobileClose}
                   className="rounded-md p-1 text-content-muted hover:bg-surface-raised hover:text-content md:hidden"
                   aria-label="Close menu">
@@ -335,7 +347,7 @@ export function Sidebar({
                 <div className="mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-line bg-bg p-1.5 shadow-xl text-[10px]">
                   {matchedConvs.length > 0 && (
                     <>
-                      <div className="px-1 py-0.5 text-[9px] uppercase tracking-wide text-content-muted">{t("recent")}</div>
+                      <div className="px-1 py-0.5 text-overline uppercase text-content-muted">{t("recent")}</div>
                       {matchedConvs.map((conv) => (
                         <button key={conv.id} onClick={() => handleConvSelect(conv)}
                           className="flex w-full items-start gap-1.5 rounded-lg px-1.5 py-1 text-left hover:bg-surface-raised">
@@ -346,7 +358,7 @@ export function Sidebar({
                     </>
                   )}
                   {searchResults && searchResults.length > 0 && (
-                    <div className="mt-1 px-1 py-0.5 text-[9px] uppercase tracking-wide text-content-muted">Memory</div>
+                    <div className="mt-1 px-1 py-0.5 text-overline uppercase text-content-muted">Memory</div>
                   )}
                   {searching && <div className="px-1 py-1 text-content-muted">{t("loading")}</div>}
                   {!searching && searchResults && searchResults.length === 0 && matchedConvs.length === 0 && (
@@ -358,7 +370,7 @@ export function Sidebar({
                       <div className="min-w-0 flex-1">
                         <p className="line-clamp-2 leading-snug text-content">{h.text}</p>
                         {(h.metadata as { kind?: string }).kind && (
-                          <p className="mt-0.5 text-[9px] uppercase tracking-wide text-content-muted">
+                          <p className="mt-0.5 text-overline uppercase text-content-muted">
                             {(h.metadata as { kind?: string }).kind}
                           </p>
                         )}
@@ -382,7 +394,7 @@ export function Sidebar({
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.15 }}
-                    className="mb-1 overflow-hidden px-2.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-content-muted/60"
+                    className="mb-1 overflow-hidden px-2.5 pt-1 text-overline uppercase text-content-muted/60"
                   >
                     {section.label}
                   </motion.p>
@@ -415,7 +427,7 @@ export function Sidebar({
                         <motion.span
                           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                           transition={{ duration: 0.12 }}
-                          className="relative z-10 whitespace-nowrap text-[13px]"
+                          className="relative z-10 whitespace-nowrap text-sm"
                         >
                           {navLabel(key)}
                         </motion.span>
@@ -434,7 +446,7 @@ export function Sidebar({
                 <motion.p
                   initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="mb-1 overflow-hidden px-2.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-content-muted/60"
+                  className="mb-1 overflow-hidden px-2.5 pt-1 text-overline uppercase text-content-muted/60"
                 >
                   Account
                 </motion.p>
@@ -464,7 +476,7 @@ export function Sidebar({
                       <motion.span
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         transition={{ duration: 0.12 }}
-                        className="relative z-10 whitespace-nowrap text-[13px]"
+                        className="relative z-10 whitespace-nowrap text-sm"
                       >
                         {navLabel("settings")}
                       </motion.span>
@@ -487,7 +499,7 @@ export function Sidebar({
               <div className="mb-1.5 flex items-center justify-between px-1.5">
                 <button
                   onClick={() => setRecentOpen((v) => !v)}
-                  className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-content-muted transition hover:text-content"
+                  className="flex items-center gap-1.5 text-overline uppercase text-content-muted transition hover:text-content"
                 >
                   {recentOpen ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
                   {t("recent")}

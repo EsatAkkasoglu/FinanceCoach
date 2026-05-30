@@ -43,6 +43,20 @@ export default {
         sans: ["Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
+      // Named type scale (modular ~1.25). Use these semantic roles in new code
+      // instead of ad-hoc text-[Npx] values. Tailwind's default sizes (xs/sm/…)
+      // remain available for the existing codebase.
+      fontSize: {
+        display:   ["2.25rem",  { lineHeight: "1.1",  letterSpacing: "-0.02em", fontWeight: "700" }],
+        h1:        ["1.875rem", { lineHeight: "1.2",  letterSpacing: "-0.02em", fontWeight: "600" }],
+        h2:        ["1.5rem",   { lineHeight: "1.25", letterSpacing: "-0.01em", fontWeight: "600" }],
+        h3:        ["1.25rem",  { lineHeight: "1.3",  fontWeight: "600" }],
+        h4:        ["1rem",     { lineHeight: "1.4",  fontWeight: "600" }],
+        body:      ["1rem",     { lineHeight: "1.6" }],
+        "body-sm": ["0.875rem", { lineHeight: "1.5" }],
+        caption:   ["0.75rem",  { lineHeight: "1.4" }],
+        overline:  ["0.6875rem",{ lineHeight: "1.2", letterSpacing: "0.06em", fontWeight: "600" }],
+      },
       borderRadius: {
         lg: "14px",
         xl: "18px",

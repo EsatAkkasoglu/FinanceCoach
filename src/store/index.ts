@@ -288,6 +288,10 @@ export interface DashboardCache {
   holdings: import("@/lib/api").Holding[];
   totals: import("@/lib/api").PortfolioTotals;
   briefing: import("@/lib/api").BriefingItem[];
+  budget: import("@/lib/api").BudgetSummary | null;
+  accountCount: number;
+  goals: import("@/lib/api").Goal[];
+  history: import("@/lib/api").NetWorthPoint[];
   fetchedAt: number; // Date.now()
 }
 
@@ -300,6 +304,57 @@ interface DashboardState {
 }
 
 export const useDashboardStore = create<DashboardState>((set) => ({
+  cache: null,
+  loading: false,
+  setCache: (c) => set({ cache: c, loading: false }),
+  setLoading: (v) => set({ loading: v }),
+  invalidate: () => set({ cache: null }),
+}));
+
+// ----- Portfolio cache -----
+
+export interface PortfolioCacheData {
+  holdings: import("@/lib/api").Holding[];
+  totals: import("@/lib/api").PortfolioTotals | null;
+  fetchedAt: number;
+}
+
+interface PortfolioState {
+  cache: PortfolioCacheData | null;
+  loading: boolean;
+  setCache: (c: PortfolioCacheData) => void;
+  setLoading: (v: boolean) => void;
+  invalidate: () => void;
+}
+
+export const usePortfolioStore = create<PortfolioState>((set) => ({
+  cache: null,
+  loading: false,
+  setCache: (c) => set({ cache: c, loading: false }),
+  setLoading: (v) => set({ loading: v }),
+  invalidate: () => set({ cache: null }),
+}));
+
+// ----- Budget cache -----
+
+export interface BudgetCacheData {
+  accounts: import("@/lib/api").Account[];
+  txs: import("@/lib/api").Transaction[];
+  subs: import("@/lib/api").Subscription[];
+  summary: import("@/lib/api").BudgetSummary | null;
+  trend: import("@/lib/api").BudgetTrend | null;
+  fetchedAt: number;
+}
+
+interface BudgetState {
+  cache: BudgetCacheData | null;
+  loading: boolean;
+  setCache: (c: BudgetCacheData) => void;
+  setLoading: (v: boolean) => void;
+  invalidate: () => void;
+}
+
+export const useBudgetStore = create<BudgetState>((set) => ({
   cache: null,
   loading: false,
   setCache: (c) => set({ cache: c, loading: false }),

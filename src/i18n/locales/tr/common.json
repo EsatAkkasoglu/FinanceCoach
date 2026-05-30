@@ -18,11 +18,12 @@
   "openNav": "Navigasyonu aç",
   "disclaimer": "Yapay zeka önerileridir, finansal tavsiye değildir. Lisanslı bir danışmana başvurun.",
   "nav": {
+    "coach": "Koç",
     "dashboard": "Özet",
     "portfolio": "Portföy",
     "budget": "Bütçe",
-    "funds": "Fonlar (TR)",
-    "discover": "Keşfet",
+    "funds": "Fonlar",
+    "discover": "Piyasalar",
     "goals": "Hedefler",
     "documents": "Belgeler",
     "settings": "Ayarlar"

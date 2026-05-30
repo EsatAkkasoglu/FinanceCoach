@@ -132,7 +132,7 @@ function ResultView({ result, tool }: { result: string; tool: string }) {
       <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
         {entries.slice(0, 24).map(([k, v]) => (
           <div key={k} className="contents">
-            <span className="text-[10px] uppercase tracking-wide text-content-muted">
+            <span className="text-overline uppercase text-content-muted">
               {k.replace(/_/g, " ")}
             </span>
             <span className="text-[10px] text-content break-words">
@@ -244,7 +244,7 @@ export function CitationChip({ citation }: { citation: Citation }) {
           {hasResult ? (
             <>
               <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-widest text-content-muted">
+                <span className="inline-flex items-center gap-1 text-overline uppercase text-content-muted">
                   <Sparkles className="h-2.5 w-2.5 text-accent" />
                   Result
                 </span>
@@ -254,7 +254,7 @@ export function CitationChip({ citation }: { citation: Citation }) {
                     e.stopPropagation();
                     setShowRaw((v) => !v);
                   }}
-                  className="text-[9px] uppercase tracking-widest text-content-muted hover:text-accent"
+                  className="text-overline uppercase text-content-muted hover:text-accent"
                 >
                   {showRaw ? "pretty" : "raw"}
                 </button>
@@ -268,7 +268,7 @@ export function CitationChip({ citation }: { citation: Citation }) {
                   <ResultView result={citation.result!} tool={citation.tool} />
                 </div>
               )}
-              <details className="text-[9px] text-content-muted">
+              <details className="text-[10px] text-content-muted">
                 <summary className="cursor-pointer uppercase tracking-widest hover:text-accent">
                   <Code2 className="mr-1 inline h-2.5 w-2.5" />
                   Call

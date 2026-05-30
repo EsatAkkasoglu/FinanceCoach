@@ -193,7 +193,7 @@ export function HoldingFormModal({ open, onClose, onSaved, editing }: Props) {
                         <span className="font-mono font-semibold text-emerald-300">{s.ticker}</span>
                         <span className="text-xs text-zinc-400 truncate max-w-[20rem]">{s.description}</span>
                       </span>
-                      <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                      <span className="text-overline uppercase text-zinc-500">
                         {s.asset_class}
                       </span>
                     </button>

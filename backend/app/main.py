@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date as date_cls, datetime
@@ -754,6 +755,7 @@ def _parse_date(value: str) -> date_cls | None:
 @app.post("/onboarding")
 async def onboarding(payload: OnboardingIn, user_id: int = Depends(get_current_user_id)):
     """Persist the onboarding wizard output into the current user's profile."""
+    _invalidate_portfolio_cache(user_id)
     with SessionLocal() as db:
         user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
         if user is None:
@@ -801,6 +803,14 @@ async def onboarding(payload: OnboardingIn, user_id: int = Depends(get_current_u
 
 # --- Portfolio + Briefing -----------------------------------------------
 
+# Per-user in-memory portfolio cache: user_id → (result_dict, timestamp)
+_portfolio_cache: dict[int, tuple[dict, float]] = {}
+_PORTFOLIO_TTL = 120  # seconds
+
+
+def _invalidate_portfolio_cache(user_id: int) -> None:
+    _portfolio_cache.pop(user_id, None)
+
 
 def _quote_or_none(ticker: str, asset_class: str | None = None) -> dict | None:
     """Wrap get_quote tool with safe error handling (briefing must never 500).
@@ -832,9 +842,16 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
 
     Fetches all quotes in parallel via asyncio.gather + thread pool so N holdings
     cost ~1 round-trip instead of N sequential Alpha Vantage calls.
+    Results are cached per-user for 2 minutes to avoid hammering yfinance on every
+    page navigation.
     """
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
+
+    now = time.time()
+    cached = _portfolio_cache.get(user_id)
+    if cached and now - cached[1] < _PORTFOLIO_TTL:
+        return cached[0]
 
     with SessionLocal() as db:
         rows = db.execute(select(Holding).where(Holding.user_id == user_id)).scalars().all()
@@ -901,7 +918,7 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
         total_cost += cost_total
 
     day_pnl_pct = (total_day_pnl / total_value * 100.0) if total_value else 0.0
-    return {
+    result = {
         "holdings": enriched,
         "totals": {
             "value": round(total_value, 2),
@@ -913,6 +930,8 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
             "count": len(enriched),
         },
     }
+    _portfolio_cache[user_id] = (result, time.time())
+    return result
 
 
 class HoldingCreate(BaseModel):
@@ -932,6 +951,7 @@ class HoldingUpdate(BaseModel):
 @app.post("/portfolio/holdings")
 async def add_holding(payload: HoldingCreate, user_id: int = Depends(get_current_user_id)):
     """Add a holding to the user's portfolio."""
+    _invalidate_portfolio_cache(user_id)
     with SessionLocal() as db:
         h = Holding(
             user_id=user_id,
@@ -951,6 +971,7 @@ async def update_holding(
     holding_id: int, payload: HoldingUpdate, user_id: int = Depends(get_current_user_id)
 ):
     """Patch a single holding. Only fields present in the body are touched."""
+    _invalidate_portfolio_cache(user_id)
     with SessionLocal() as db:
         h = db.execute(
             select(Holding).where(Holding.id == holding_id, Holding.user_id == user_id)
@@ -980,6 +1001,7 @@ async def update_holding(
 @app.delete("/portfolio/holdings/{holding_id}")
 async def delete_holding(holding_id: int, user_id: int = Depends(get_current_user_id)):
     """Remove a holding."""
+    _invalidate_portfolio_cache(user_id)
     with SessionLocal() as db:
         h = db.execute(
             select(Holding).where(Holding.id == holding_id, Holding.user_id == user_id)

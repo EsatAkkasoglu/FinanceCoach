@@ -8,13 +8,15 @@ import { toast } from "sonner";
 import { listPortfolio, deleteHolding, type Holding, type PortfolioTotals } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { useDashboardStore } from "@/store";
+import { useDashboardStore, usePortfolioStore } from "@/store";
 import { useFxRates, type UseFxRates } from "@/lib/fx";
 import { Button } from "@/components/ui/Button";
 import { HoldingFormModal } from "./HoldingFormModal";
 import { HoldingChartDrawer } from "./HoldingChartDrawer";
 import { TickerDrawer } from "@/components/insights/TickerDrawer";
 import { Disclaimer } from "@/components/ui/Disclaimer";
+
+const STALE_MS = 2 * 60 * 1000;
 
 const ASSET_BADGE: Record<string, string> = {
   stock: "bg-gain/15 text-gain",
@@ -27,10 +29,11 @@ const ASSET_BADGE: Record<string, string> = {
 
 export function Portfolio() {
   const { t } = useTranslation("portfolio");
-  const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [totals, setTotals] = useState<PortfolioTotals | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { cache, loading, setCache, setLoading, invalidate: invalidatePortfolio } = usePortfolioStore();
   const [error, setError] = useState<string | null>(null);
+
+  const holdings = cache?.holdings ?? [];
+  const totals = cache?.totals ?? null;
 
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Holding | null>(null);
@@ -41,24 +44,25 @@ export function Portfolio() {
   const invalidateDashboard = useDashboardStore((s) => s.invalidate);
   const fx = useFxRates();
 
-  async function load(silent = false) {
-    if (!silent) setLoading(true);
+  async function load(forceRefresh = false) {
+    if (!forceRefresh && cache && Date.now() - cache.fetchedAt < STALE_MS) return;
+    if (!forceRefresh && loading) return;
+    setLoading(true);
     setError(null);
     try {
       const r = await listPortfolio();
-      setHoldings(r.holdings);
-      setTotals(r.totals);
+      setCache({ holdings: r.holdings, totals: r.totals, fetchedAt: Date.now() });
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function refresh() {
     invalidateDashboard();
+    invalidatePortfolio();
     void load(true);
   }
 
@@ -66,15 +70,16 @@ export function Portfolio() {
     if (h.id == null) return;
     if (!window.confirm(`Remove ${h.ticker} from your portfolio?`)) return;
     setDeletingId(h.id);
-    // Optimistic update
-    const prev = holdings;
-    setHoldings(holdings.filter((x) => x.id !== h.id));
+    // Optimistic update in cache
+    if (cache) {
+      setCache({ ...cache, holdings: cache.holdings.filter((x) => x.id !== h.id) });
+    }
     try {
       await deleteHolding(h.id);
       toast.success(`${h.ticker} removed`);
       refresh();
     } catch (err) {
-      setHoldings(prev);
+      if (cache) setCache(cache); // restore
       toast.error(`Couldn't remove: ${(err as Error).message}`);
     } finally {
       setDeletingId(null);
@@ -183,23 +188,31 @@ function SummaryRow({
 
   const positive = pnl >= 0;
   return (
-    <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
-      <div className="card">
-        <div className="text-xs uppercase tracking-wide text-content-muted">{t("netWorth")}</div>
-        <div className="num mt-2 text-2xl font-semibold">{formatCurrency(value, displayCcy)}</div>
-      </div>
-      <div className="card">
-        <div className="text-xs uppercase tracking-wide text-content-muted">{t("allTimePnl")}</div>
-        <div className={cn("num mt-2 text-2xl font-semibold", positive ? "text-gain" : "text-loss")}>
-          {formatPercent(pnlPct)}
+    <div className="mb-6 overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-surface-raised via-surface to-surface p-6 md:p-8">
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        {/* Dominant figure */}
+        <div className="min-w-0">
+          <div className="text-overline uppercase text-content-muted">{t("netWorth")}</div>
+          <div className="num mt-1 text-4xl font-bold tracking-tight md:text-5xl">
+            {formatCurrency(value, displayCcy)}
+          </div>
         </div>
-        <div className={cn("mt-1 text-xs", positive ? "text-gain" : "text-loss")}>
-          {formatCurrency(pnl, displayCcy)}
+        {/* Secondary stats */}
+        <div className="flex items-end gap-8">
+          <div>
+            <div className="text-overline uppercase text-content-muted">{t("allTimePnl")}</div>
+            <div className={cn("num mt-1 text-2xl font-semibold", positive ? "text-gain" : "text-loss")}>
+              {formatPercent(pnlPct)}
+            </div>
+            <div className={cn("text-xs", positive ? "text-gain" : "text-loss")}>
+              {formatCurrency(pnl, displayCcy)}
+            </div>
+          </div>
+          <div>
+            <div className="text-overline uppercase text-content-muted">{t("positions")}</div>
+            <div className="num mt-1 text-2xl font-semibold">{count}</div>
+          </div>
         </div>
-      </div>
-      <div className="card">
-        <div className="text-xs uppercase tracking-wide text-content-muted">{t("positions")}</div>
-        <div className="num mt-2 text-2xl font-semibold">{count}</div>
       </div>
     </div>
   );
@@ -268,7 +281,7 @@ function HoldingsTable({
                 )}
               </td>
               <td className="px-3 py-3">
-                <span className={cn("rounded px-1.5 py-0.5 text-[10px] uppercase", ASSET_BADGE[h.asset_class])}>
+                <span className={cn("rounded px-1.5 py-0.5 text-overline uppercase", ASSET_BADGE[h.asset_class])}>
                   {h.asset_class}
                 </span>
               </td>

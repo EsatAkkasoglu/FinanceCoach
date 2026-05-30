@@ -263,7 +263,7 @@ function MarketPulse({ trends, asOf }: { trends: TrendsResult | null; asOf: stri
           <div key={label} className="group flex items-center gap-2" title={hint}>
             <Icon className={cn("h-4 w-4 shrink-0 text-content-muted", color)} />
             <div className="min-w-0">
-              <p className="truncate text-[10px] uppercase tracking-widest text-content-muted">{label}</p>
+              <p className="truncate text-overline uppercase text-content-muted">{label}</p>
               <p className={cn("num text-sm font-semibold", color)}>{value}</p>
             </div>
           </div>
@@ -382,7 +382,7 @@ function Watchlist({ holdings, onPick }: { holdings: Holding[]; onPick: (t: stri
                   <div className="flex w-20 shrink-0 flex-col gap-0.5">
                     <span className="num text-xs font-semibold leading-tight">{tk}</span>
                     <span className={cn(
-                      "w-fit rounded px-1 py-0 text-[9px] font-medium uppercase",
+                      "w-fit rounded px-1 py-0 text-overline uppercase",
                       assetClassBadge(cls),
                     )}>
                       {t(`assetClass.${cls}`, { defaultValue: cls })}
@@ -428,7 +428,7 @@ function RecommendationBadge({ rec }: { rec: string | null }) {
     : kind === "sell" ? "bg-loss/15 text-loss"
     : "bg-surface text-content-muted";
   return (
-    <span className={cn("w-12 shrink-0 rounded-full px-2 py-0.5 text-center text-[10px] font-medium uppercase", cls)}>
+    <span className={cn("w-12 shrink-0 rounded-full px-2 py-0.5 text-center text-overline uppercase", cls)}>
       {t(`recommendation.${kind}`)}
     </span>
   );
@@ -551,7 +551,7 @@ function TrendingCryptoCard({ trends, onPick }: { trends: TrendsResult | null; o
               >
                 {/* Rank medal */}
                 <span className={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold",
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
                   i === 0 ? "bg-yellow-500/20 text-yellow-300"
                     : i === 1 ? "bg-slate-400/20 text-slate-300"
                     : i === 2 ? "bg-orange-700/20 text-orange-400"
@@ -653,7 +653,7 @@ function NewsSection({ articles }: { articles: NewsArticle[] }) {
               rel="noopener noreferrer"
               className="group flex items-start gap-2 text-xs hover:text-accent"
             >
-              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded bg-surface-raised text-[9px] text-content-muted">
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded bg-surface-raised text-[10px] text-content-muted">
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
@@ -726,7 +726,7 @@ function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: strin
                 {/* Top row: category badge + ticker + impact */}
                 <div className="flex items-center gap-2">
                   <span className={cn(
-                    "shrink-0 rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider",
+                    "shrink-0 rounded px-1.5 py-0.5 text-overline uppercase",
                     r.category === "m&a" ? "bg-accent-muted text-accent" : "bg-surface-raised text-content-muted",
                   )}>
                     {r.category ?? "news"}
@@ -741,7 +741,7 @@ function RumorsCard({ rumors, onPick }: { rumors: RumorItem[]; onPick: (t: strin
                   )}
                   <div className="ml-auto flex items-center gap-1.5">
                     {isHighImpact && (
-                      <span className="text-[9px] font-medium uppercase tracking-wide text-warning">
+                      <span className="text-overline uppercase text-warning">
                         {t("highImpact")}
                       </span>
                     )}

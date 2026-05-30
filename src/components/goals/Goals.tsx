@@ -213,11 +213,11 @@ export function Goals() {
         <GoalsHero />
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-emerald-400/70">Savings Quest</p>
+            <p className="text-overline uppercase text-emerald-400/70">Savings Quest</p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
               {t("title")}
             </h1>
-            <p className="mt-1 text-sm text-white/50">{t("subtitle")}</p>
+            <p className="mt-1 text-sm text-white/70">{t("subtitle")}</p>
           </div>
           <Button onClick={() => setCreating(true)} className="shrink-0">
             <Plus className="h-4 w-4" /> {t("addGoal")}
@@ -233,7 +233,7 @@ export function Goals() {
                 <span className={cn("flex items-center gap-1.5 font-semibold", lvl.color)}>
                   {lvl.icon} {lvl.label}
                 </span>
-                <span className="text-white/40">{stats.xp.toLocaleString()} / 10 000 XP</span>
+                <span className="text-white/65 tabular-nums">{stats.xp.toLocaleString()} / 10 000 XP</span>
               </div>
               <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/10">
                 <motion.div
@@ -346,7 +346,7 @@ function SummaryBanner({
         { label: "Tamamlanan",    value: `${stats.completed} / ${stats.count}`, sub: "hedef",              color: stats.completed > 0 ? "text-yellow-400" : "" },
       ].map(({ label, value, sub, color }) => (
         <div key={label} className="card text-center">
-          <p className="text-[10px] uppercase tracking-wide text-content-muted">{label}</p>
+          <p className="text-overline uppercase text-content-muted">{label}</p>
           <p className={cn("mt-1 text-lg font-bold tabular-nums", color)}>{value}</p>
           {sub && <p className="text-[10px] text-content-muted">{sub}</p>}
         </div>
@@ -659,7 +659,7 @@ function MilestoneTrack({ pct }: { pct: number }) {
             <span
               key={m}
               className={cn(
-                "absolute text-[9px] transition-colors duration-500",
+                "absolute text-[10px] transition-colors duration-500",
                 isLast ? "right-0 translate-x-0" : "-translate-x-1/2",
                 pct >= m ? "text-gain" : "text-content-muted/40",
               )}

@@ -99,7 +99,7 @@ export function HoldingChartDrawer({ ticker, assetClass, onClose }: Props) {
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-line bg-bg p-5 shadow-2xl animate-in slide-in-from-right">
         <header className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-content-muted">
+            <p className="text-overline uppercase text-content-muted">
               {t("chart.title", { defaultValue: "Price history" })}
             </p>
             <h2 className="font-mono text-3xl font-semibold text-emerald-300">{ticker}</h2>

@@ -208,11 +208,7 @@ export function Dashboard() {
   const { t } = useTranslation("dashboard");
   const { cache, loading, setCache, setLoading } = useDashboardStore();
   const [error, setError] = useState<string | null>(null);
-  const [budget, setBudget] = useState<BudgetSummary | null>(null);
-  const [accountCount, setAccountCount] = useState<number | null>(null);
-  const [goals, setGoals] = useState<Goal[]>([]);
   const [briefingFetchedAt, setBriefingFetchedAt] = useState<number | null>(null);
-  const [history, setHistory] = useState<NetWorthPoint[]>([]);
 
   const { name, avatar, riskProfile, riskScore, monthlyIncome } = useUserStore();
   const authUser = useAuthStore((s) => s.user);
@@ -225,8 +221,13 @@ export function Dashboard() {
   const holdings = cache?.holdings ?? [];
   const totals = cache?.totals ?? null;
   const briefing = cache?.briefing ?? null;
+  const budget = cache?.budget ?? null;
+  const accountCount = cache?.accountCount ?? null;
+  const goals = cache?.goals ?? [];
+  const history = cache?.history ?? [];
 
   useEffect(() => {
+    if (cache) setBriefingFetchedAt(cache.fetchedAt);
     if (cache && Date.now() - cache.fetchedAt < STALE_MS) return;
     if (loading) return;
     let cancelled = false;
@@ -240,11 +241,16 @@ export function Dashboard() {
           listGoals().catch(() => []),
         ]);
         if (cancelled) return;
-        setCache({ holdings: p.holdings, totals: p.totals, briefing: b.items, fetchedAt: Date.now() });
-        setBudget(budgetData); setAccountCount(accounts.length);
-        setGoals(goalsData); setBriefingFetchedAt(Date.now());
+        const pts = await netWorthHistory(30).catch(() => [] as typeof history);
+        if (cancelled) return;
+        setCache({
+          holdings: p.holdings, totals: p.totals, briefing: b.items,
+          budget: budgetData, accountCount: accounts.length,
+          goals: goalsData, history: pts,
+          fetchedAt: Date.now(),
+        });
+        setBriefingFetchedAt(Date.now());
         if (p.totals?.count && p.totals.count > 0) captureNetWorth(p.totals.value, "USD").catch(() => {});
-        netWorthHistory(30).then((pts) => { if (!cancelled) setHistory(pts); }).catch(() => {});
       } catch (err) {
         if (!cancelled) setError((err as Error).message);
       } finally {
@@ -252,7 +258,10 @@ export function Dashboard() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      setLoading(false);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -265,15 +274,13 @@ export function Dashboard() {
     return Object.values(budget.expense_mtd).some((v) => v > 0);
   }, [budget]);
 
+
   const isLoading = loading && !cache;
 
   return (
     <div>
       {/* Top bar */}
-      <div className="mb-5 flex items-center justify-between border-b border-line pb-3">
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-content-muted">
-          {t("title")}
-        </span>
+      <div className="mb-5 flex items-center justify-end border-b border-line pb-3">
         <RiskBadge cls={badgeCls} label={badgeLabel} explanation={riskExplain} title={t("riskExplanation.title")} />
       </div>
 
@@ -289,36 +296,37 @@ export function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* Bento grid */}
+      {/* Focus column — hero, balanced 2-up rows, full-width detail */}
       <motion.div
-        className="grid grid-cols-1 gap-3 lg:grid-cols-12"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2"
         variants={{ visible: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } }}
         initial="hidden"
         animate="visible"
       >
-        {/* Row A — Hero */}
+        {/* Hero — single dominant number */}
         <HeroStrip
           avatarEmoji={avatarMeta.emoji}
           greeting={greeting}
           totals={totals}
           holdings={holdings}
-          budget={budget}
           badge={{ cls: badgeCls, label: badgeLabel }}
           fallbackSubtitle={t("todayAtAGlance")}
           loading={isLoading}
         />
 
-        {/* Row B — Metric cards */}
+        {/* Portfolio health */}
         <NetWorthCard totals={totals} holdings={holdings} history={history} loading={isLoading} />
+        <AllocationCard holdings={holdings} riskProfile={riskProfile} loading={isLoading} />
+
+        {/* Monthly money */}
         <CashFlowCard budget={budget} loading={isLoading} />
         <SavingsRateCard budget={budget} loading={isLoading} />
 
-        {/* Row C */}
-        <AllocationCard holdings={holdings} riskProfile={riskProfile} loading={isLoading} />
+        {/* Highlights */}
         <TopMoverCard holdings={holdings} loading={isLoading} />
         <GoalCard goals={goals} loading={isLoading} />
 
-        {/* Row D */}
+        {/* Detail */}
         <HoldingsTable holdings={holdings} loading={isLoading} />
         <BriefingCard items={briefing} loading={isLoading} fetchedAt={briefingFetchedAt} />
       </motion.div>
@@ -342,10 +350,10 @@ export function Dashboard() {
 // ── Hero strip ────────────────────────────────────────────────────────────────
 
 function HeroStrip({
-  avatarEmoji, greeting, totals, holdings, budget, badge, fallbackSubtitle, loading,
+  avatarEmoji, greeting, totals, holdings, badge, fallbackSubtitle, loading,
 }: {
   avatarEmoji: string; greeting: string; totals: PortfolioTotals | null;
-  holdings: Holding[]; budget: BudgetSummary | null;
+  holdings: Holding[];
   badge: { cls: string; label: string }; fallbackSubtitle: string; loading: boolean;
 }) {
   const { t } = useTranslation("dashboard");
@@ -369,12 +377,11 @@ function HeroStrip({
 
   const positive = todayDelta >= 0;
   const pct = totalValue > 0 ? (todayDelta / totalValue) * 100 : 0;
-  const savingsRate = useMemo(() => computeSavingsRate(budget, fx), [budget, fx]);
   const countedValue = useCountUp(totalValue);
 
   return (
-    <motion.div variants={CARD_VAR} className="lg:col-span-12">
-      <div className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-surface-raised via-surface to-surface p-5">
+    <motion.div variants={CARD_VAR} className="md:col-span-2">
+      <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-surface-raised via-surface to-surface p-6 md:p-8">
         {/* Subtle grid pattern */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.03]"
@@ -395,7 +402,7 @@ function HeroStrip({
                 <h1 className="text-lg font-semibold leading-tight tracking-tight text-content-muted">
                   {greeting}
                 </h1>
-                <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide", badge.cls)}>
+                <span className={cn("rounded-full border px-2.5 py-0.5 text-overline uppercase", badge.cls)}>
                   {badge.label}
                 </span>
               </div>
@@ -409,8 +416,8 @@ function HeroStrip({
               <SkeletonCard lines={2} />
             ) : totalValue > 0 ? (
               <>
-                <p className="text-[10px] uppercase tracking-widest text-content-muted">{t("netWorth")}</p>
-                <p className="num text-3xl font-bold tracking-tight">
+                <p className="text-overline uppercase text-content-muted">{t("netWorth")}</p>
+                <p className="num text-4xl font-bold tracking-tight md:text-5xl">
                   {formatCurrency(countedValue, displayCcy)}
                 </p>
                 {hasDelta && todayDelta !== 0 && (
@@ -430,17 +437,6 @@ function HeroStrip({
               <p className="text-sm text-content-muted">{fallbackSubtitle}</p>
             )}
           </div>
-
-          {/* Savings rate quick stat */}
-          {savingsRate != null && (
-            <div className="flex flex-col items-end">
-              <p className="text-[10px] uppercase tracking-widest text-content-muted">{t("savingsRate")}</p>
-              <p className={cn("num text-2xl font-bold", savingsRate >= 0 ? "text-gain" : "text-loss")}>
-                {Math.round(savingsRate)}%
-              </p>
-              <p className="text-[10px] text-content-muted">{t("thisMonth")}</p>
-            </div>
-          )}
         </div>
       </div>
     </motion.div>
@@ -471,7 +467,7 @@ function NetWorthCard({ totals, holdings, history, loading }: {
   const spark = history.map((h) => h.value);
 
   return (
-    <motion.div variants={CARD_VAR} className="card lg:col-span-4 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
       <CardHeader icon={Activity} label={t("netWorth")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : totals?.count && totals.count > 0 ? (
         <>
@@ -492,7 +488,7 @@ function NetWorthCard({ totals, holdings, history, loading }: {
             <Briefcase className="h-5 w-5 text-content-muted" />
           </div>
           <p className="mt-2 text-sm text-content-muted">{t("noHoldings")}</p>
-          <p className="mt-0.5 text-[11px] text-content-muted/60">{t("addHoldingsHint")}</p>
+          <p className="mt-0.5 text-[11px] text-content-muted">{t("addHoldingsHint")}</p>
         </div>
       )}
     </motion.div>
@@ -531,7 +527,7 @@ function CashFlowCard({ budget, loading }: { budget: BudgetSummary | null; loadi
   const hasFlow = (income ?? 0) > 0 || (expense ?? 0) > 0;
 
   return (
-    <motion.div variants={CARD_VAR} className="card lg:col-span-4 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
       <CardHeader icon={Wallet} label={t("cashFlow")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : !hasFlow ? (
         <p className="mt-3 text-sm text-content-muted">{t("cashFlowEmpty")}</p>
@@ -568,7 +564,7 @@ function SavingsRateCard({ budget, loading }: { budget: BudgetSummary | null; lo
   const counted = useCountUp(rate ?? 0);
 
   return (
-    <motion.div variants={CARD_VAR} className="card lg:col-span-4 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
       <CardHeader icon={PiggyBank} label={t("savingsRate")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : rate == null ? (
         <p className="mt-3 text-sm text-content-muted">{t("noBudgetData")}</p>
@@ -635,7 +631,7 @@ function AllocationCard({ holdings, riskProfile, loading }: {
   });
 
   return (
-    <motion.div variants={CARD_VAR} className="card lg:col-span-5 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
       <CardHeader icon={Target} label={t("allocationVsTarget")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={4} /> : !hasData ? (
         <p className="mt-3 text-sm text-content-muted">{t("addHoldingsForBreakdown")}</p>
@@ -676,7 +672,7 @@ function AllocationCard({ holdings, riskProfile, loading }: {
                       transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
                     />
                   </div>
-                  <div className="mt-0.5 flex justify-between text-[9px] text-content-muted">
+                  <div className="mt-0.5 flex justify-between text-[10px] tabular-nums text-content-muted">
                     <span>{Math.round(r.actual)}% actual</span>
                     <span>{r.target}% target</span>
                   </div>
@@ -705,7 +701,7 @@ function TopMoverCard({ holdings, loading }: { holdings: Holding[]; loading: boo
   const positive = (top?.change_today ?? 0) >= 0;
 
   return (
-    <motion.div variants={CARD_VAR} className="card lg:col-span-4 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
       <CardHeader icon={Flame} label={t("topMover")} iconColor="text-warning" />
       {loading ? <SkeletonCard lines={3} /> : !top ? (
         <p className="mt-3 text-sm text-content-muted">{t("noMoverData")}</p>
@@ -751,7 +747,7 @@ function GoalCard({ goals, loading }: { goals: Goal[]; loading: boolean }) {
     : null;
 
   return (
-    <motion.div variants={CARD_VAR} className="card lg:col-span-3 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
       <CardHeader icon={Target} label={t("goalProgress")} iconColor="text-purple-400" />
       {loading ? <SkeletonCard lines={2} /> : !top ? (
         <p className="mt-3 text-sm text-content-muted">{t("goalNoGoals")}</p>
@@ -804,7 +800,7 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
   }
 
   return (
-    <motion.div variants={CARD_VAR} className="card lg:col-span-7 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card md:col-span-2 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
       <CardHeader icon={Briefcase} label={t("holdings")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={5} /> : holdings.length === 0 ? (
         <div className="mt-4 flex flex-col items-center py-6 text-center">
@@ -907,7 +903,7 @@ function BriefingCard({ items, loading, fetchedAt }: {
   };
 
   return (
-    <motion.div variants={CARD_VAR} className="card flex flex-col lg:col-span-5 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card md:col-span-2 flex flex-col hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
       <CardHeader icon={Newspaper} label={t("todaysBrief")} iconColor="text-content-muted" />
       {loading ? <SkeletonCard lines={5} /> : items && items.length > 0 ? (
         <ul className="mt-3 space-y-2">
@@ -960,7 +956,7 @@ function RiskBadge({ cls, label, explanation, title }: {
         onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
         onClick={() => setOpen((v) => !v)}
-        className={cn("flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide transition", cls)}
+        className={cn("flex items-center gap-1 rounded-full border px-2.5 py-1 text-overline uppercase transition", cls)}
       >
         <span>{label}</span>
         <Info className="h-3 w-3 opacity-70" />
@@ -974,7 +970,7 @@ function RiskBadge({ cls, label, explanation, title }: {
             transition={{ duration: 0.15 }}
             className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-surface p-3 text-left shadow-2xl"
           >
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-content-muted">{title}</p>
+            <p className="mb-1 text-overline uppercase text-content-muted">{title}</p>
             <p className="text-xs leading-relaxed text-content">{explanation}</p>
           </motion.div>
         )}
@@ -1037,7 +1033,7 @@ function NextStepCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-accent">{t("nextStep.title")}</span>
+            <span className="text-overline uppercase text-accent">{t("nextStep.title")}</span>
             <span className="text-[10px] text-content-muted">·</span>
             <span className="text-[10px] text-content-muted">{t("nextStep.subtitle")}</span>
           </div>

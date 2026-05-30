@@ -142,7 +142,7 @@ export function Funds() {
         )}
         {!loading && !error && rows.length > 0 && (
           <table className="w-full text-sm">
-            <thead className="bg-surface-raised text-[10px] uppercase tracking-wide text-content-muted">
+            <thead className="bg-surface-raised text-overline uppercase text-content-muted">
               <tr>
                 <th className="px-3 py-2 text-left">{t("table.code")}</th>
                 <th className="px-3 py-2 text-left">{t("table.name")}</th>

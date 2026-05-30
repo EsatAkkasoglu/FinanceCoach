@@ -634,7 +634,7 @@ function HoldingRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm font-semibold">{holding.ticker}</span>
-          <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase text-content-muted">
+          <span className="rounded bg-surface px-1.5 py-0.5 text-overline uppercase text-content-muted">
             {holding.asset_class}
           </span>
         </div>

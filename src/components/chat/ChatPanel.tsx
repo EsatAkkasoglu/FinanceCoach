@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Paperclip, X, FileText, FileSpreadsheet, FileCode, Image as ImageIcon, File as FileIcon, AlertCircle, UploadCloud, Mic } from "lucide-react";
+import { Send, Square, Trash2, Copy, Check, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Paperclip, X, FileText, FileSpreadsheet, FileCode, Image as ImageIcon, File as FileIcon, AlertCircle, UploadCloud, Mic } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { streamChat, sendFeedback, autotitleConversation, parseDocument, transcribeAudio, type Citation as ApiCitation } from "@/lib/api";
-import { parseToolResult } from "@/lib/parseToolResult";
 import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity, type MessageAttachment } from "@/store";
 import { cn } from "@/lib/cn";
 import { AgentBadge } from "./AgentBadge";
-import { AgentGraph } from "./AgentGraph";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 
 function pickRandom<T>(arr: T[], n: number): T[] {
@@ -105,7 +103,7 @@ function MessageAttachments({ attachments }: { attachments: MessageAttachment[] 
             <span className="truncate max-w-[200px] text-xs font-medium text-content">
               {a.name}
             </span>
-            <span className="text-[10px] uppercase tracking-wide text-content-muted">
+            <span className="text-overline uppercase text-content-muted">
               {a.kind} · {humanSize(a.size)}
             </span>
           </span>
@@ -153,20 +151,15 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const { t, i18n } = useTranslation("chat");
   const {
     messagesByConv, streaming,
-    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setMessageSuggestions, addReasoning, setStreaming, resetConv,
+    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSuggestions, addReasoning, setStreaming, resetConv,
   } = useChatStore();
   const messages = messagesByConv[convId] ?? [];
-  const setAgentEvent = useAgentVizStore((s) => s.setEvent);
-  const markAgentDone = useAgentVizStore((s) => s.markDone);
-  const incrementAgentToolCount = useAgentVizStore((s) => s.incrementToolCount);
   const clearAgentEvents = useAgentVizStore((s) => s.clear);
-  const vizActive = useAgentVizStore((s) => Object.keys(s.events).length > 0);
   const updateTitle = useConversationStore((s) => s.updateTitle);
   const activeConv = useConversationStore((s) => s.conversations.find((c) => c.id === convId));
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
   const [input, setInput] = useState("");
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
-  const [toolActivities, setToolActivities] = useState<ToolActivity[]>([]);
   const [suggestions] = useState<string[]>(() => {
     const raw = t("suggestionPool", { returnObjects: true });
     return pickRandom(Array.isArray(raw) ? (raw as string[]) : [], 4);
@@ -414,7 +407,6 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     inFlightPromptRef.current = finalText;
     clearAgentEvents();
     setActiveAgent(null);
-    setToolActivities([]);
     toolActivitiesRef.current = [];
     seenAgentsThisTurn.current.clear();
     toolRunsRef.current.clear();
@@ -432,7 +424,6 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           case "agent_start": {
             const agentName = event.payload.agent as string;
             const internal = event.payload.internal === true;
-            setAgentEvent({ agent: agentName, status: "running", startedAt: Date.now() });
             setActiveAgent(agentName);
 
             // Supervisor never produces content — skip bubble logic for it.
@@ -468,39 +459,24 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             }
             break;
           }
-          case "agent_done": {
-            const agentName = event.payload.agent as string;
-            markAgentDone(agentName);
+          case "agent_done":
             break;
-          }
           case "tool_call": {
             const runId = event.payload.run_id as string ?? String(Date.now());
             const tool = event.payload.tool as string;
             const args = (event.payload.args ?? {}) as Record<string, unknown>;
-            const parentAgent = event.payload.agent as string | undefined;
-            if (parentAgent) incrementAgentToolCount(parentAgent);
             toolRunsRef.current.set(runId, { tool, argsKey: stableKey(args) });
-            setToolActivities((prev) => {
-              const next = [...prev, { runId, tool, args, status: "running" as const }];
-              toolActivitiesRef.current = next;
-              return next;
-            });
+            toolActivitiesRef.current = [...toolActivitiesRef.current, { runId, tool, args, status: "running" as const }];
             break;
           }
           case "tool_result": {
             const runId = event.payload.run_id as string;
             const result = event.payload.result as string;
             const existing = toolRunsRef.current.get(runId);
-            if (existing) {
-              toolRunsRef.current.set(runId, { ...existing, result });
-            }
-            setToolActivities((prev) => {
-              const next = prev.map((a) =>
-                a.runId === runId ? { ...a, status: "done" as const, result } : a
-              );
-              toolActivitiesRef.current = next;
-              return next;
-            });
+            if (existing) toolRunsRef.current.set(runId, { ...existing, result });
+            toolActivitiesRef.current = toolActivitiesRef.current.map((a) =>
+              a.runId === runId ? { ...a, status: "done" as const, result } : a
+            );
             break;
           }
           case "agent_message":
@@ -590,13 +566,8 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
       inFlightPromptRef.current = null;
       setStreaming(false);
       setActiveAgent(null);
-      // Persist completed steps into the message before clearing transient state.
-      if (toolActivitiesRef.current.length > 0 && lastAsstId.current) {
-        setMessageSteps(convId, lastAsstId.current, toolActivitiesRef.current);
-      }
       setTimeout(() => {
         clearAgentEvents();
-        setToolActivities([]);
       }, 800);
     }
   }
@@ -702,27 +673,26 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="mb-6 flex items-start justify-between">
-          <div>
+        {messages.length === 0 ? (
+          <div className="mb-6">
             <h1 className="text-2xl font-semibold tracking-tight">{t("coach")}</h1>
-            <p className="text-sm text-content-muted">
+            <p className="mt-1 text-sm text-content-muted">
               {t("greeting")}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {messages.length > 0 && (
-              <button
-                type="button"
-                onClick={clearChat}
-                disabled={streaming}
-                className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-content-muted hover:border-loss hover:text-loss disabled:opacity-30"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                {t("clearChat")}
-              </button>
-            )}
+        ) : (
+          <div className="mb-3 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={clearChat}
+              disabled={streaming}
+              className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-content-muted hover:border-loss hover:text-loss disabled:opacity-30"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t("clearChat")}
+            </button>
           </div>
-        </div>
+        )}
 
         <div
           role="log"
@@ -755,7 +725,6 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             const isAssistant = m.role === "assistant";
             const isStreamingThis = streaming && lastAsstId.current === m.id && m.content.length > 0;
             const showCopy = isAssistant && !isThinking && m.content.length > 0;
-            const hasSteps = Boolean(isAssistant && m.steps && m.steps.length > 0);
             const timeStr = new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
             const regenHandler = () => {
               const idx = messages.findIndex((x) => x.id === m.id);
@@ -780,11 +749,6 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                       : "w-full max-w-3xl items-stretch"
                   )}
                 >
-                {/* Steps strip — outside the bubble, above it */}
-                {isAssistant && hasSteps && (
-                  <StepsPanel steps={m.steps ?? []} agent={m.agent ?? null} strip />
-                )}
-
                 <div
                   className={cn(
                     "relative rounded-2xl border p-4 text-sm shadow-sm",
@@ -793,17 +757,19 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                       : "rounded-tl-md border-line bg-surface-raised"
                   )}
                 >
-                  {/* Badge only when there are no steps */}
-                  {isAssistant && !hasSteps && m.agent && (
+                  {isAssistant && m.agent && (
                     <div className="mb-2"><AgentBadge name={m.agent} /></div>
                   )}
                   {showCopy && <CopyButton text={m.content} />}
                   {isThinking ? (
-                    <AgentActivity agent={activeAgent} activities={toolActivities} />
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+                      <span className="text-xs text-content-muted">{activeAgent ?? t("thinking")}</span>
+                    </div>
                   ) : (
                     <div
                       className={cn(
-                        "prose prose-invert prose-sm max-w-none",
+                        "prose prose-invert prose-sm max-w-[68ch]",
                         isStreamingThis && "chat-streaming-fade"
                       )}
                     >
@@ -820,7 +786,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                   )}
                   {isAssistant && m.suggestions && m.suggestions.length > 0 && (
                     <div className="mt-3 flex flex-col gap-1.5 border-t border-line pt-3">
-                      <span className="text-[10px] uppercase tracking-wide text-content-muted">
+                      <span className="text-overline uppercase text-content-muted">
                         {t("tryNext")}
                       </span>
                       <div className="flex flex-wrap gap-1.5">
@@ -853,7 +819,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                     ) : (
                       <span />
                     )}
-                    <p className="text-[10px] text-content-muted/50 select-none">
+                    <p className="text-[11px] text-content-muted/90 select-none tabular-nums">
                       {timeStr}
                     </p>
                   </div>
@@ -882,12 +848,6 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
               <RotateCcw className="h-3.5 w-3.5" />
               {t("continue")}
             </button>
-          </div>
-        )}
-
-        {vizActive && (
-          <div className="mt-4">
-            <AgentGraph />
           </div>
         )}
 
@@ -942,7 +902,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 onPaste={onPaste}
                 rows={1}
                 placeholder={t("placeholder")}
-                className="num-0 flex-1 resize-none rounded-lg border border-line bg-surface py-3 pl-11 pr-4 text-sm leading-5 outline-none focus:border-accent"
+                className="num-0 flex-1 resize-none rounded-lg border border-content-muted/25 bg-surface py-3 pl-11 pr-4 text-sm leading-5 outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent/40"
                 disabled={streaming}
               />
             </div>
@@ -1015,653 +975,6 @@ function stableKey(obj: unknown): string {
     a.localeCompare(b)
   );
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableKey(v)}`).join(",")}}`;
-}
-
-// ─── AgentActivity ────────────────────────────────────────────────────────────
-
-const TOOL_ICONS: Record<string, string> = {
-  get_quote: "📈",
-  resolve_symbol: "🔎",
-  analyze_ticker_8dim: "🔍",
-  get_dividend_metrics: "💰",
-  scan_hot_trends: "🔥",
-  get_us_movers: "🇺🇸",
-  get_bist_movers: "🇹🇷",
-  scan_rumors: "👂",
-  search_fund: "🏦",
-  get_fund_quote: "🏦",
-  get_fund_history: "📊",
-  list_top_funds: "🏆",
-  list_holdings: "📋",
-  list_transactions: "📋",
-  add_holding: "➕",
-  add_holding_by_value: "💸",
-  set_cash_balance: "💵",
-  remove_holding: "🗑️",
-  search_news: "📰",
-  get_user_profile: "👤",
-  update_risk_score: "⚖️",
-  query_memory: "🧠",
-};
-
-function useToolMeta(tool: string): { label: string; icon: string } {
-  const { t } = useTranslation("chat");
-  const icon = TOOL_ICONS[tool] ?? "⚙️";
-  const label = t(`tools.${tool}`, { defaultValue: tool });
-  return { label, icon };
-}
-
-// Render parsed result as a clean table — scalar fields + first-level arrays.
-function ResultView({ data, tool }: { data: unknown; tool?: string }) {
-  const { t } = useTranslation("chat");
-  if (data === null || data === undefined) return null;
-
-  // ── Specialized inline visualizations for well-known tools ──────────────
-  if (tool === "get_quote" && isRecord(data) && typeof data.price === "number") {
-    return <QuoteCard quote={data} />;
-  }
-  if (
-    (tool === "analyze_ticker_8dim" || tool === "analyze_ticker") &&
-    isRecord(data) &&
-    isRecord(data.dimensions)
-  ) {
-    return <EightDimView result={data} />;
-  }
-
-  if (typeof data === "string") {
-    return (
-      <p className="text-[11px] leading-relaxed text-content-muted">
-        {data.length > 300 ? data.slice(0, 300) + "…" : data}
-      </p>
-    );
-  }
-
-  if (Array.isArray(data)) {
-    if (data.length === 0) {
-      return (
-        <p className="text-[11px] italic text-content-muted">{t("noResults")}</p>
-      );
-    }
-    // Array of objects → render as headline-style list (news, search hits, etc.)
-    if (typeof data[0] === "object" && data[0] !== null) {
-      const items = (data as Record<string, unknown>[]).slice(0, 6);
-      return (
-        <ul className="space-y-1.5">
-          {items.map((item, i) => {
-            const title = (item.title || item.headline || item.name || item.symbol || item.ticker) as
-              | string
-              | undefined;
-            const url = (item.url || item.link) as string | undefined;
-            const meta: string[] = [];
-            if (item.source) meta.push(String(item.source));
-            if (item.published_at) meta.push(String(item.published_at).slice(0, 16));
-            if (item.sentiment) meta.push(String(item.sentiment));
-            const summary = (item.summary || item.description) as string | undefined;
-            return (
-              <li
-                key={i}
-                className="rounded border border-line bg-surface p-2"
-              >
-                {title && (url
-                  ? <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-medium leading-snug text-content hover:text-accent hover:underline underline-offset-2"
-                    >
-                      {title}
-                    </a>
-                  : <p className="text-[11px] font-medium leading-snug text-content">
-                      {title}
-                    </p>
-                )}
-                {meta.length > 0 && (
-                  <p className="mt-0.5 text-[10px] text-content-muted">
-                    {meta.join(" · ")}
-                  </p>
-                )}
-                {summary && (
-                  <p className="mt-1 text-[10px] leading-snug text-content-muted line-clamp-2">
-                    {summary}
-                  </p>
-                )}
-                {!title && !summary && (
-                  <p className="text-[10px] text-content-muted">
-                    {JSON.stringify(item).slice(0, 120)}
-                  </p>
-                )}
-              </li>
-            );
-          })}
-          {data.length > items.length && (
-            <li className="text-[10px] text-content-muted">
-              +{data.length - items.length} more
-            </li>
-          )}
-        </ul>
-      );
-    }
-    // Array of scalars → pill list
-    return (
-      <div className="flex flex-wrap gap-1">
-        {(data as unknown[]).slice(0, 12).map((v, i) => (
-          <span
-            key={i}
-            className="rounded-md border border-line bg-surface px-2 py-0.5 text-[10px] text-content"
-          >
-            {String(v)}
-          </span>
-        ))}
-        {data.length > 12 && (
-          <span className="text-[10px] text-content-muted self-center">
-            +{data.length - 12} more
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  if (typeof data !== "object") {
-    return (
-      <p className="font-mono text-[11px] text-content-muted">
-        {String(data).slice(0, 300)}
-      </p>
-    );
-  }
-
-  const obj = data as Record<string, unknown>;
-
-  if (Array.isArray(obj.top_trending)) {
-    return <HotTrendsView scanTime={obj.scan_time} trends={obj.top_trending} />;
-  }
-
-  // Separate scalars, objects (nested), arrays
-  const scalars = Object.entries(obj).filter(
-    ([, v]) => v !== null && v !== undefined && typeof v !== "object"
-  );
-  const arrays = Object.entries(obj).filter(([, v]) => Array.isArray(v));
-
-  const SKIP_KEYS = new Set(["timestamp", "tool_call_id"]);
-
-  const displayScalars = scalars
-    .filter(([k]) => !SKIP_KEYS.has(k))
-    .slice(0, 10);
-
-  return (
-    <div className="space-y-3">
-      {displayScalars.length > 0 && (
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-          {displayScalars.map(([k, v]) => {
-            const raw = String(v);
-            const display = raw.length > 60 ? raw.slice(0, 60) + "…" : raw;
-            const isNumeric = typeof v === "number";
-            return (
-              <div key={k} className="flex flex-col gap-0.5">
-                <span className="text-[9px] uppercase tracking-widest text-content-muted">
-                  {k.replace(/_/g, " ")}
-                </span>
-                <span
-                  className={cn(
-                    "text-[11px] font-medium leading-tight",
-                    isNumeric ? "tabular-nums text-content" : "text-content"
-                  )}
-                >
-                  {display}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {arrays.slice(0, 3).map(([k, v]) => {
-        const items = (v as unknown[]).slice(0, 6);
-        return (
-          <div key={k}>
-            <p className="mb-1.5 text-[9px] uppercase tracking-widest text-content-muted">
-              {k.replace(/_/g, " ")}
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {items.map((item, i) => {
-                let label: string;
-                if (typeof item === "object" && item !== null) {
-                  const o = item as Record<string, unknown>;
-                  // Show symbol + first meaningful value
-                  const sym = o.symbol ?? o.ticker ?? o.name ?? "";
-                  const val = o.price ?? o.mentions ?? o.score ?? "";
-                  label = sym ? `${sym}${val !== "" ? ` · ${val}` : ""}` : JSON.stringify(item).slice(0, 40);
-                } else {
-                  label = String(item);
-                }
-                return (
-                  <span
-                    key={i}
-                    className="rounded-md border border-line bg-surface px-2 py-0.5 text-[10px] text-content"
-                  >
-                    {label}
-                  </span>
-                );
-              })}
-              {(v as unknown[]).length > 6 && (
-                <span className="text-[10px] text-content-muted self-center">
-                  +{(v as unknown[]).length - 6} more
-                </span>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// Compact price tile for get_quote: big price, colored change %, ticker chip.
-function QuoteCard({ quote }: { quote: Record<string, unknown> }) {
-  const price = Number(quote.price ?? 0);
-  const changePct = Number(quote.change_pct ?? 0);
-  const ticker = String(quote.ticker ?? "");
-  const currency = String(quote.currency ?? "USD");
-  const up = changePct >= 0;
-  // Visual scale: clamp to ±10% for the bar fill so big moves don't blow out the layout.
-  const barPct = Math.min(Math.abs(changePct) / 10, 1) * 100;
-
-  return (
-    <div className="rounded-lg border border-line bg-surface p-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-content-muted">
-            {ticker || "Quote"}
-          </p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-content">
-            {price.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-            <span className="ml-1 text-[10px] font-normal text-content-muted">
-              {currency}
-            </span>
-          </p>
-        </div>
-        <div
-          className={cn(
-            "rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
-            up ? "bg-gain/10 text-gain" : "bg-loss/10 text-loss"
-          )}
-        >
-          {up ? "▲" : "▼"} {changePct.toFixed(2)}%
-        </div>
-      </div>
-      <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface-raised">
-        <div
-          className={cn("h-full", up ? "bg-gain" : "bg-loss")}
-          style={{ width: `${barPct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// Horizontal-bar overview for analyze_ticker_8dim: each dimension's score.
-function EightDimView({ result }: { result: Record<string, unknown> }) {
-  const dimensions = result.dimensions as Record<string, unknown> | undefined;
-  if (!dimensions) return null;
-  const score = typeof result.score === "number" ? result.score : null;
-  const recommendation = typeof result.recommendation === "string" ? result.recommendation : null;
-  const entries = Object.entries(dimensions).slice(0, 8);
-
-  function dimScore(v: unknown): number | null {
-    if (typeof v === "number") return v;
-    if (isRecord(v) && typeof v.score === "number") return v.score;
-    return null;
-  }
-
-  return (
-    <div className="space-y-3">
-      {(score !== null || recommendation) && (
-        <div className="flex items-center gap-3 rounded-lg border border-line bg-surface p-2">
-          {score !== null && (
-            <div>
-              <p className="text-[9px] uppercase tracking-widest text-content-muted">
-                Score
-              </p>
-              <p className="text-base font-semibold tabular-nums text-content">
-                {score.toFixed(1)}
-              </p>
-            </div>
-          )}
-          {recommendation && (
-            <div className="ml-auto">
-              <span
-                className={cn(
-                  "rounded-md px-2 py-1 text-[11px] font-semibold uppercase",
-                  recommendation === "BUY" && "bg-gain/15 text-gain",
-                  recommendation === "SELL" && "bg-loss/15 text-loss",
-                  recommendation === "HOLD" && "bg-surface-raised text-content"
-                )}
-              >
-                {recommendation}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-      <div className="space-y-1.5">
-        {entries.map(([name, v]) => {
-          const s = dimScore(v);
-          const pct = s === null ? 0 : Math.max(0, Math.min(100, s));
-          return (
-            <div key={name} className="grid grid-cols-[110px_1fr_36px] items-center gap-2">
-              <span className="text-[10px] capitalize text-content-muted">
-                {name.replace(/_/g, " ")}
-              </span>
-              <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
-                <div
-                  className={cn(
-                    "h-full",
-                    pct >= 66 ? "bg-gain" : pct >= 33 ? "bg-accent" : "bg-loss"
-                  )}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <span className="text-right text-[10px] tabular-nums text-content-muted">
-                {s === null ? "—" : s.toFixed(0)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-
-function HotTrendsView({ scanTime, trends }: { scanTime: unknown; trends: unknown[] }) {
-  const items = trends.filter(isRecord).slice(0, 8);
-
-  return (
-    <div className="space-y-2">
-      {typeof scanTime === "string" && (
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[9px] uppercase tracking-widest text-content-muted">
-            Scan time
-          </span>
-          <span className="text-[11px] font-medium text-content">
-            {scanTime}
-          </span>
-        </div>
-      )}
-      <div className="grid gap-1.5 sm:grid-cols-2">
-        {items.map((item, i) => {
-          const symbol = String(item.symbol ?? item.ticker ?? `#${i + 1}`);
-          const mentions = item.mentions;
-          const sources = Array.isArray(item.sources) ? item.sources.map(String) : [];
-          const signals = Array.isArray(item.signals) ? item.signals.map(String) : [];
-          const signalText = signals.join(" ");
-          const signalClass = signalText.toLowerCase().includes("bullish")
-            ? "border-gain/30 bg-gain/10 text-gain"
-            : signalText.toLowerCase().includes("bearish") || signalText.toLowerCase().includes("dump")
-              ? "border-loss/30 bg-loss/10 text-loss"
-              : "border-line bg-surface text-content-muted";
-
-          return (
-            <div
-              key={`${symbol}-${i}`}
-              className="rounded-md border border-line bg-surface p-2"
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[12px] font-semibold text-accent">{symbol}</span>
-                {mentions !== undefined && (
-                  <span className="rounded bg-surface-raised px-1.5 py-0.5 text-[10px] text-content-muted">
-                    {String(mentions)} mentions
-                  </span>
-                )}
-              </div>
-              {signals.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {signals.slice(0, 3).map((signal) => (
-                    <span key={signal} className={cn("rounded px-1.5 py-0.5 text-[10px]", signalClass)}>
-                      {signal}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {sources.length > 0 && (
-                <p className="mt-1 text-[10px] leading-snug text-content-muted">
-                  {sources.slice(0, 3).join(" · ")}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {trends.length > items.length && (
-        <p className="text-[10px] text-content-muted">
-          +{trends.length - items.length} more
-        </p>
-      )}
-    </div>
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function ArgPills({ args }: { args: Record<string, unknown> }) {
-  const entries = Object.entries(args).filter(
-    ([, v]) => v !== undefined && v !== null && v !== ""
-  );
-  if (entries.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {entries.map(([k, v]) => (
-        <span
-          key={k}
-          className="rounded bg-surface border border-line px-1.5 py-0.5 text-[10px] text-content-muted"
-        >
-          <span className="font-medium text-content">{k}</span>
-          {" "}
-          {String(v).slice(0, 40)}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function ToolRow({ activity }: { activity: ToolActivity }) {
-  const { t } = useTranslation("chat");
-  const [open, setOpen] = useState(false);
-  const meta = useToolMeta(activity.tool);
-  const parsed = activity.result ? parseToolResult(activity.result) : null;
-
-  // Primary arg value for the header preview (first non-empty value)
-  const primaryArg = Object.values(activity.args).find(
-    (v) => v !== undefined && v !== null && v !== ""
-  );
-
-  return (
-    <div className="rounded-lg border border-line bg-surface-raised overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
-      >
-        {/* status */}
-        <span className="shrink-0">
-          {activity.status === "running" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
-          ) : (
-            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gain/20 text-gain">
-              <Check className="h-2.5 w-2.5" />
-            </span>
-          )}
-        </span>
-
-        {/* icon + label */}
-        <span className="text-sm leading-none">{meta.icon}</span>
-        <span className="text-[12px] font-medium text-content">{meta.label}</span>
-
-        {/* primary arg chip */}
-        {primaryArg !== undefined && (
-          <span className="rounded bg-surface border border-line px-1.5 py-0.5 text-[10px] font-mono text-accent">
-            {String(primaryArg).slice(0, 30)}
-          </span>
-        )}
-
-        <span className="ml-auto shrink-0 text-content-muted">
-          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        </span>
-      </button>
-
-      {open && (
-        <div className="border-t border-line px-3 py-3 space-y-3">
-          {/* args */}
-          {Object.keys(activity.args).length > 0 && (
-            <div>
-              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-content-muted">
-                {t("input")}
-              </p>
-              <ArgPills args={activity.args} />
-            </div>
-          )}
-
-          {/* result */}
-          {parsed !== null ? (
-            <div>
-              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-content-muted">
-                {t("result")}
-              </p>
-              <ResultView data={parsed} tool={activity.tool} />
-            </div>
-          ) : activity.status === "running" ? (
-            <p className="text-[11px] italic text-content-muted">{t("fetching")}</p>
-          ) : null}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AgentActivity({
-  agent,
-  activities,
-}: {
-  agent: string | null;
-  activities: ToolActivity[];
-}) {
-  const { t } = useTranslation("chat");
-  const runningCount = activities.filter((a) => a.status === "running").length;
-  const doneCount = activities.filter((a) => a.status === "done").length;
-
-  return (
-    <div className="space-y-3">
-      {/* header */}
-      <div className="flex items-center gap-2">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
-        <span className="text-[12px] font-medium text-content">
-          {agent ?? t("thinking")}
-        </span>
-        {activities.length > 0 && (
-          <span className="ml-auto text-[10px] text-content-muted">
-            {runningCount > 0
-              ? t("toolsProgress", { done: doneCount, total: activities.length })
-              : t("toolsDone", { count: doneCount })}
-          </span>
-        )}
-      </div>
-
-      {/* tool rows */}
-      {activities.length > 0 && (
-        <div className="space-y-1.5">
-          {activities.map((a) => (
-            <ToolRow key={a.runId} activity={a} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StepsPanel({
-  steps,
-  agent,
-  compact = false,
-  strip = false,
-}: {
-  steps: ToolActivity[];
-  agent?: string | null;
-  compact?: boolean;
-  strip?: boolean;
-}) {
-  const { t } = useTranslation("chat");
-  const [open, setOpen] = useState(false);
-  const doneCount = steps.filter((s) => s.status === "done").length;
-
-  if (strip) {
-    return (
-      <div className={cn(open && "mb-1")}>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-[11px] text-content-muted hover:text-content transition-colors py-0.5"
-        >
-          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-          {agent && <AgentBadge name={agent} className="scale-90 origin-left" />}
-          <span className="tabular-nums">{t("toolsProgress", { done: doneCount, total: steps.length })}</span>
-        </button>
-        {open && (
-          <div className="mt-2 w-full space-y-1 rounded-lg border border-line bg-surface/40 p-2 overflow-x-auto">
-            {steps.map((a) => (
-              <ToolRow key={a.runId} activity={a} />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        compact
-          ? "rounded-lg border border-line bg-surface-raised"
-          : "mt-3 border-t border-line pt-3"
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "flex w-full items-center gap-2 transition-colors",
-          compact
-            ? "px-3 py-2 text-left hover:bg-white/5"
-            : "text-[10px] text-content-muted hover:text-accent"
-        )}
-      >
-        <span className="flex items-center gap-1">
-          {open ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-          <span className="uppercase tracking-wide font-medium">{t("agentSteps")}</span>
-        </span>
-        {agent && <AgentBadge name={agent} />}
-        <span
-          className={cn(
-            "rounded-full px-1.5 py-0.5",
-            compact ? "bg-surface" : "bg-surface-raised"
-          )}
-        >
-          {t("toolsProgress", { done: doneCount, total: steps.length })}
-        </span>
-      </button>
-      {open && (
-        <div className={cn("space-y-1", compact ? "border-t border-line p-2" : "mt-2 pl-1")}>
-          {steps.map((a) => (
-            <ToolRow key={a.runId} activity={a} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function MessageActions({
@@ -1772,7 +1085,7 @@ function AttachmentStrip({
           >
             {!isError && !isUploading && (
               <div className="group/hint absolute -right-1 -top-1 z-10">
-                <div className="flex h-4 w-4 cursor-default items-center justify-center rounded-full border border-line bg-surface-raised text-[9px] font-bold text-content-muted transition-colors group-hover/hint:border-accent/50 group-hover/hint:bg-accent/10 group-hover/hint:text-accent">
+                <div className="flex h-4 w-4 cursor-default items-center justify-center rounded-full border border-line bg-surface-raised text-[10px] font-bold text-content-muted transition-colors group-hover/hint:border-accent/50 group-hover/hint:bg-accent/10 group-hover/hint:text-accent">
                   !
                 </div>
                 <div className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-52 rounded-lg border border-line bg-surface-raised px-2.5 py-2 text-[10px] leading-snug text-content-muted opacity-0 shadow-lg transition-opacity group-hover/hint:opacity-100">

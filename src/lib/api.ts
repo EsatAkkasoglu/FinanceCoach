@@ -22,10 +22,19 @@ export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ??
 export const DEMO_TOKEN_KEY = "fincoach-demo-token";
 
 async function getBearerToken(forceRefresh = false): Promise<string | null> {
-  try {
-    const firebaseToken = (await auth.currentUser?.getIdToken(forceRefresh)) ?? null;
-    if (firebaseToken) return firebaseToken;
-  } catch { /* fall through to demo token */ }
+  if (auth.currentUser) {
+    try {
+      // Race the Firebase token refresh against a 8 s deadline.
+      // If getIdToken() stalls (Firebase servers slow), we fall through so
+      // fetch() still runs and the backend can return 401 rather than hanging.
+      const tokenPromise = auth.currentUser.getIdToken(forceRefresh);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("token_timeout")), 8_000),
+      );
+      const firebaseToken = await Promise.race([tokenPromise, timeoutPromise]);
+      if (firebaseToken) return firebaseToken;
+    } catch { /* fall through to demo token */ }
+  }
   return localStorage.getItem(DEMO_TOKEN_KEY);
 }
 
@@ -46,6 +55,8 @@ export function onUnauthorized(handler: UnauthorizedHandler): () => void {
  * Fetch wrapper that attaches a fresh Firebase ID token and handles 401.
  * On first 401, force-refreshes the token and retries once before logging out.
  */
+const FETCH_TIMEOUT_MS = 25_000;
+
 export async function apiFetch(
   path: string,
   init: RequestInit = {},
@@ -54,7 +65,14 @@ export async function apiFetch(
   const token = await getBearerToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const resp = await fetch(`${API_BASE}${path}`, { ...init, headers });
+
+  // Merge caller's signal with a 25 s deadline so we never hang forever.
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, timeout])
+    : timeout;
+
+  const resp = await fetch(`${API_BASE}${path}`, { ...init, headers, signal });
 
   if (resp.status === 401 && !_retried && auth.currentUser) {
     // Force-refresh the Firebase ID token and retry once
@@ -238,6 +256,7 @@ export async function ping() {
 
 export async function listPortfolio() {
   const r = await apiFetch(`/portfolio`);
+  if (!r.ok) throw new Error(`portfolio ${r.status}`);
   return r.json() as Promise<{ holdings: Holding[]; totals: PortfolioTotals }>;
 }
 

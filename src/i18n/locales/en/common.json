@@ -18,11 +18,12 @@
   "openNav": "Open navigation",
   "disclaimer": "AI-generated suggestions, not financial advice. Consult a licensed advisor.",
   "nav": {
+    "coach": "Coach",
     "dashboard": "Dashboard",
     "portfolio": "Portfolio",
     "budget": "Budget",
-    "funds": "Funds (TR)",
-    "discover": "Discover",
+    "funds": "Funds",
+    "discover": "Markets",
     "goals": "Goals",
     "documents": "Documents",
     "settings": "Settings"
@@ -47,7 +48,7 @@
     "dueToday": "due today",
     "daysToGo": "{{days}}d to go"
   },
-  "recent": "Recent",
+  "recent": "Your chats",
   "noChatsYet": "No chats yet",
   "language": "Language",
   "languageEn": "English",

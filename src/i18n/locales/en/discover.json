@@ -1,7 +1,7 @@
 {
-  "title": "Discover",
+  "title": "Markets",
   "subtitle": "Today's movers, trending crypto, and your personalized market view.",
-  "personalizedFor": "Discover for {{name}}",
+  "personalizedFor": "Markets for {{name}}",
   "hotToday": "Hot today",
   "topGainers": "Top gainers",
   "topLosers": "Top losers",

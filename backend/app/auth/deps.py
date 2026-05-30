@@ -22,6 +22,25 @@ def get_current_user(
 
     token = credentials.credentials
 
+    # ── Legacy/demo JWT (HS256, local secret) ──────────────────────────────
+    # Try this first: it's an offline signature check, so demo tokens never hit
+    # the slow Firebase cert-fetch network call below. Real Firebase ID tokens
+    # are RS256 and fail this decode, falling through to verification.
+    try:
+        payload = decode_token(token)
+        user_id = int(payload["sub"])
+    except Exception:  # noqa: BLE001
+        user_id = None
+
+    if user_id is not None:
+        with SessionLocal() as db:
+            user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+            if user is None:
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
+            db.expunge(user)
+        current_user_id_var.set(user.id)
+        return user
+
     # ── Firebase ID token ──────────────────────────────────────────────────
     firebase_uid = verify_firebase_token(token)
     if firebase_uid:
@@ -35,21 +54,7 @@ def get_current_user(
         current_user_id_var.set(user.id)
         return user
 
-    # ── Legacy JWT fallback ────────────────────────────────────────────────
-    try:
-        payload = decode_token(token)
-        user_id = int(payload["sub"])
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token") from exc
-
-    with SessionLocal() as db:
-        user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
-        if user is None:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
-        db.expunge(user)
-
-    current_user_id_var.set(user.id)
-    return user
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
 
 
 def get_current_user_id(user: User = Depends(get_current_user)) -> int:

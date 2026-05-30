@@ -100,7 +100,7 @@ export function TickerDrawer({ ticker, onClose }: Props) {
         {/* Header */}
         <header className="mb-5 flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] uppercase tracking-widest text-content-muted">
+            <p className="text-overline uppercase text-content-muted">
               {t("drawer.tickerAnalysis")}
             </p>
             <h2 className="font-mono text-3xl font-semibold text-emerald-300 leading-tight">
@@ -255,7 +255,7 @@ function EightDimSection({ result }: { result: EightDimResult }) {
               >
                 <div className="flex items-center gap-2 text-xs">
                   {/* Label */}
-                  <span className="w-28 shrink-0 text-[10px] uppercase tracking-wide text-content-muted">
+                  <span className="w-28 shrink-0 text-overline uppercase text-content-muted">
                     {t(`drawer.dimensions.${d.key}`, { defaultValue: d.key.replace(/_/g, " ") })}
                   </span>
 
@@ -277,7 +277,7 @@ function EightDimSection({ result }: { result: EightDimResult }) {
                   {/* Strength badge */}
                   {!isUnavailable ? (
                     <span className={cn(
-                      "shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide",
+                      "shrink-0 rounded px-1 py-0.5 text-overline uppercase",
                       strength === "strong" ? "bg-gain/10 text-gain"
                       : strength === "moderate" ? "bg-accent/10 text-accent"
                       : "bg-loss/10 text-loss",
@@ -285,7 +285,7 @@ function EightDimSection({ result }: { result: EightDimResult }) {
                       {t(`drawer.scoreStrength.${strength}`)}
                     </span>
                   ) : (
-                    <span className="shrink-0 text-[9px] text-content-muted">—</span>
+                    <span className="shrink-0 text-[10px] text-content-muted">—</span>
                   )}
 
                   {/* Expand chevron */}
@@ -416,7 +416,7 @@ function TechnicalsSection({ result }: { result: TechnicalsResult }) {
       <div className="mt-3 grid grid-cols-2 gap-4 text-xs">
         {result.rsi && (
           <div>
-            <p className="text-[10px] uppercase text-content-muted">{t("drawer.rsiPeriod", { period: result.rsi.period })}</p>
+            <p className="text-overline uppercase text-content-muted">{t("drawer.rsiPeriod", { period: result.rsi.period })}</p>
             <p className="num text-2xl font-semibold leading-tight">{rsiVal?.toFixed(1) ?? "—"}</p>
             {rsiLabel && (
               <p className={cn(
@@ -447,7 +447,7 @@ function TechnicalsSection({ result }: { result: TechnicalsResult }) {
         )}
         {result.sma && (
           <div>
-            <p className="text-[10px] uppercase text-content-muted">{t("drawer.smaPeriod", { period: result.sma.period })}</p>
+            <p className="text-overline uppercase text-content-muted">{t("drawer.smaPeriod", { period: result.sma.period })}</p>
             <p className="num text-2xl font-semibold leading-tight">{result.sma.value?.toFixed(2) ?? "—"}</p>
             <p className={cn(
               "text-[11px] font-medium mt-0.5",
@@ -477,18 +477,18 @@ function DividendSection({ result }: { result: DividendResult }) {
       <h3 className="text-sm font-semibold">{t("drawer.dividendTitle")}</h3>
       <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
         <div>
-          <p className="text-[10px] uppercase text-content-muted">{t("drawer.dividendYield")}</p>
+          <p className="text-overline uppercase text-content-muted">{t("drawer.dividendYield")}</p>
           <p className="num text-xl font-semibold text-gain">{yld.toFixed(2)}%</p>
         </div>
         {result.safety_score != null && (
           <div>
-            <p className="text-[10px] uppercase text-content-muted">{t("drawer.dividendSafety")}</p>
+            <p className="text-overline uppercase text-content-muted">{t("drawer.dividendSafety")}</p>
             <p className="num text-xl font-semibold">{Math.round(result.safety_score)}/100</p>
           </div>
         )}
         {result.income_rating && (
           <div>
-            <p className="text-[10px] uppercase text-content-muted">{t("drawer.dividendRating")}</p>
+            <p className="text-overline uppercase text-content-muted">{t("drawer.dividendRating")}</p>
             <p className="text-xl font-semibold">
               {t(`drawer.dividendRatingValue.${result.income_rating}`, { defaultValue: result.income_rating })}
             </p>

@@ -160,24 +160,30 @@ export default function App() {
     // onIdTokenChanged fires on login, logout AND silent token refresh (~1 hr).
     // This keeps the local user state in sync without showing "session expired".
     return onIdTokenChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const u = await fetchMe();
-        if (u) setUser(u);
-        // if fetchMe fails (backend unreachable), keep the existing user state
-        // rather than logging out — the user is still authenticated with Firebase
-      } else if (localStorage.getItem(DEMO_TOKEN_KEY)) {
-        // Demo login: no Firebase user but we have a backend JWT
-        const u = await fetchMe();
-        if (u) {
-          setUser(u);
+      try {
+        if (firebaseUser) {
+          const u = await fetchMe();
+          if (u) setUser(u);
+          // if fetchMe fails (backend unreachable), keep the existing user state
+          // rather than logging out — the user is still authenticated with Firebase
+        } else if (localStorage.getItem(DEMO_TOKEN_KEY)) {
+          // Demo login: no Firebase user but we have a backend JWT
+          const u = await fetchMe();
+          if (u) {
+            setUser(u);
+          } else {
+            localStorage.removeItem(DEMO_TOKEN_KEY);
+            setUser(null);
+          }
         } else {
-          localStorage.removeItem(DEMO_TOKEN_KEY);
           setUser(null);
         }
-      } else {
-        setUser(null);
+      } catch {
+        // fetchMe threw (network error, timeout, etc.) — keep existing auth state
+        // and still mark as ready so the UI doesn't hang on the loading screen.
+      } finally {
+        setReady(true);
       }
-      setReady(true);
     });
   }, [setUser, setReady]);
 
@@ -240,10 +246,24 @@ export default function App() {
     return <PrefixedDashboardRedirect language={activeLanguage} />;
   }
 
-  const languageSwitcher = (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+  // Language + tour controls. Two placements:
+  //  - "fab": fixed bottom-right pill, for screens with no header (login/onboarding).
+  //  - "header": inline cluster inside the top bar, so it never collides with the
+  //    chat composer's send button in the bottom-right corner of the main app.
+  const renderLanguageControls = (variant: "fab" | "header") => (
+    <div
+      className={
+        variant === "fab"
+          ? "fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2"
+          : "relative flex items-center gap-3"
+      }
+    >
       {langOpen && (
-        <div className="flex flex-col gap-1.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2 shadow-xl">
+        <div
+          className={`flex flex-col gap-1.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2 shadow-xl ${
+            variant === "header" ? "absolute right-0 top-full z-50 mt-2" : ""
+          }`}
+        >
           {(["tr", "en"] as const).map((lang) => (
             <button
               key={lang}
@@ -263,13 +283,18 @@ export default function App() {
       {user && user.has_onboarded && <TourReplayButton />}
       <button
         onClick={() => setLangOpen((v) => !v)}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:bg-accent/90 active:scale-95"
+        className={
+          variant === "fab"
+            ? "flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:bg-accent/90 active:scale-95"
+            : "flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))]"
+        }
         title={t("language")}
       >
         <Globe className="h-4 w-4" />
       </button>
     </div>
   );
+  const languageSwitcher = renderLanguageControls("fab");
 
   if (!ready) {
     return (
@@ -311,7 +336,7 @@ export default function App() {
     "/goals":      { title: t("nav.goals"),     icon: Target         },
     "/documents":  { title: t("nav.documents"), icon: FileText       },
     "/settings":   { title: t("nav.settings"),  icon: SettingsIcon   },
-    "/chat":       { title: "Coach",            icon: MessageSquare  },
+    "/chat":       { title: t("nav.coach"),     icon: MessageSquare  },
   };
   const matchedMeta = Object.entries(PAGE_META).find(([k]) => appPath === k || appPath.startsWith(k + "/"));
   const pageMeta = matchedMeta?.[1] ?? null;
@@ -332,7 +357,6 @@ export default function App() {
   return (
     <div className="flex h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
       <DemoTour />
-      {languageSwitcher}
 
       <Sidebar
         healthy={healthy}
@@ -388,6 +412,8 @@ export default function App() {
             />
             {/* Only show currency switcher on financial pages */}
             {showCurrency && <CurrencySwitcher />}
+            {/* Language + tour controls — inline so they don't overlap the chat send button */}
+            {renderLanguageControls("header")}
           </div>
         </header>
 
@@ -399,8 +425,13 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.16, ease: "easeOut" }}
-            className="flex-1 overflow-y-auto p-4 pb-20 md:p-8 md:pb-8"
+            className={
+              onChatRoute
+                ? "flex-1 overflow-y-auto"
+                : "flex-1 overflow-y-auto px-4 pb-24 pt-6 md:px-8 md:pb-12 md:pt-10"
+            }
           >
+            <div className={onChatRoute ? "h-full" : "mx-auto w-full max-w-5xl"}>
             <Routes location={location}>
               <Route path="/" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="/:lang/dashboard" element={<Dashboard />} />
@@ -417,6 +448,7 @@ export default function App() {
               <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
             </Routes>
+            </div>
           </motion.main>
         </AnimatePresence>
 

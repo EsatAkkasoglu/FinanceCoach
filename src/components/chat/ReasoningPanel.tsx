@@ -34,7 +34,7 @@ function DriverChip({ source, factor, impact }: { source: string; factor: string
   return (
     <div className="rounded-md border border-line bg-surface px-2 py-1.5 text-[11px] leading-snug">
       <div className="flex items-center gap-1.5">
-        <span className="rounded bg-accent-muted/40 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-accent">
+        <span className="rounded bg-accent-muted/40 px-1.5 py-0.5 text-overline uppercase text-accent">
           {labelSource(source, t)}
         </span>
       </div>
@@ -101,7 +101,7 @@ function ReasoningCard({ entry }: { entry: ReasoningEntry }) {
         <div className="space-y-3 border-t border-line px-3 py-3">
           {hasKey && (
             <div>
-              <p className="mb-1.5 text-[9px] uppercase tracking-widest text-content-muted">
+              <p className="mb-1.5 text-overline uppercase text-content-muted">
                 {t("reasoning.keyFactors")}
               </p>
               <div className="grid gap-1.5 sm:grid-cols-2">
@@ -113,7 +113,7 @@ function ReasoningCard({ entry }: { entry: ReasoningEntry }) {
           )}
           {hasAlloc && entry.allocation_drivers && (
             <div className="space-y-2">
-              <p className="text-[9px] uppercase tracking-widest text-content-muted">
+              <p className="text-overline uppercase text-content-muted">
                 {t("reasoning.allocationRationale")}
               </p>
               {entry.allocation_drivers

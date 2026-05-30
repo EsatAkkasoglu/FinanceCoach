@@ -1,7 +1,7 @@
 {
-  "title": "Keşfet",
+  "title": "Piyasalar",
   "subtitle": "Günün hareketleri, trend kriptolar ve kişiselleştirilmiş piyasa görünümü.",
-  "personalizedFor": "{{name}} için keşfet",
+  "personalizedFor": "{{name}} için piyasalar",
   "hotToday": "Bugün popüler",
   "topGainers": "En çok kazananlar",
   "topLosers": "En çok kaybedenler",

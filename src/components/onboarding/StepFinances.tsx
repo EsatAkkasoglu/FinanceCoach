@@ -337,7 +337,7 @@ function ManualPanel({
               className="mt-2 overflow-hidden rounded-xl border border-line bg-surface-raised p-4 space-y-3"
             >
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.sourceName")}</span>
+                <span className="text-overline uppercase text-content-muted">{t("finances.sourceName")}</span>
                 <input
                   autoFocus
                   value={incomeForm.label}
@@ -349,7 +349,7 @@ function ManualPanel({
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.monthlyAmount")}</span>
+                  <span className="text-overline uppercase text-content-muted">{t("finances.monthlyAmount")}</span>
                   <input
                     type="number" min={0} step={100}
                     value={incomeForm.amount || ""}
@@ -360,7 +360,7 @@ function ManualPanel({
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.currency")}</span>
+                  <span className="text-overline uppercase text-content-muted">{t("finances.currency")}</span>
                   <select value={incomeForm.currency} onChange={(e) => setIncomeForm((f) => ({ ...f, currency: e.target.value }))}
                     className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent">
                     {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
@@ -397,7 +397,7 @@ function ManualPanel({
               className="mt-2 overflow-hidden rounded-xl border border-line bg-surface-raised p-4 space-y-3"
             >
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.accountName")}</span>
+                <span className="text-overline uppercase text-content-muted">{t("finances.accountName")}</span>
                 <input
                   autoFocus
                   value={accountForm.name}
@@ -408,28 +408,28 @@ function ManualPanel({
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.type")}</span>
+                  <span className="text-overline uppercase text-content-muted">{t("finances.type")}</span>
                   <select value={accountForm.kind} onChange={(e) => setAccountForm((f) => ({ ...f, kind: e.target.value as AccountKind }))}
                     className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent">
                     {Object.entries(KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.institution")}</span>
+                  <span className="text-overline uppercase text-content-muted">{t("finances.institution")}</span>
                   <input value={accountForm.institution}
                     onChange={(e) => setAccountForm((f) => ({ ...f, institution: e.target.value }))}
                     placeholder="Garanti, Ziraat…"
                     className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent" />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-content-muted">{t("finances.balance")}</span>
+                  <span className="text-overline uppercase text-content-muted">{t("finances.balance")}</span>
                   <input type="number" min={0} value={accountForm.balance || ""}
                     onChange={(e) => setAccountForm((f) => ({ ...f, balance: Number(e.target.value) }))}
                     placeholder="50 000"
                     className="num mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent" />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-wide text-content-muted">Currency</span>
+                  <span className="text-overline uppercase text-content-muted">Currency</span>
                   <select value={accountForm.currency} onChange={(e) => setAccountForm((f) => ({ ...f, currency: e.target.value }))}
                     className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent">
                     {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
