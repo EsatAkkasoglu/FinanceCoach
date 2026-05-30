@@ -14,6 +14,13 @@
     "value": "Piyasa Değeri",
     "pnl": "Kar / Zarar"
   },
+  "chart": {
+    "title": "Fiyat geçmişi",
+    "price": "Fiyat",
+    "close": "Kapat",
+    "open": "Fiyat geçmişini gör",
+    "noData": "Geçmiş veri bulunamadı."
+  },
   "empty": {
     "title": "Yatırımlarınızı ekleyin",
     "desc": "Hisse, ETF, kripto ve tahvilleri tek yerden takip edin.",

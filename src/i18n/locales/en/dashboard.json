@@ -95,5 +95,13 @@
     "price": "Price",
     "value": "Value",
     "pnl": "P&L"
-  }
+  },
+  "marketOpen": "Market open",
+  "marketPre": "Pre-market",
+  "marketPost": "After hours",
+  "marketClosed": "Market closed",
+  "addHoldingsHint": "Go to Portfolio to add your first holding",
+  "savingsTarget": "target",
+  "savingsStrong": "Strong savings pace this month.",
+  "savingsLow": "Room to push your savings rate higher."
 }

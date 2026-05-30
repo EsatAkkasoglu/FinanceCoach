@@ -12,6 +12,7 @@ import { useDashboardStore } from "@/store";
 import { useFxRates, type UseFxRates } from "@/lib/fx";
 import { Button } from "@/components/ui/Button";
 import { HoldingFormModal } from "./HoldingFormModal";
+import { HoldingChartDrawer } from "./HoldingChartDrawer";
 import { TickerDrawer } from "@/components/insights/TickerDrawer";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 
@@ -20,6 +21,7 @@ const ASSET_BADGE: Record<string, string> = {
   etf: "bg-gain/10 text-gain",
   crypto: "bg-warning/15 text-warning",
   bond: "bg-accent/15 text-accent",
+  fund: "bg-[#8B5CF6]/15 text-[#8B5CF6]",
   cash: "bg-surface-raised text-content-muted",
 };
 
@@ -34,6 +36,7 @@ export function Portfolio() {
   const [editing, setEditing] = useState<Holding | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [analysisTicker, setAnalysisTicker] = useState<string | null>(null);
+  const [chartHolding, setChartHolding] = useState<Holding | null>(null);
 
   const invalidateDashboard = useDashboardStore((s) => s.invalidate);
   const fx = useFxRates();
@@ -116,6 +119,7 @@ export function Portfolio() {
             onEdit={setEditing}
             onDelete={handleDelete}
             onAnalyze={setAnalysisTicker}
+            onChart={setChartHolding}
           />
         </>
       )}
@@ -132,6 +136,11 @@ export function Portfolio() {
         editing={editing}
       />
       <TickerDrawer ticker={analysisTicker} onClose={() => setAnalysisTicker(null)} />
+      <HoldingChartDrawer
+        ticker={chartHolding?.ticker ?? null}
+        assetClass={chartHolding?.asset_class ?? null}
+        onClose={() => setChartHolding(null)}
+      />
       <Disclaimer className="mt-8 text-center" />
     </div>
   );
@@ -199,7 +208,7 @@ function SummaryRow({
 // ── Holdings table ──────────────────────────────────────────────────────────
 
 function HoldingsTable({
-  holdings, deletingId, fx, onEdit, onDelete, onAnalyze,
+  holdings, deletingId, fx, onEdit, onDelete, onAnalyze, onChart,
 }: {
   holdings: Holding[];
   deletingId: number | null;
@@ -207,6 +216,7 @@ function HoldingsTable({
   onEdit: (h: Holding) => void;
   onDelete: (h: Holding) => void;
   onAnalyze: (ticker: string) => void;
+  onChart: (h: Holding) => void;
 }) {
   const { t } = useTranslation("portfolio");
   // Convert a per-holding figure to the display currency, falling back to
@@ -242,7 +252,21 @@ function HoldingsTable({
                 deletingId === h.id && "opacity-40 pointer-events-none",
               )}
             >
-              <td className="px-4 py-3 font-semibold">{h.ticker}</td>
+              <td className="px-4 py-3 font-semibold">
+                {h.asset_class === "cash" ? (
+                  h.ticker
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onChart(h)}
+                    className="rounded text-left hover:text-accent hover:underline underline-offset-2"
+                    title={t("chart.open", { defaultValue: `Price history for ${h.ticker}` })}
+                    aria-label={t("chart.open", { defaultValue: `Price history for ${h.ticker}` })}
+                  >
+                    {h.ticker}
+                  </button>
+                )}
+              </td>
               <td className="px-3 py-3">
                 <span className={cn("rounded px-1.5 py-0.5 text-[10px] uppercase", ASSET_BADGE[h.asset_class])}>
                   {h.asset_class}

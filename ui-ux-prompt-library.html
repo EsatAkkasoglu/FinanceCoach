@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI/UX AI Prompt Library</title>
+<style>
+  :root {
+    --bg: #0a0b10;
+    --bg-elev: #13151d;
+    --bg-card: #161824;
+    --bg-card-hover: #1c1f2e;
+    --border: #262a3b;
+    --border-bright: #353a52;
+    --text: #e7e9f0;
+    --text-dim: #9aa0b4;
+    --text-faint: #686d82;
+    --accent: #7c6cff;
+    --accent-2: #28d6c8;
+    --accent-glow: rgba(124, 108, 255, 0.35);
+    --radius: 14px;
+    --radius-sm: 9px;
+    --shadow: 0 10px 40px -12px rgba(0,0,0,0.6);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  #bg-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .shell { position: relative; z-index: 1; }
+
+  /* ---------- Header ---------- */
+  header {
+    padding: 56px 24px 32px;
+    text-align: center;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    font-weight: 600;
+    padding: 6px 14px;
+    border: 1px solid var(--border-bright);
+    border-radius: 999px;
+    background: rgba(40, 214, 200, 0.06);
+    margin-bottom: 22px;
+  }
+  .eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent-2);
+    box-shadow: 0 0 10px var(--accent-2);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  h1 {
+    font-size: clamp(2.1rem, 5vw, 3.4rem);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    background: linear-gradient(135deg, #fff 0%, #c8c5ff 45%, #28d6c8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 16px;
+  }
+  header p {
+    color: var(--text-dim);
+    font-size: clamp(0.98rem, 2vw, 1.12rem);
+    max-width: 620px;
+    margin: 0 auto;
+  }
+  .stat-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 28px;
+  }
+  .stat {
+    font-size: 13px;
+    color: var(--text-faint);
+  }
+  .stat b { color: var(--text); font-weight: 700; }
+
+  /* ---------- Controls ---------- */
+  .controls {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(10, 11, 16, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    margin-top: 8px;
+  }
+  .controls-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .search-wrap { position: relative; }
+  .search-wrap svg {
+    position: absolute;
+    left: 16px; top: 50%;
+    transform: translateY(-50%);
+    width: 18px; height: 18px;
+    color: var(--text-faint);
+  }
+  #search {
+    width: 100%;
+    padding: 14px 16px 14px 46px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 15px;
+    font-family: var(--sans);
+    outline: none;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  #search::placeholder { color: var(--text-faint); }
+  #search:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-glow);
+  }
+  .filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .chip {
+    padding: 8px 15px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .16s;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .chip:hover { border-color: var(--border-bright); color: var(--text); transform: translateY(-1px); }
+  .chip.active {
+    background: linear-gradient(135deg, var(--accent), #6354e0);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 6px 18px -6px var(--accent-glow);
+  }
+  .chip .count {
+    opacity: .65;
+    font-size: 11px;
+    margin-left: 5px;
+  }
+
+  /* ---------- Main ---------- */
+  main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 36px 24px 80px;
+  }
+  .section { margin-bottom: 52px; scroll-margin-top: 150px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .section-head h2 {
+    font-size: 1.5rem;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+  }
+  .section-head .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .section-desc {
+    color: var(--text-dim);
+    font-size: 14.5px;
+    margin-bottom: 22px;
+    max-width: 760px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    transition: border-color .18s, transform .18s, box-shadow .18s;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  .card:hover {
+    border-color: var(--border-bright);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow);
+  }
+  .card:hover::before { opacity: 1; }
+  .card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .card-title {
+    font-size: 15.5px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+  }
+  .card-id {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent-2);
+    font-weight: 700;
+    background: rgba(40, 214, 200, 0.08);
+    padding: 3px 7px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .card-blurb {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 14px;
+    line-height: 1.45;
+  }
+  .prompt-box {
+    position: relative;
+    background: #0c0d14;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-top: auto;
+  }
+  .prompt-text {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: #c5c9da;
+    padding: 14px 14px 14px;
+    max-height: 160px;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-word;
+    position: relative;
+    transition: max-height .25s ease;
+  }
+  .prompt-text.expanded { max-height: 1400px; }
+  .prompt-text:not(.expanded).clipped::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 48px;
+    background: linear-gradient(transparent, #0c0d14);
+    pointer-events: none;
+  }
+  .prompt-text .ph { color: var(--accent-2); font-style: italic; }
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    padding: 0 12px 12px;
+  }
+  .btn {
+    flex: 1;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 650;
+    font-family: var(--sans);
+    cursor: pointer;
+    border: 1px solid var(--border-bright);
+    background: var(--bg-elev);
+    color: var(--text);
+    transition: all .15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .btn:hover { background: var(--bg-card-hover); border-color: var(--accent); }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--accent), #6354e0);
+    border-color: transparent;
+    color: #fff;
+  }
+  .btn.primary:hover { filter: brightness(1.1); box-shadow: 0 6px 16px -6px var(--accent-glow); }
+  .btn.copied { background: linear-gradient(135deg, #1ea672, #16c08a); border-color: transparent; color: #fff; }
+  .btn svg { width: 14px; height: 14px; }
+  .btn-toggle { flex: 0 0 auto; }
+
+  .empty {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text-faint);
+    display: none;
+  }
+  .empty.show { display: block; }
+  .empty svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: .5; }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: fixed;
+    bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(120px);
+    background: var(--bg-elev);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 600;
+    box-shadow: var(--shadow);
+    z-index: 100;
+    transition: transform .3s cubic-bezier(.16,1,.3,1);
+    display: flex; align-items: center; gap: 8px;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast svg { width: 16px; height: 16px; color: var(--accent-2); }
+
+  /* ---------- Tip banner ---------- */
+  .tip {
+    max-width: 1180px;
+    margin: 0 auto 8px;
+    padding: 0 24px;
+  }
+  .tip-inner {
+    background: linear-gradient(135deg, rgba(124,108,255,0.08), rgba(40,214,200,0.05));
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-size: 13.5px;
+    color: var(--text-dim);
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .tip-inner b { color: var(--text); }
+  .tip-inner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--accent-2); margin-top: 1px; }
+
+  footer {
+    text-align: center;
+    padding: 40px 24px 56px;
+    color: var(--text-faint);
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+    header { padding-top: 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; scroll-behavior: auto; }
+    #bg-canvas { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div class="shell">
+  <header>
+    <span class="eyebrow"><span class="dot"></span>AI Prompt Library</span>
+    <h1>UI/UX AI Prompt Library</h1>
+    <p>A systematic toolkit for auditing and elevating your website's design and experience — with Three.js and modern motion woven throughout. Search, filter, fill the <span style="color:var(--accent-2)">{placeholders}</span>, copy, and paste into any AI assistant.</p>
+    <div class="stat-row">
+      <span class="stat"><b id="stat-prompts">0</b> prompts</span>
+      <span class="stat"><b id="stat-cats">0</b> categories</span>
+      <span class="stat"><b>1-click</b> copy</span>
+      <span class="stat"><b>Tailored</b> for your stack</span>
+    </div>
+  </header>
+
+  <div class="tip">
+    <div class="tip-inner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16v-4M12 8h.01"/><circle cx="12" cy="12" r="10"/></svg>
+      <div>Every prompt works best when you <b>ground the AI in a real artifact</b> — a screenshot, a live URL, a Figma link, or pasted component code — and ask it to <b>prioritize by impact-to-effort</b>. The first reply is a draft; follow up with "go deeper on #2."</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="controls-inner">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="search" type="text" placeholder="Search prompts — try 'accessibility', 'three.js', 'cta', 'tokens'…" autocomplete="off">
+      </div>
+      <div class="filters" id="filters"></div>
+    </div>
+  </div>
+
+  <main id="main"></main>
+
+  <div class="empty" id="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <div>No prompts match your search.</div>
+  </div>
+
+  <footer>
+    Built for systematic, repeatable design improvement. Treat every prompt as a starting template, ground the AI in a real artifact, and always ask it to prioritize.
+  </footer>
+</div>
+
+<div id="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg><span>Copied to clipboard</span></div>
+
+<script>
+const CATEGORIES = [
+  { id: "audit",     num: "01", label: "Audit",            title: "UI/UX Audit Prompts", desc: "Get an honest, structured read on where your site stands. Run one category at a time for deeper analysis per dimension." },
+  { id: "ui",        num: "02", label: "UI Fixes",         title: "UI Improvement Prompts", desc: "The audit tells you what's wrong; these generate the fixes — layout, CTAs, whitespace, IA, and visual consistency." },
+  { id: "ux",        num: "03", label: "UX",               title: "UX Enhancement Prompts", desc: "Journey mapping, friction teardowns, scannability, conversion, navigation, and cognitive-load reduction." },
+  { id: "variations",num: "04", label: "Variations / A·B", title: "Design Variations & A/B Testing", desc: "Explore distinct directions and build a prioritized experiment backlog." },
+  { id: "systems",   num: "05", label: "Design Systems",   title: "Style Guides & Design Systems", desc: "Extract tokens, build systems from scratch, document components, and lint for consistency." },
+  { id: "motion",    num: "06", label: "Three.js + Motion",title: "Three.js & Modern Animation", desc: "Where a site goes from clean to memorable. Motion must serve clarity — performance and reduced-motion are non-negotiable." },
+  { id: "tailored",  num: "07", label: "Your Stack",       title: "Tailored for Your Stack", desc: "Pre-filled for React 18 + TypeScript, Tailwind + shadcn/ui, Zustand, recharts, reactflow, framer-motion — plus a game-designer's eye for feel." },
+];
+
+const PROMPTS = [
+  // ---- AUDIT ----
+  { cat:"audit", id:"1.1", title:"Master audit (start here)", blurb:"A full heuristic evaluation across every dimension, scored 1–5, ending with the highest-leverage change.",
+    text:`You are a senior product designer conducting a heuristic evaluation.
+I'll give you {a screenshot / a live URL / the page's HTML+CSS}.
+
+Audit this screen across these dimensions and rate each 1–5 with a one-line justification:
+- Visual hierarchy (does the eye land on what matters first?)
+- Color & contrast
+- Typography & readability
+- Navigation clarity
+- Spacing & layout rhythm
+- Mobile responsiveness (if visible)
+- Accessibility (obvious issues only)
+- Overall first impression
+
+Then give me: the 3 most damaging problems, and the single change with the highest impact-to-effort ratio. Be specific and blunt.
+
+Artifact: {paste / attach}` },
+  { cat:"audit", id:"1.2", title:"Visual hierarchy", blurb:"Map intended vs. actual reading order and find what's fighting for attention.",
+    text:`Analyze the visual hierarchy of this screen. Map the intended reading order (1st, 2nd, 3rd?) versus the actual order your eye follows. Where do they diverge?
+
+Evaluate size contrast, weight contrast, color/emphasis, positioning, and whitespace as hierarchy tools. Tell me which element is over-emphasized and which primary action is under-emphasized.
+
+Give me 3 specific adjustments (e.g. "increase the H1 from 32px to 44px and mute the subtitle") to make the hierarchy unmistakable.
+
+Artifact: {screenshot / URL}` },
+  { cat:"audit", id:"1.3", title:"Color scheme consistency", blurb:"Extract the palette, find inconsistencies and contrast failures, output cleaned tokens.",
+    text:`Audit the color usage on {URL / screenshots}. Extract the apparent palette (primary, secondary, accent, neutrals, semantic success/warning/error). Identify:
+- Inconsistencies (near-duplicate grays, off-brand one-offs)
+- Whether the accent/CTA color is reserved for actions or diluted by overuse
+- Contrast failures vs WCAG AA (4.5:1 body, 3:1 large/UI)
+- Whether the palette supports a clear light/dark mode
+
+Output a cleaned-up token set (hex + semantic names) and a list of "replace X with Y" fixes.` },
+  { cat:"audit", id:"1.4", title:"Typography & readability", blurb:"Assess the type scale, line length, pairing, and propose a coherent scale.",
+    text:`Evaluate the typography of {URL / screenshot}. Assess:
+- Type scale: how many distinct sizes/weights, coherent or ad hoc?
+- Line length (target 50–75 characters for body)
+- Line height / leading
+- Font pairing and tone fit
+- Readability issues: low contrast, all-caps overuse, text-over-image legibility
+
+Propose a clean type scale (display, h1–h4, body, caption) with specific px/rem values, weights, and line-heights.` },
+  { cat:"audit", id:"1.5", title:"Navigation intuitiveness", blurb:"First-click heuristic: information scent, labels, depth, and a real task trace.",
+    text:`You are running a first-click usability heuristic. Looking at {URL / nav screenshot}, evaluate:
+- Is it obvious where the user is and where they can go?
+- Are labels in the user's language or internal jargon?
+- Is the information scent strong (can users predict what's behind each link)?
+- Are top-level items within the 5±2 range?
+- Mobile: is the pattern appropriate?
+
+Run this scenario: "{a real task, e.g. 'a new user wants pricing'}". Trace the path. Where would they hesitate? Suggest a clearer structure and labels.` },
+  { cat:"audit", id:"1.6", title:"Mobile responsiveness", blurb:"Flag tap targets, wrapping, scroll risks, and hover-only breakage at 375px / 768px.",
+    text:`Review this layout for mobile (~375px) and tablet (~768px). {Provide: mobile screenshot, OR desktop screenshot + "infer likely mobile issues", OR the responsive CSS.}
+
+Flag: tap targets under 44×44px, text that wraps/truncates awkwardly, horizontal scroll risks, sections that won't reflow, sticky elements that eat the viewport, and hover-only interactions that break on touch.
+
+Prioritize issues that make the page feel broken vs. merely imperfect, with the fix for each.` },
+  { cat:"audit", id:"1.7", title:"Accessibility (WCAG 2.1 AA)", blurb:"Contrast, keyboard, semantics, alt text, forms, motion safety — with criterion + fix.",
+    text:`Run a WCAG 2.1 AA accessibility review of {URL / this HTML}. Check:
+- Color contrast (text and UI components)
+- Keyboard navigability and visible focus states
+- Semantic HTML / landmarks / heading order
+- Alt text and non-text content
+- Form labels, error identification, instructions
+- Touch target size, prefers-reduced-motion, text resize
+
+For each issue give: the WCAG success criterion, severity, where it occurs, and a concrete code-level fix. End with the top 5 to fix first.` },
+  { cat:"audit", id:"1.8", title:"End-to-end user flow", blurb:"Map a primary flow step by step; find friction, dead ends, and unnecessary steps.",
+    text:`Map the primary user flow for {goal, e.g. "sign up and complete onboarding"} based on {these screens / this URL}. For each step list: the user's goal, what the screen asks, friction points, and drop-off risks.
+
+Identify unnecessary steps, redundant data entry, dead ends, and moments where the user won't know what happens next. Propose a streamlined flow with fewer steps and the riskiest friction eliminated.` },
+  { cat:"audit", id:"1.9", title:"5-second first-impression test", blurb:"Simulate a first-time visitor with 5 seconds, then quiz from memory.",
+    text:`You are a first-time visitor. You can look at this screen for 5 seconds only, then I take it away. {Screenshot.}
+
+Now answer from memory: What is this product? What can I do here? What stood out? What did you NOT notice? Was the main action obvious?
+
+Then tell me what to change so those answers would be unambiguous after 5 seconds.` },
+  { cat:"audit", id:"1.10", title:"Competitive heuristic benchmark", blurb:"Compare against best-in-class conventions; get a keep/fix/steal list.",
+    text:`Compare my screen ({screenshot/URL}) against the conventions of best-in-class {category, e.g. "fintech dashboards" / "indie game landing pages"}. Where does mine deviate in ways that help vs. hurt? Which conventions am I missing that users expect?
+
+Give me a "keep / fix / steal" list: what's working, what's broken, and what to borrow from the best.` },
+
+  // ---- UI ----
+  { cat:"ui", id:"2.1", title:"Layout optimization", blurb:"Two distinct layout directions with trade-offs, same content and brand.",
+    text:`Redesign the layout of {this screen} for clarity and focus. Keep the same content and brand. Consider: a clearer grid, better content grouping (proximity), a deliberate F- or Z-pattern for scanning, and a stronger above-the-fold.
+
+Give me 2 distinct layout directions described concretely (sections, order, emphasis), and the trade-offs of each. {Attach current layout.}` },
+  { cat:"ui", id:"2.2", title:"Button & CTA placement", blurb:"Audit every button's weight, label, and placement; define one clear primary action.",
+    text:`Audit every button and CTA on {this screen}. For each: is it weighted correctly for its importance (primary/secondary/tertiary)? Is the label action-oriented ("Start free trial" > "Submit")? Is the primary CTA where the eye arrives and repeated at logical scroll points? Are competing CTAs diluting the main action?
+
+Recommend a clear button hierarchy, exact labels, and placement for the one action this page most wants.` },
+  { cat:"ui", id:"2.3", title:"Whitespace & spacing rhythm", blurb:"Find cramped/cluttered areas, propose an 8px scale, say where to add or tighten.",
+    text:`Evaluate the use of whitespace and spacing on {this screen}. Identify cramped areas and awkward/inconsistent gaps.
+
+Propose a consistent spacing scale (4px or 8px base: 4/8/12/16/24/32/48/64) and tell me specifically where to add breathing room and where to tighten. Explain how better spacing alone improves perceived hierarchy and quality.` },
+  { cat:"ui", id:"2.4", title:"Information architecture", blurb:"Is content grouped how users think? Propose a revised sitemap/outline.",
+    text:`Review the information architecture of {this page / sitemap}. Is content grouped how users think, or how the org is structured? Are labels clear? Is anything buried that should be surfaced, or vice versa?
+
+Propose a revised structure (content outline or sitemap) with clearer grouping and labels, and the reasoning for any move.` },
+  { cat:"ui", id:"2.5", title:"Visual consistency sweep", blurb:"List every inconsistency by type and the canonical value each should use.",
+    text:`Scan {these screens} for visual inconsistencies: mismatched button styles, varying corner radii, inconsistent shadows, differing icon styles/weights, one-off spacing, near-duplicate colors, and typographic drift.
+
+List every inconsistency grouped by type, and give the single canonical value each should standardize to. The goal is a system, not a collection.` },
+  { cat:"ui", id:"2.6", title:"Component-level redesign", blurb:"Redesign one component with full state coverage and better affordance.",
+    text:`Redesign this single component: {paste / screenshot}. Keep its function identical. Improve: visual hierarchy within the component, state handling (default / hover / active / focus / disabled / loading / error / empty), spacing, and affordance (does it look interactive?).
+
+Provide the improved design as {a description / Tailwind classes / the JSX}, plus the full set of states.` },
+  { cat:"ui", id:"2.7", title:'"Make it feel premium"', blurb:"A prioritized craft-level polish checklist, cheapest-highest-impact first.",
+    text:`This screen works but feels {generic / dated / cheap / unfinished}: {screenshot}. Without changing the content or core layout, tell me the specific craft-level moves that would make it feel premium and modern — refined type, tighter spacing, subtle depth/shadows, micro-interactions, better empty states, purposeful motion.
+
+Give me a prioritized "polish checklist" of 8–12 concrete changes, cheapest-highest-impact first.` },
+
+  // ---- UX ----
+  { cat:"ux", id:"3.1", title:"User journey mapping", blurb:"Stage-by-stage map with actions, emotions, friction, and the two leakiest stages.",
+    text:`Build a user journey map for {persona, e.g. "a first-time user evaluating whether to sign up"} pursuing {goal}. For each stage (Awareness → Consideration → Onboarding → Activation → Retention, or stages that fit better), capture: actions, goal, likely thoughts/emotions, friction points, and opportunities to delight or reassure.
+
+Output as a table. Then highlight the two stages where I'm most likely losing people and what to do about each.` },
+  { cat:"ux", id:"3.2", title:"Friction-point teardown", blurb:"Walk the flow as an impatient skeptic; rank friction by users it costs.",
+    text:`You are a conversion-focused UX strategist. Walk through {this flow: screens / URL} as a skeptical, busy, impatient user. Narrate every point of friction: confusing, slow, redundant, anxiety-inducing (e.g. asking for a card too early), or requiring unnecessary thought.
+
+Rank friction points by how many users they'd cost me. For the top 3, give a specific fix and the principle behind it (Hick's law, recognition over recall, etc.).` },
+  { cat:"ux", id:"3.3", title:"Readability & scannability", blurb:"Evaluate for skim-readers; rewrite one section to be maximally scannable.",
+    text:`Evaluate how scannable {this page} is for someone who will NOT read every word. Assess: heading structure, paragraph length, bullets/lists, bolding of key phrases, front-loading of important info, and visual anchors.
+
+Rewrite one representative section to be maximally scannable while keeping the meaning, and give the general rules to apply to the rest.` },
+  { cat:"ux", id:"3.4", title:"CTA & conversion optimization", blurb:"Sharpen value prop, objection handling, social proof, and CTA copy.",
+    text:`Optimize {this page} for its primary conversion goal: {goal}. Analyze value-proposition clarity, objection handling, social-proof placement, CTA wording and prominence, and the cognitive load of the ask.
+
+Suggest: a sharper above-the-fold value statement, the ideal moments to place CTAs, what reassurance to add near the action (guarantees, "no card required"), and 3 alternative CTA copy options to test.` },
+  { cat:"ux", id:"3.5", title:"Navigation structure redesign", blurb:"Design a task-mapped nav from your destinations and top user tasks.",
+    text:`Propose a more intuitive navigation structure for {site / app}. Main destinations users need: {list}. Top tasks users come to do: {list}.
+
+Design a nav (top-level items, grouping, labels, and the pattern — top nav / sidebar / tab bar / mega-menu) that maps to tasks, minimizes depth, and uses plain language. Explain why this beats {current}.` },
+  { cat:"ux", id:"3.6", title:"Onboarding & empty states", blurb:"Guide new users to their first 'aha'; design the 3 key empty states.",
+    text:`Design the onboarding and empty-state experience for {feature/app}. For a brand-new user with no data, what should each empty state say and offer so it guides action instead of looking broken? What's the minimum first-run flow to reach their first "aha" fastest?
+
+Give me copy + layout for the 3 most important empty states and a lean onboarding sequence.` },
+  { cat:"ux", id:"3.7", title:"Microcopy & UX writing", blurb:"Rewrite labels, hints, errors, tooltips; before/after table, no dead-end errors.",
+    text:`Review and rewrite the UX copy on {this screen}. Tighten button labels, form hints, error messages, tooltips, and empty states. Make them clear, human, and confidence-inspiring — no jargon, no dead-end errors (every error says what happened and what to do next).
+
+Give me a before/after table for each string. Tone: {e.g. "friendly and plain" / "precise and trustworthy"}.` },
+  { cat:"ux", id:"3.8", title:"Cognitive load reduction", blurb:"Apply Hick's/Miller's law + recognition-over-recall; rank by effort saved.",
+    text:`Analyze {this screen} for cognitive load. Where am I making the user think, remember, compare, or decide more than necessary? Apply Hick's law (too many choices), Miller's law (too much to hold in memory), and recognition over recall.
+
+Tell me what to remove, defer, group, or set as a smart default to make the screen feel effortless. Rank by how much mental effort each change saves.` },
+
+  // ---- VARIATIONS ----
+  { cat:"variations", id:"4.1", title:"Distinct design directions", blurb:"Three genuinely different directions, each named, with audience fit and risk.",
+    text:`Generate 3 genuinely distinct design directions for {this screen}, not 3 minor variations. For each, give it a name and a one-line concept (e.g. "Editorial & calm," "Bold & high-contrast," "Dense & data-forward"), then describe the layout, type treatment, color emphasis, and motion approach.
+
+Tell me which audience and brand each suits best, and the risk of each.` },
+  { cat:"variations", id:"4.2", title:"A/B test hypothesis backlog", blurb:"Ten test ideas with hypothesis, metric, effect size, effort — sorted by leverage.",
+    text:`You are a growth/experimentation lead. For {this page} with the goal of {metric, e.g. "increase signup conversion"}, generate a backlog of 10 A/B test ideas.
+
+For each state: the hypothesis ("If we ___, then ___ because ___"), the specific change, the primary metric, rough expected effect size, and effort (S/M/L). Sort by impact-to-effort. Flag which 2 I should run first and why.` },
+  { cat:"variations", id:"4.3", title:"Single-variable variant generator", blurb:"Five variants of ONE element, each testing a distinct psychological angle.",
+    text:`I want to A/B test {one element, e.g. "the hero headline" / "the CTA color" / "the pricing layout"}. Generate {5} meaningfully different variants for ONLY that element, holding everything else constant.
+
+For each, explain the psychological angle it tests (urgency, clarity, social proof, simplicity) and what a win would tell me about my users.` },
+  { cat:"variations", id:"4.4", title:"Headline & value-prop variations", blurb:"Eight hero headline/subhead variants across angles; top 3 to test first.",
+    text:`Write 8 variations of the hero headline + subheadline for {product}. Audience: {who}; core value: {what}; tone: {how}. Range across angles: outcome-focused, problem-focused, curiosity, bold claim, plainspoken, playful. Headlines under ~10 words.
+
+Then tell me which 3 you'd test first and the reasoning.` },
+  { cat:"variations", id:"4.5", title:"Critique two variations objectively", blurb:"Blind-evaluate A vs B per dimension, then propose a combined 'C'.",
+    text:`Here are two versions of {screen}: A {attach} and B {attach}. Without knowing which I prefer, evaluate both on hierarchy, clarity, conversion potential, and craft.
+
+Call a winner per dimension, name the single biggest weakness of each, and propose a "C" that combines the strengths of both.` },
+
+  // ---- SYSTEMS ----
+  { cat:"systems", id:"5.1", title:"Extract design tokens from UI", blurb:"Reverse-engineer a full token set from screenshots/CSS into CSS vars or Tailwind.",
+    text:`From {these screenshots / this CSS / this URL}, reverse-engineer a design-token system. Produce: a color palette (semantic names + hex, including states), a type scale (roles, sizes, weights, line-heights), a spacing scale, radii, shadows/elevation, and border styles.
+
+Where the UI is inconsistent, pick the best canonical value and note what it replaces. Output as a clean token list for {CSS variables / a Tailwind config / a tokens.json}.` },
+  { cat:"systems", id:"5.2", title:"Build a design system from scratch", blurb:"Define foundations, color, type, spacing, elevation, icons, and motion with rationale.",
+    text:`Help me define a design system for {product} with a {adjective, e.g. "modern, energetic, precise"} personality. Cover: brand foundations (voice, mood, keywords), color system (palette + semantic roles + dark mode), typography (typefaces + full scale), spacing/layout grid, elevation/shadows, iconography style, and motion principles.
+
+For each, give concrete values and a one-line rationale tied to the personality. Keep it lean enough for a small team to maintain.` },
+  { cat:"systems", id:"5.3", title:"Component documentation", blurb:"Write a real design-system page for a component: variants, states, do's/don'ts, a11y.",
+    text:`Write design-system documentation for the {component, e.g. "Button"} component. Include: purpose and when to use, all variants (primary/secondary/ghost/destructive…), all states (default/hover/active/focus/disabled/loading), sizes, do's and don'ts with examples, accessibility notes (roles, keyboard, contrast), and the props/anatomy.
+
+Format it like a real design-system page.` },
+  { cat:"systems", id:"5.4", title:"Consistency linter", blurb:"Lint N screens for drift; table of location/issue/canonical value + 5 rules.",
+    text:`Act as a design-system linter. Here are {N} screens / components: {attach}. Find every place that deviates from a consistent system — ad hoc colors, off-scale spacing, inconsistent radii/shadows, typographic drift, mismatched component styles.
+
+Output a table: location | what's inconsistent | the canonical value it should use. Then summarize the 5 system rules that, if enforced, would eliminate most of the drift.` },
+  { cat:"systems", id:"5.5", title:"Naming & token taxonomy", blurb:"Move from value-bound to semantic, tiered tokens that re-theme cleanly.",
+    text:`Review my design-token names: {paste}. Are they semantic and scalable, or tied to specific values (e.g. "blue-500" vs "color-action-primary")? Propose a clean, tiered taxonomy (primitive → semantic → component tokens) with examples, so the system can re-theme without renaming everything.
+
+Show how a light/dark theme swap would work under this scheme.` },
+  { cat:"systems", id:"5.6", title:"Design-to-dev handoff spec", blurb:"A complete engineering spec: spacing, tokens, states, responsive, edge cases, motion.",
+    text:`Produce an engineering handoff spec for {this component/screen}. Include: exact spacing, sizing, and layout (with values), the design tokens used, every interaction state, responsive behavior at each breakpoint, edge/empty/error cases, animation timing and easing, and accessibility requirements.
+
+Format so a developer could build it without guessing.` },
+
+  // ---- MOTION ----
+  { cat:"motion", id:"6.1", title:"Decide WHERE 3D/animation earns it", blurb:"A motion designer's restraint filter: rank the 3 highest-impact moments, and what to skip.",
+    text:`You are a motion designer with a strong taste for restraint. Here is my site: {describe / screens / URL}. Tell me where 3D (Three.js) and animation would genuinely elevate the experience vs. where they'd be noise that hurts performance and clarity.
+
+Categorize each candidate moment as: "hero/signature moment," "supporting micro-interaction," "transition/continuity," or "skip it." Give me a ranked shortlist of the 3 highest-impact places to invest, and what NOT to animate.` },
+  { cat:"motion", id:"6.2", title:"Three.js hero scene concept", blurb:"Three distinct hero concepts with interaction model, tech approach, and perf budget.",
+    text:`Design a Three.js hero scene for {product, personality: "___"}. Propose 3 distinct concepts (e.g. "floating low-poly objects with parallax," "an interactive particle field reacting to the cursor," "slowly rotating abstract geometry with depth-of-field").
+
+For each: the visual idea, brand tie-in, interaction model (mouse/scroll/idle), rough technical approach (geometry, materials, lighting, post-processing), and a realistic performance budget. Recommend one and explain why.` },
+  { cat:"motion", id:"6.3", title:"Three.js hero — implementation", blurb:"Full commented code: responsive, 60fps, off-screen pause, reduced-motion, clean teardown.",
+    text:`Implement the {chosen concept} as a self-contained Three.js hero for the web. Requirements:
+- Stack: {plain Three.js / react-three-fiber + drei}.
+- Responsive: 375px to ultrawide; resizes cleanly.
+- Performance: 60fps on a mid laptop; cap pixel ratio; pause the render loop off-screen (IntersectionObserver) and on hidden tab.
+- Respect prefers-reduced-motion: fall back to a static, attractive frame.
+- Graceful degradation if WebGL is unavailable.
+- Clean teardown (dispose geometries/materials/textures; cancel RAF).
+
+Give me the complete, commented code plus notes on where to tune the feel.` },
+  { cat:"motion", id:"6.4", title:"Scroll-driven animation", blurb:"Trigger points, easing, and smoothness rules; recommends the right tool with reasons.",
+    text:`Design a scroll-driven animation sequence for {page/section}. I want {e.g. "elements that assemble as you scroll," "a 3D object that rotates with scroll progress," "pinned sections with staged reveals"}.
+
+Specify: trigger points, what animates at each, easing and duration, and how to keep it smooth (transform/opacity only, will-change discipline, no layout thrash). Recommend the tool ({GSAP ScrollTrigger / Framer Motion / Motion One / IntersectionObserver + CSS}) and justify it. Include reduced-motion fallbacks.` },
+  { cat:"motion", id:"6.5", title:"Micro-interactions & game-feel", blurb:"Tune the 'feel' like a game designer: timing, easing, principle for every state.",
+    text:`You are designing the "feel" of {component/UI}, the way a game designer tunes game feel. Specify micro-interactions: hover, press, focus, success, error, loading, and state transitions.
+
+For each give: what moves, the timing (ms) and easing curve, and the principle (anticipation, follow-through, overshoot, settle). Keep it tasteful and fast — nothing over ~300ms for UI feedback. Provide it as a spec with suggested framer-motion / CSS values.` },
+  { cat:"motion", id:"6.6", title:"Page & element transitions", blurb:"A consistent motion language: durations, easings, and perceived-performance rules.",
+    text:`Design the transition system for {site/app}: page-to-page, modal open/close, list item enter/exit, and shared-element continuity where it makes sense. Define a consistent motion language: a small set of durations (fast 150ms / base 250ms / slow 400ms), 2–3 standard easings, and rules for when to use each.
+
+Show how to keep transitions from feeling slow (animate out fast, in a touch slower; never block input). Include reduced-motion behavior.` },
+  { cat:"motion", id:"6.7", title:"Motion design system / tokens", blurb:"Codify duration scale, easing set, displacement, and stagger as reusable tokens.",
+    text:`Create a motion design system for {product}. Define motion tokens: a duration scale, an easing set (cubic-bezier values + when to use each: standard, decelerate, accelerate, spring), distance/displacement guidelines, and stagger rules.
+
+Establish principles (purposeful, consistent, fast, reduced-motion-respectful). Output as tokens I can codify (CSS variables / a JS config) so all animation stays coherent.` },
+  { cat:"motion", id:"6.8", title:"Three.js performance audit", blurb:"Draw calls, instancing, textures, render-loop, disposal, mobile fallbacks — prioritized.",
+    text:`Audit this Three.js / WebGL scene for performance: {paste code / describe}. Check: draw calls and geometry merging/instancing, material and texture cost, overdraw, pixel ratio handling, render-loop efficiency (rendering when nothing changes?), post-processing cost, memory disposal, and mobile/GPU fallbacks.
+
+Give me a prioritized optimization list with the fps/quality trade-off of each, and what to cut first if I'm over budget on low-end devices.` },
+  { cat:"motion", id:"6.9", title:"Tasteful-vs-gimmick gut check", blurb:"Pressure-test a motion idea: serves the user, or shows off? Ship / tone down / cut.",
+    text:`Be my taste filter. Here's a motion/3D idea I'm considering for {context}: {describe}. Pressure-test it: Does it serve the user or just show off? Will it still feel good on the 50th visit, or only the 1st? Does it slow down someone trying to get something done? Does it hurt accessibility or performance?
+
+Give me a verdict (ship / tone down / cut), and if "tone down," the restrained version that keeps 80% of the delight at 20% of the cost.` },
+  { cat:"motion", id:"6.10", title:"Loading & perceived performance", blurb:"Choreograph first paint so a motion-heavy page never feels slow — a 0ms→interactive timeline.",
+    text:`Design the loading and first-paint experience for a motion-heavy / Three.js page so it never feels slow. Cover: what to show during asset load (skeletons, a minimal branded loader, progressive reveal), how to sequence the entrance so the page feels alive the instant it's interactive, lazy-loading the heavy 3D after first paint, and avoiding layout shift.
+
+Give me the choreography as a timeline (0ms → interactive) with what appears when.` },
+
+  // ---- TAILORED ----
+  { cat:"tailored", id:"T.1", title:"Review a shadcn/Tailwind component", blurb:"Senior design-engineer critique + a strict-TS drop-in replacement.",
+    text:`You are a senior React/TypeScript design engineer. Review this component from my app — React 18, strict TS, Tailwind, shadcn/ui (Radix), framer-motion.
+
+{paste the .tsx}
+
+Critique: visual hierarchy, spacing rhythm (against an 8px scale), state coverage (default/hover/focus-visible/active/disabled/loading/error/empty), accessibility (Radix is in use — am I preserving its a11y?), and dark-mode correctness.
+
+Return the improved component as a drop-in replacement using Tailwind utilities and shadcn conventions, with framer-motion for any motion. Keep it strict-TS clean. Note what you changed and why.` },
+  { cat:"tailored", id:"T.2", title:"Tailwind theme / token audit", blurb:"Audit your CSS variables + tailwind.config as a system; get a cleaned-up theme.",
+    text:`Here is my Tailwind theme config / CSS variables: {paste}. Audit it as a design system: are my colors semantic (background/foreground/primary/muted/accent/destructive…) and dark-mode-ready in the shadcn CSS-variable style? Is there a coherent spacing, radius, and shadow scale, or one-off values leaking into components?
+
+Propose a cleaned-up theme (the CSS-variable block + tailwind.config extensions) and flag the top component-level cleanups to match it.` },
+  { cat:"tailored", id:"T.3", title:"Framer-motion micro-interaction spec", blurb:"Game-feel interactions with exact framer-motion props + a reduced-motion variant.",
+    text:`Design micro-interactions for {component} in my React app using framer-motion. I care about game-feel: anticipation, snappy response, a satisfying settle. For each interaction (mount, hover, tap, layout change, exit) give me the exact framer-motion props (variants, transition with type/stiffness/damping or duration/ease) and keep UI feedback under ~250ms.
+
+Provide the code, and a reduced-motion variant gated on useReducedMotion(). Tasteful, not bouncy-toy.` },
+  { cat:"tailored", id:"T.4", title:"Add a Three.js / R3F moment", blurb:"A tasteful, strict-TS <Scene/> in react-three-fiber with all the perf/a11y guards.",
+    text:`I want to add a tasteful 3D moment to my React 18 + TypeScript app using react-three-fiber + drei (and framer-motion for surrounding UI). Context: {where it goes, the brand feel}.
+
+Propose the concept, then give me a self-contained <Scene/> component that: is strict-TS typed, responsive, caps pixel ratio, pauses when off-screen and on hidden tab, disposes resources on unmount, falls back to a static frame under prefers-reduced-motion, and degrades if WebGL is missing. Comment the knobs I'd tune for feel.` },
+  { cat:"tailored", id:"T.5", title:"recharts data-viz polish", blurb:"Improve the story, theme-token colors, restraint, tooltips, empty states, subtle motion.",
+    text:`Review this recharts chart in my React/TS + Tailwind app: {paste}. As a data-viz designer, improve: clarity of the story it tells, color (use my semantic theme tokens, colorblind-safe), axis/label/gridline restraint, tooltip usefulness, empty/loading states, and subtle entrance animation that aids comprehension rather than distracting.
+
+Return the improved component and explain the viz decisions.` },
+  { cat:"tailored", id:"T.6", title:"reactflow graph UX", blurb:"Improve node hierarchy, edges, handles, zoom discoverability, and a node-style system.",
+    text:`I visualize a node graph with reactflow in my app: {paste / screenshot}. Improve its UX and visual design: node hierarchy and readability, edge clarity, handle affordances, zoom/pan discoverability, selection/hover feedback, and how it scales as the graph grows.
+
+Suggest a clean node-style system (consistent sizing, color-coded by type using my theme tokens) and tasteful motion for state changes. Keep it legible at a glance.` },
+  { cat:"tailored", id:"T.7", title:"Game-feel 'juice' for the web", blurb:"Map game-feel concepts onto restrained, professional web interactions with 'too far' warnings.",
+    text:`I'm a game designer applying game-feel principles to a productivity web app (React/TS, Tailwind, framer-motion). I want the app to feel responsive and alive without being gimmicky or slowing users down. Map game-feel concepts — feedback, anticipation, follow-through, easing, juicy confirmation, screen-space feedback — onto specific, restrained web interactions for {feature}.
+
+For each, give the principle, the web translation, exact timing/easing, and a "too far" warning so it stays professional. Code where useful.` },
+];
+
+// ---------- Render ----------
+const main = document.getElementById('main');
+const filtersEl = document.getElementById('filters');
+const searchEl = document.getElementById('search');
+const emptyEl = document.getElementById('empty');
+let activeCat = "all";
+
+document.getElementById('stat-prompts').textContent = PROMPTS.length;
+document.getElementById('stat-cats').textContent = CATEGORIES.length;
+
+function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function highlightPlaceholders(s){
+  return escapeHtml(s).replace(/\{[^}]+\}/g, m => `<span class="ph">${m}</span>`);
+}
+
+// filter chips
+const allChip = document.createElement('button');
+allChip.className = 'chip active';
+allChip.dataset.cat = 'all';
+allChip.innerHTML = `All <span class="count">${PROMPTS.length}</span>`;
+filtersEl.appendChild(allChip);
+CATEGORIES.forEach(c => {
+  const n = PROMPTS.filter(p => p.cat === c.id).length;
+  const chip = document.createElement('button');
+  chip.className = 'chip';
+  chip.dataset.cat = c.id;
+  chip.innerHTML = `${c.label} <span class="count">${n}</span>`;
+  filtersEl.appendChild(chip);
+});
+
+function buildSections(){
+  main.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const sec = document.createElement('section');
+    sec.className = 'section';
+    sec.id = 'sec-' + cat.id;
+    sec.dataset.cat = cat.id;
+    sec.innerHTML = `
+      <div class="section-head"><span class="num">${cat.num}</span><h2>${cat.title}</h2></div>
+      <p class="section-desc">${cat.desc}</p>
+      <div class="grid"></div>`;
+    const grid = sec.querySelector('.grid');
+    PROMPTS.filter(p => p.cat === cat.id).forEach(p => {
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.dataset.search = (p.title + ' ' + p.blurb + ' ' + p.text + ' ' + cat.label).toLowerCase();
+      card.dataset.id = p.id;
+      card.innerHTML = `
+        <div class="card-head">
+          <div class="card-title">${escapeHtml(p.title)}</div>
+          <span class="card-id">${p.id}</span>
+        </div>
+        <div class="card-blurb">${escapeHtml(p.blurb)}</div>
+        <div class="prompt-box">
+          <div class="prompt-text">${highlightPlaceholders(p.text)}</div>
+          <div class="card-actions">
+            <button class="btn primary copy-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy prompt
+            </button>
+            <button class="btn btn-toggle toggle-btn" title="Expand / collapse">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+          </div>
+        </div>`;
+      grid.appendChild(card);
+
+      const promptText = card.querySelector('.prompt-text');
+      // mark as clipped if overflowing
+      requestAnimationFrame(() => {
+        if (promptText.scrollHeight > promptText.clientHeight + 4) promptText.classList.add('clipped');
+        else card.querySelector('.toggle-btn').style.display = 'none';
+      });
+
+      card.querySelector('.copy-btn').addEventListener('click', (e) => {
+        copyText(p.text);
+        const b = e.currentTarget;
+        b.classList.add('copied');
+        const orig = b.innerHTML;
+        b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> Copied!';
+        setTimeout(() => { b.classList.remove('copied'); b.innerHTML = orig; }, 1600);
+      });
+      card.querySelector('.toggle-btn').addEventListener('click', (e) => {
+        const expanded = promptText.classList.toggle('expanded');
+        e.currentTarget.querySelector('svg').style.transform = expanded ? 'rotate(180deg)' : '';
+      });
+    });
+    main.appendChild(sec);
+  });
+}
+
+function copyText(text){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(showToast).catch(() => fallbackCopy(text));
+  } else { fallbackCopy(text); }
+}
+function fallbackCopy(text){
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); showToast(); } catch(e){}
+  document.body.removeChild(ta);
+}
+let toastTimer;
+function showToast(){
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function applyFilters(){
+  const q = searchEl.value.trim().toLowerCase();
+  let anyVisible = false;
+  document.querySelectorAll('.section').forEach(sec => {
+    const catMatch = (activeCat === 'all' || sec.dataset.cat === activeCat);
+    let sectionHasVisible = false;
+    sec.querySelectorAll('.card').forEach(card => {
+      const textMatch = !q || card.dataset.search.includes(q);
+      const show = catMatch && textMatch;
+      card.style.display = show ? '' : 'none';
+      if (show) { sectionHasVisible = true; anyVisible = true; }
+    });
+    sec.style.display = sectionHasVisible ? '' : 'none';
+  });
+  emptyEl.classList.toggle('show', !anyVisible);
+}
+
+filtersEl.addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  activeCat = chip.dataset.cat;
+  applyFilters();
+  if (activeCat !== 'all') {
+    const sec = document.getElementById('sec-' + activeCat);
+    if (sec) window.scrollTo({ top: sec.offsetTop - 140, behavior: 'smooth' });
+  }
+});
+searchEl.addEventListener('input', applyFilters);
+// keyboard: "/" focuses search
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement !== searchEl) { e.preventDefault(); searchEl.focus(); }
+  if (e.key === 'Escape' && document.activeElement === searchEl) { searchEl.value=''; applyFilters(); searchEl.blur(); }
+});
+
+buildSections();
+
+// ---------- Three.js animated background ----------
+(function initBg(){
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const script = document.createElement('script');
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+  script.onload = runThree;
+  script.onerror = () => { document.getElementById('bg-canvas').style.display='none'; };
+  document.head.appendChild(script);
+
+  function runThree(){
+    const canvas = document.getElementById('bg-canvas');
+    let W = window.innerWidth, H = window.innerHeight;
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setSize(W, H);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, W/H, 0.1, 100);
+    camera.position.z = 22;
+
+    // particle field
+    const COUNT = 900;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(COUNT * 3);
+    for (let i = 0; i < COUNT; i++){
+      pos[i*3]   = (Math.random() - 0.5) * 70;
+      pos[i*3+1] = (Math.random() - 0.5) * 50;
+      pos[i*3+2] = (Math.random() - 0.5) * 40;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.16, color: 0x7c6cff, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const points = new THREE.Points(geo, mat);
+    scene.add(points);
+
+    // a few accent points
+    const geo2 = new THREE.BufferGeometry();
+    const pos2 = new Float32Array(120 * 3);
+    for (let i = 0; i < 120; i++){
+      pos2[i*3]   = (Math.random() - 0.5) * 60;
+      pos2[i*3+1] = (Math.random() - 0.5) * 45;
+      pos2[i*3+2] = (Math.random() - 0.5) * 35;
+    }
+    geo2.setAttribute('position', new THREE.BufferAttribute(pos2, 3));
+    const mat2 = new THREE.PointsMaterial({ size: 0.28, color: 0x28d6c8, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+    const points2 = new THREE.Points(geo2, mat2);
+    scene.add(points2);
+
+    let mx = 0, my = 0, tx = 0, ty = 0;
+    window.addEventListener('mousemove', e => {
+      tx = (e.clientX / W - 0.5);
+      ty = (e.clientY / H - 0.5);
+    });
+
+    let raf, visible = true;
+    document.addEventListener('visibilitychange', () => { visible = !document.hidden; if (visible) loop(); });
+    window.addEventListener('resize', () => {
+      W = window.innerWidth; H = window.innerHeight;
+      camera.aspect = W/H; camera.updateProjectionMatrix();
+      renderer.setSize(W, H);
+    });
+
+    function loop(){
+      if (!visible) return;
+      raf = requestAnimationFrame(loop);
+      mx += (tx - mx) * 0.04; my += (ty - my) * 0.04;
+      points.rotation.y += 0.0006;
+      points.rotation.x += 0.0002;
+      points2.rotation.y -= 0.001;
+      camera.position.x += (mx * 6 - camera.position.x) * 0.05;
+      camera.position.y += (-my * 4 - camera.position.y) * 0.05;
+      camera.lookAt(scene.position);
+      renderer.render(scene, camera);
+    }
+    loop();
+  }
+})();
+</script>
+</body>
+</html>

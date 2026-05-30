@@ -645,19 +645,277 @@ def _recommendation(final_score: float) -> str:
     return "HOLD"
 
 
+# ---------------------------------------------------------------------------
+# Crypto-specific 8-dim scoring helpers
+# ---------------------------------------------------------------------------
+
+_CRYPTO_WEIGHTS = {
+    "momentum": 0.20,
+    "historical": 0.15,
+    "market_context": 0.15,
+    "liquidity": 0.12,
+    "relative_strength": 0.13,
+    "sentiment": 0.10,
+    "volume_momentum": 0.08,
+    "trend_strength": 0.07,
+}
+
+
+def _score_crypto_momentum(symbol: str) -> tuple[float, dict[str, Any]]:
+    """RSI + price vs SMA50 via yfinance (works for BTC-USD, ETH-USD, etc.)."""
+    try:
+        rsi_rows = yf_svc.rsi(symbol, period=14)
+        sma_rows = yf_svc.sma(symbol, period=50)
+        rsi_v = rsi_rows[0]["rsi"] if rsi_rows else None
+        sma_v = sma_rows[0]["sma"] if sma_rows else None
+        try:
+            price = yf_svc.quote(symbol).get("price")
+        except YFinanceError:
+            price = None
+        return _momentum_from_values(rsi_v, sma_v, price, source="yfinance")
+    except YFinanceError as exc:
+        return 0.5, {"error": str(exc), "unavailable": True}
+
+
+def _score_crypto_historical(symbol: str) -> tuple[float, dict[str, Any]]:
+    """52-week range position + YTD return via CoinGecko history."""
+    base = symbol.split("-")[0]
+    try:
+        rows = cg.coin_history(base, days=365)
+        if len(rows) < 30:
+            return 0.5, {"bars": len(rows), "unavailable": True}
+        closes = [r["close"] for r in rows if r.get("close") is not None]
+        latest, hi, lo = closes[0], max(closes), min(closes)
+        rng = hi - lo
+        range_pos = (latest - lo) / rng if rng else 0.5
+        ytd_return = (latest / closes[-1] - 1) * 100.0 if closes[-1] else 0.0
+        ytd_score = max(0.0, min(1.0, 0.5 + ytd_return / 200.0))
+        score = statistics.mean([range_pos, ytd_score])
+        return score, {
+            "year_high": round(hi, 6),
+            "year_low": round(lo, 6),
+            "year_return_pct": round(ytd_return, 2),
+            "range_position_pct": round(range_pos * 100, 1),
+            "source": "coingecko",
+        }
+    except CoinGeckoError as exc:
+        return 0.5, {"error": str(exc), "unavailable": True}
+
+
+def _score_crypto_market_context() -> tuple[float, dict[str, Any]]:
+    """BTC dominance direction + global 24h market cap change."""
+    try:
+        gbl = cg.global_market()
+        btc_dom = gbl.get("btc_dominance_pct")
+        mkt_chg = gbl.get("market_cap_change_pct_24h")
+        scores: list[float] = []
+        detail: dict[str, Any] = {"source": "coingecko"}
+        if mkt_chg is not None:
+            detail["market_cap_change_24h_pct"] = round(mkt_chg, 2)
+            scores.append(max(0.0, min(1.0, 0.5 + mkt_chg / 10.0)))
+        if btc_dom is not None:
+            detail["btc_dominance_pct"] = round(btc_dom, 1)
+            # Very high BTC dom → altcoins struggling → neutral for generic crypto
+            dom_score = max(0.0, min(1.0, 1.0 - (btc_dom - 40.0) / 40.0))
+            scores.append(dom_score)
+        if not scores:
+            return 0.5, {"unavailable": True}
+        return statistics.mean(scores), detail
+    except CoinGeckoError as exc:
+        return 0.5, {"error": str(exc), "unavailable": True}
+
+
+def _score_crypto_liquidity(market_row: dict[str, Any]) -> tuple[float, dict[str, Any]]:
+    """Volume/market-cap ratio — higher means more active and liquid."""
+    vol = market_row.get("volume_24h")
+    cap = market_row.get("market_cap")
+    if not vol or not cap or cap <= 0:
+        return 0.5, {"unavailable": True}
+    ratio = vol / cap
+    # Typical healthy ratio 0.05–0.15; >0.20 = very active, <0.01 = illiquid
+    score = max(0.0, min(1.0, ratio / 0.15))
+    return score, {
+        "volume_24h_usd": vol,
+        "market_cap_usd": cap,
+        "vol_to_cap_ratio": round(ratio, 4),
+        "source": "coingecko",
+    }
+
+
+def _score_crypto_relative_strength(symbol: str, base: str) -> tuple[float, dict[str, Any]]:
+    """30-day return vs BTC. Neutral for BTC itself."""
+    if base == "BTC":
+        return 0.5, {"note": "BTC itself — no relative benchmark", "unavailable": True}
+    try:
+        coin_rows = cg.coin_history(base, days=30)
+        btc_rows = cg.coin_history("BTC", days=30)
+        if len(coin_rows) < 10 or len(btc_rows) < 10:
+            return 0.5, {"unavailable": True}
+        coin_ret = (coin_rows[0]["close"] / coin_rows[-1]["close"] - 1) * 100
+        btc_ret = (btc_rows[0]["close"] / btc_rows[-1]["close"] - 1) * 100
+        alpha = coin_ret - btc_ret
+        score = max(0.0, min(1.0, 0.5 + alpha / 40.0))
+        return score, {
+            "coin_30d_return_pct": round(coin_ret, 2),
+            "btc_30d_return_pct": round(btc_ret, 2),
+            "alpha_vs_btc_pct": round(alpha, 2),
+            "source": "coingecko",
+        }
+    except CoinGeckoError as exc:
+        return 0.5, {"error": str(exc), "unavailable": True}
+
+
+def _score_crypto_sentiment() -> tuple[float, dict[str, Any]]:
+    """Fear & Greed proxy via CoinGecko global market cap 24h change direction."""
+    try:
+        import requests as _req  # noqa: PLC0415
+        resp = _req.get(
+            "https://api.alternative.me/fng/?limit=1",
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            data = resp.json().get("data") or []
+            if data:
+                fng = int(data[0].get("value", 50))
+                label = data[0].get("value_classification", "Neutral")
+                score = max(0.0, min(1.0, fng / 100.0))
+                return score, {"fear_greed_index": fng, "label": label, "source": "alternative.me"}
+    except Exception:  # noqa: BLE001
+        pass
+    # Fallback: neutral
+    return 0.5, {"unavailable": True, "note": "Fear & Greed index unavailable"}
+
+
+def _score_crypto_volume_momentum(base: str) -> tuple[float, dict[str, Any]]:
+    """Compare 7-day average volume vs 30-day average volume from history."""
+    try:
+        rows = cg.coin_history(base, days=30)
+        if len(rows) < 14:
+            return 0.5, {"unavailable": True}
+        # coin_history returns close prices; use CoinGecko markets for volume
+        mkt = cg.coin_market_data([base])
+        if not mkt:
+            return 0.5, {"unavailable": True}
+        vol_now = mkt[0].get("volume_24h")
+        chg_24h = mkt[0].get("change_pct_24h") or 0.0
+        # Use 24h volume trend as proxy
+        score = max(0.0, min(1.0, 0.5 + chg_24h / 20.0))
+        return score, {
+            "volume_24h_usd": vol_now,
+            "price_change_24h_pct": round(chg_24h, 2),
+            "source": "coingecko",
+        }
+    except CoinGeckoError as exc:
+        return 0.5, {"error": str(exc), "unavailable": True}
+
+
+def _score_crypto_trend_strength(symbol: str) -> tuple[float, dict[str, Any]]:
+    """Price position relative to 30-day SMA."""
+    try:
+        sma_rows = yf_svc.sma(symbol, period=30)
+        sma_v = sma_rows[0]["sma"] if sma_rows else None
+        price = yf_svc.quote(symbol).get("price")
+        if sma_v and price:
+            gap = (price - sma_v) / sma_v
+            score = max(0.0, min(1.0, 0.5 + gap * 5))
+            return score, {
+                "price": price,
+                "sma_30d": round(sma_v, 6),
+                "price_vs_sma_pct": round(gap * 100, 2),
+                "source": "yfinance",
+            }
+    except (YFinanceError, Exception):  # noqa: BLE001
+        pass
+    return 0.5, {"unavailable": True}
+
+
+def _analyze_crypto_8dim(ticker: str, base: str) -> dict[str, Any]:
+    """Inner crypto 8-dim runner — called by analyze_ticker_8dim."""
+    # Fetch market row once for reuse across dimensions
+    try:
+        market_rows = cg.coin_market_data([base])
+        market_row = market_rows[0] if market_rows else {}
+    except CoinGeckoError:
+        market_row = {}
+
+    dims: dict[str, dict[str, Any]] = {}
+
+    s, d = _score_crypto_momentum(ticker)
+    dims["momentum"] = {"score": s, **d}
+
+    s, d = _score_crypto_historical(ticker)
+    dims["historical"] = {"score": s, **d}
+
+    s, d = _score_crypto_market_context()
+    dims["market_context"] = {"score": s, **d}
+
+    s, d = _score_crypto_liquidity(market_row)
+    dims["liquidity"] = {"score": s, **d}
+
+    s, d = _score_crypto_relative_strength(ticker, base)
+    dims["relative_strength"] = {"score": s, **d}
+
+    s, d = _score_crypto_sentiment()
+    dims["sentiment"] = {"score": s, **d}
+
+    s, d = _score_crypto_volume_momentum(base)
+    dims["volume_momentum"] = {"score": s, **d}
+
+    s, d = _score_crypto_trend_strength(ticker)
+    dims["trend_strength"] = {"score": s, **d}
+
+    unavailable = [k for k, v in dims.items() if v.get("unavailable")]
+    usable_keys = [k for k in _CRYPTO_WEIGHTS if k not in unavailable]
+    total_weight = sum(_CRYPTO_WEIGHTS[k] for k in usable_keys)
+    if total_weight > 0:
+        final = sum(_CRYPTO_WEIGHTS[k] * dims[k]["score"] for k in usable_keys) / total_weight
+    else:
+        final = 0.5
+
+    degraded = len(unavailable) >= 5
+    name = market_row.get("name", base)
+    result: dict[str, Any] = {
+        "ticker": ticker,
+        "name": name,
+        "asset_class": "crypto",
+        "final_score": round(final, 3) if not degraded else None,
+        "recommendation": _recommendation(final) if not degraded else None,
+        "dimensions": {k: {**v, "score": round(v["score"], 3)} for k, v in dims.items()},
+        "weights": _CRYPTO_WEIGHTS,
+        "unavailable_dimensions": unavailable,
+        "source": "coingecko+yfinance",
+        "as_of": _now_iso(),
+    }
+    if degraded:
+        result["degraded"] = True
+        result["error"] = (
+            f"Analysis degraded: {len(unavailable)}/8 dimensions unavailable. "
+            "Final score and recommendation withheld."
+        )
+    if market_row:
+        result["market_data"] = {
+            "price_usd": market_row.get("price"),
+            "change_pct_24h": market_row.get("change_pct_24h"),
+            "market_cap_usd": market_row.get("market_cap"),
+            "rank": market_row.get("rank"),
+        }
+    return result
+
+
 @tool
 def analyze_ticker_8dim(ticker: str, fast: bool = False) -> dict[str, Any]:
-    """Run the 8-dimension analysis on a US stock or ETF.
+    """Run the 8-dimension analysis on a stock, ETF, or cryptocurrency.
 
-    Dimensions: earnings_surprise, fundamentals, analyst_sentiment, historical,
-    market_context, sector, momentum, sentiment. Each scored 0–1, then a
-    weighted score (0–1) yields a BUY (>=0.70) / HOLD / SELL (<=0.40)
-    recommendation. Backed by yfinance (no rate limits).
+    For equities/ETFs, dimensions cover: earnings_surprise, fundamentals,
+    analyst_sentiment, historical, market_context, sector, momentum, sentiment.
+
+    For crypto (e.g. BTC-USD, ETH-USD), dimensions cover: momentum, historical,
+    market_context, liquidity, relative_strength, sentiment, volume_momentum,
+    trend_strength. Each scored 0–1, weighted score (0–1) yields BUY/HOLD/SELL.
 
     Args:
-        ticker: e.g. "NVDA", "AAPL". US equities/ETFs recommended.
-        fast: skip the news-sentiment dimension (no effect — sentiment is
-            always neutral without a news API).
+        ticker: e.g. "NVDA", "AAPL", "BTC-USD", "ETH-USD".
+        fast: skip slow dimensions where possible (crypto: skips relative_strength).
     """
     cache_key = f"8dim:{(ticker or '').strip().upper()}:{int(bool(fast))}"
     cached = cache_get(cache_key)
@@ -666,12 +924,20 @@ def analyze_ticker_8dim(ticker: str, fast: bool = False) -> dict[str, Any]:
 
     upper = (ticker or "").strip().upper()
     cls = classify_ticker(upper)
+
+    # Route crypto to dedicated scorer
+    if cls.get("kind") == "crypto":
+        base = cls.get("base", upper.split("-")[0])
+        result = _analyze_crypto_8dim(upper, base)
+        cache_set(cache_key, result)
+        return result
+
     if cls.get("kind") not in {"stock", "futures_proxy"}:
         return {
             "ticker": upper,
             "error": (
-                "8-dim analysis is only available for equities/ETFs "
-                "(crypto/indices/forex lack the required fundamentals data)."
+                "8-dim analysis is only available for equities/ETFs and cryptocurrencies. "
+                "Indices and forex lack the required fundamentals data."
             ),
         }
     symbol = cls["symbol"]
@@ -714,6 +980,7 @@ def analyze_ticker_8dim(ticker: str, fast: bool = False) -> dict[str, Any]:
     degraded = len(unavailable) >= 4
     result: dict[str, Any] = {
         "ticker": upper,
+        "asset_class": "stock",
         "final_score": round(final, 3) if not degraded else None,
         "recommendation": _recommendation(final) if not degraded else None,
         "dimensions": {k: {**v, "score": round(v["score"], 3)} for k, v in dims.items()},

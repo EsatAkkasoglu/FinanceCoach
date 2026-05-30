@@ -8,18 +8,28 @@
   "trendingCrypto": "Trending crypto",
   "rankHint": "CoinGecko ranking",
   "noTrendData": "No trend data — CoinGecko unavailable.",
-  "globalMarketCap": "Global Market Cap",
+  "cryptoMarketCap": "Crypto Market Cap",
   "btcDominance": "BTC Dominance",
-  "marketChange24h": "24h Change",
+  "marketChange24h": "Crypto 24h",
+  "stockBreadth": "Stock breadth",
   "updatedAt": "Updated: {{time}}",
   "portfolioSpotlight": "Your Portfolio Today",
   "noPortfolioOverlap": "None of your holdings appear in today's movers list.",
   "marketPulse": "Market pulse",
   "mostActive": "Most active",
+  "movers": "Top movers",
   "watchlist": "Your watchlist",
   "watchlistHint": "score + RSI",
   "watchlistEmpty": "Add holdings to see live analysis here.",
+  "watchlistCryptoHint": "Stocks, ETFs & crypto from your portfolio",
   "scoreLabel": "Score",
+  "assetClass": {
+    "stock": "Stock",
+    "etf": "ETF",
+    "crypto": "Crypto",
+    "fund": "Fund",
+    "other": "Other"
+  },
   "recommendation": {
     "buy": "buy",
     "hold": "hold",
@@ -29,7 +39,9 @@
   "latestNews": "Latest News",
   "rumorMill": "Rumor mill",
   "noRumors": "No fresh M&A or actionable rumors right now.",
-  "impact": "impact {{score}}/10",
+  "impact": "{{score}}/10",
+  "highImpact": "High impact",
+  "searchTrend": "Search trend",
   "categories": {
     "ma": "M&A"
   },
@@ -84,7 +96,40 @@
       "market_context": "Market context",
       "sector": "Sector",
       "momentum": "Momentum",
-      "sentiment": "News sentiment"
+      "sentiment": "Sentiment",
+      "liquidity": "Liquidity",
+      "relative_strength": "vs BTC",
+      "volume_momentum": "Volume trend",
+      "trend_strength": "Trend strength"
+    },
+    "dimensionDesc": {
+      "earnings_surprise": "How much earnings beat or missed analyst estimates in recent quarters.",
+      "fundamentals": "Company health — P/E ratio, profit margins, and return on equity.",
+      "analyst_sentiment": "Wall Street consensus: ratio of Buy, Hold, and Sell ratings.",
+      "historical": "Where the price sits within its 52-week range and yearly return.",
+      "market_context": "Broad market stress level — lower VIX means calmer conditions.",
+      "sector": "How the coin's sector ETF performed today.",
+      "momentum": "RSI and price position vs 50-day average — trend strength.",
+      "sentiment": "Crypto Fear & Greed index: how fearful or greedy the market feels.",
+      "liquidity": "24h trading volume relative to market cap — higher means more active.",
+      "relative_strength": "30-day return compared to Bitcoin — positive means outperforming BTC.",
+      "volume_momentum": "Whether today's trading volume is picking up or cooling down.",
+      "trend_strength": "Price position relative to the 30-day moving average."
+    },
+    "scoreStrength": {
+      "strong": "Strong",
+      "moderate": "Moderate",
+      "weak": "Weak"
+    },
+    "recommendationBasis": "Based on {{count}} market signals",
+    "notAdvice": "Not financial advice",
+    "cryptoRank": "Rank #{{rank}}",
+    "rsiRange": {
+      "overbought": "Overbought (>70)",
+      "overbought_zone": "Nearing overbought",
+      "neutral": "Neutral range",
+      "oversold_zone": "Nearing oversold",
+      "oversold": "Oversold (<30)"
     }
   }
 }

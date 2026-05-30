@@ -3,6 +3,14 @@
   "placeholder": "Ask your coach… (Shift+Enter for newline)",
   "send": "Send (Enter)",
   "stopGenerating": "Stop generating",
+  "voice": {
+    "start": "Record voice message",
+    "stop": "Stop recording",
+    "unsupported": "Voice input isn't supported in this environment.",
+    "micDenied": "Microphone access was denied.",
+    "empty": "Couldn't hear anything — try again.",
+    "failed": "Transcription failed. Please try again."
+  },
   "clearChat": "Clear chat",
   "confirmClear": "Clear the entire chat history?",
   "tryOneOfThese": "Try one of these:",

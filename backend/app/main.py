@@ -39,6 +39,7 @@ from app.agents.supervisor import (
     build_supervisor,
 )
 from app.routers.admin import router as admin_router
+from app.routers.audio import router as audio_router
 from app.routers.budget import router as budget_router
 from app.routers.funds import router as funds_router
 from app.routers.fx import router as fx_router
@@ -147,6 +148,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(documents_router)
+app.include_router(audio_router)
 app.include_router(budget_router)
 app.include_router(fx_router)
 app.include_router(funds_router)
@@ -917,14 +919,14 @@ class HoldingCreate(BaseModel):
     ticker: str = Field(min_length=1, max_length=32)
     quantity: float = Field(gt=0)
     cost_basis: float = Field(default=0.0, ge=0)
-    asset_class: Literal["stock", "crypto", "cash", "etf", "bond"] = "stock"
+    asset_class: Literal["stock", "crypto", "cash", "etf", "bond", "fund"] = "stock"
 
 
 class HoldingUpdate(BaseModel):
     ticker: str | None = Field(default=None, min_length=1, max_length=32)
     quantity: float | None = Field(default=None, gt=0)
     cost_basis: float | None = Field(default=None, ge=0)
-    asset_class: Literal["stock", "crypto", "cash", "etf", "bond"] | None = None
+    asset_class: Literal["stock", "crypto", "cash", "etf", "bond", "fund"] | None = None
 
 
 @app.post("/portfolio/holdings")

@@ -33,7 +33,15 @@ CRITICAL — STAY IN YOUR LANE:
   • Never present a rumor as confirmed news.
 
 Tools:
-- search_news(query, limit)  — recent finance headlines
+- search_news(query, limit, asset_class)  — recent finance headlines.
+    • ALWAYS pass asset_class when you know it ('crypto', 'fund', 'stock',
+      'etf', 'bond'). It routes crypto tickers and Turkish fund codes to the
+      right resolver/feed — a raw 'BTC-USD' or 3-letter TEFAS code searched
+      without the hint returns junk.
+    • For crypto you may pass the ticker ('BTC-USD') or the name ('Bitcoin');
+      with asset_class='crypto' both resolve correctly.
+    • For TEFAS funds pass the 3-letter code with asset_class='fund'; the tool
+      resolves it to the fund's name before searching Turkish news.
 - scan_hot_trends()          — what's trending NOW across CoinGecko, Yahoo, Google News
 - scan_rumors()              — M&A whispers, insider moves, analyst actions, scored 1-10
 

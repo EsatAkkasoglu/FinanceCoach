@@ -143,7 +143,7 @@ export async function loginDemo(): Promise<AuthUser> {
 export interface Holding {
   id?: number;
   ticker: string;
-  asset_class: "stock" | "crypto" | "cash" | "bond" | "etf";
+  asset_class: "stock" | "crypto" | "cash" | "bond" | "etf" | "fund";
   quantity: number;
   cost_basis: number;
   acquired_at?: string | null;
@@ -247,7 +247,7 @@ export interface HoldingInput {
   ticker: string;
   quantity: number;
   cost_basis: number;
-  asset_class: "stock" | "etf" | "crypto" | "bond" | "cash";
+  asset_class: "stock" | "etf" | "crypto" | "bond" | "cash" | "fund";
 }
 
 export async function addHolding(input: HoldingInput) {
@@ -662,6 +662,20 @@ export async function parseDocument(file: File, signal?: AbortSignal) {
   return r.json() as Promise<ProfileExtraction>;
 }
 
+export async function transcribeAudio(blob: Blob, signal?: AbortSignal): Promise<string> {
+  const fd = new FormData();
+  const ext = blob.type.includes("ogg") ? "ogg" : "webm";
+  fd.append("file", blob, `voice.${ext}`);
+  const r = await apiFetch(`/audio/transcribe`, {
+    method: "POST",
+    body: fd,
+    signal,
+  });
+  if (!r.ok) throw new Error((await r.text()) || `transcribe ${r.status}`);
+  const data = (await r.json()) as { text: string };
+  return data.text ?? "";
+}
+
 export async function getBriefing() {
   const r = await apiFetch(`/briefing`);
   return r.json() as Promise<{ items: BriefingItem[]; as_of: string }>;
@@ -939,13 +953,41 @@ export async function fundHistory(code: string, days = 90): Promise<FundHistoryP
 
 // ── Insights (scanners + per-ticker analysis) ───────────────────────────────
 
+export interface PriceHistory {
+  ticker: string;
+  currency?: string;
+  points: FundHistoryPoint[];
+  error?: string;
+}
+
+/** Daily close history for any holding (stock/ETF/crypto/index or TEFAS fund). */
+export async function priceHistory(
+  ticker: string,
+  assetClass: string,
+  days = 90,
+): Promise<PriceHistory> {
+  const r = await apiFetch(
+    `/insights/history/${encodeURIComponent(ticker)}?days=${days}&asset_class=${encodeURIComponent(assetClass)}`,
+  );
+  if (!r.ok) return { ticker, points: [], error: `HTTP ${r.status}` };
+  return r.json();
+}
+
 export interface EightDimResult {
   ticker: string;
+  asset_class?: "stock" | "crypto";
+  name?: string;
   final_score: number | null;
   recommendation: string | null;
   dimensions: Record<string, { score: number; [k: string]: unknown }>;
   weights: Record<string, number>;
   unavailable_dimensions: string[];
+  market_data?: {
+    price_usd?: number | null;
+    change_pct_24h?: number | null;
+    market_cap_usd?: number | null;
+    rank?: number | null;
+  };
   degraded?: boolean;
   error?: string;
 }
@@ -1005,7 +1047,7 @@ export interface TrendsResult {
   top_gainers?: { ticker: string; price: number | null; change_pct: number | null; volume: number | null }[];
   top_losers?: { ticker: string; price: number | null; change_pct: number | null; volume: number | null }[];
   most_active?: { ticker: string; price: number | null; change_pct: number | null; volume: number | null }[];
-  crypto_trending?: { name: string; symbol: string; rank?: number | null }[];
+  crypto_trending?: { name: string; symbol: string; rank?: number | null; price_usd?: number | null; score?: number | null }[];
   crypto_global?: { market_cap_usd?: number; btc_dominance?: number; market_cap_change_pct_24h?: number };
   as_of?: string;
 }

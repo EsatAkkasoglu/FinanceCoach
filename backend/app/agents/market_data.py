@@ -93,7 +93,10 @@ TURKISH MUTUAL & PENSION FUNDS (via TEFAS):
 
 WORKFLOW (decision tree):
 1. If the user gives a TEFAS fund CODE (3 uppercase letters or one already in
-   the 'AAA' format), call ``get_fund_quote(code)`` directly.
+   the 'AAA' format), call ``get_fund_quote(code)`` directly. It returns NAV +
+   1-day change AND trailing returns (1m/3m/6m/1y/YTD), risk score (1-7), and
+   category — for fund suitability/analysis, report these returns and risk
+   instead of just the price; this is the fund equivalent of 8-dim analysis.
 2. If the user gives a Turkish fund NAME or theme (e.g. "altın fonu",
    "İş Bankası hisse fonu", "kısa vadeli borçlanma"), call ``search_fund``
    first to find candidate codes, then ``get_fund_quote`` on the best match.

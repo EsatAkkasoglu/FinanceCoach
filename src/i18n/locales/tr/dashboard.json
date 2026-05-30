@@ -95,5 +95,13 @@
     "price": "Fiyat",
     "value": "Değer",
     "pnl": "K/Z"
-  }
+  },
+  "marketOpen": "Borsa açık",
+  "marketPre": "Seans öncesi",
+  "marketPost": "Seans sonrası",
+  "marketClosed": "Borsa kapalı",
+  "addHoldingsHint": "Portföy'e giderek ilk varlığını ekle",
+  "savingsTarget": "hedef",
+  "savingsStrong": "Bu ay güçlü bir birikim hızı tutturuyorsunuz.",
+  "savingsLow": "Birikim oranınızı daha da yükseltme fırsatı var."
 }

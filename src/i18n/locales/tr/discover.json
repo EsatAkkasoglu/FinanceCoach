@@ -8,18 +8,28 @@
   "trendingCrypto": "Trend kriptolar",
   "rankHint": "CoinGecko sıralaması",
   "noTrendData": "Trend verisi yok — CoinGecko erişilemiyor.",
-  "globalMarketCap": "Global Piyasa Değeri",
+  "cryptoMarketCap": "Kripto Piyasa Değeri",
   "btcDominance": "BTC Dominansı",
-  "marketChange24h": "24s Değişim",
+  "marketChange24h": "Kripto 24s",
+  "stockBreadth": "Hisse genişliği",
   "updatedAt": "Güncellendi: {{time}}",
   "portfolioSpotlight": "Portföyünüzde Bugün",
   "noPortfolioOverlap": "Portföyünüzdeki varlıklar bugün kazanan/kaybeden listesinde değil.",
   "marketPulse": "Piyasa nabzı",
   "mostActive": "En aktif",
+  "movers": "Günün hareketleri",
   "watchlist": "İzleme listen",
   "watchlistHint": "puan + RSI",
   "watchlistEmpty": "Canlı analiz için varlık ekle.",
+  "watchlistCryptoHint": "Portföyünüzdeki hisse, ETF ve kriptolar",
   "scoreLabel": "Puan",
+  "assetClass": {
+    "stock": "Hisse",
+    "etf": "ETF",
+    "crypto": "Kripto",
+    "fund": "Fon",
+    "other": "Diğer"
+  },
   "recommendation": {
     "buy": "al",
     "hold": "tut",
@@ -29,7 +39,9 @@
   "latestNews": "Son Haberler",
   "rumorMill": "Söylenti değirmeni",
   "noRumors": "Şu an taze M&A veya işlem yapılabilir söylenti yok.",
-  "impact": "etki {{score}}/10",
+  "impact": "{{score}}/10",
+  "highImpact": "Yüksek etki",
+  "searchTrend": "Arama trendi",
   "categories": {
     "ma": "M&A"
   },
@@ -84,7 +96,40 @@
       "market_context": "Piyasa ortamı",
       "sector": "Sektör",
       "momentum": "Momentum",
-      "sentiment": "Haber duyarlılığı"
+      "sentiment": "Duyarlılık",
+      "liquidity": "Likidite",
+      "relative_strength": "BTC'ye karşı",
+      "volume_momentum": "Hacim trendi",
+      "trend_strength": "Trend gücü"
+    },
+    "dimensionDesc": {
+      "earnings_surprise": "Son çeyreklerde kârın analist tahminlerini ne kadar aştığını gösterir.",
+      "fundamentals": "Şirket sağlığı — F/K oranı, kâr marjı ve özsermaye kârlılığı.",
+      "analyst_sentiment": "Wall Street konsensüsü: Al, Tut ve Sat tavsiye oranları.",
+      "historical": "Fiyatın 52 haftalık aralıktaki konumu ve yıllık getirisi.",
+      "market_context": "Genel piyasa gerginliği — düşük VIX daha sakin koşullar anlamına gelir.",
+      "sector": "İlgili sektör ETF'inin bugünkü performansı.",
+      "momentum": "RSI ve fiyatın 50 günlük ortalamayla ilişkisi — trend gücü.",
+      "sentiment": "Kripto Korku & Açgözlülük Endeksi: piyasanın genel ruh hali.",
+      "liquidity": "24 saatlik işlem hacminin piyasa değerine oranı — yüksek = daha aktif.",
+      "relative_strength": "30 günlük getirinin Bitcoin ile karşılaştırması — pozitif = BTC'yi geçiyor.",
+      "volume_momentum": "Bugünkü işlem hacminin artıp artmadığını gösterir.",
+      "trend_strength": "Fiyatın 30 günlük hareketli ortalamayla ilişkisi."
+    },
+    "scoreStrength": {
+      "strong": "Güçlü",
+      "moderate": "Orta",
+      "weak": "Zayıf"
+    },
+    "recommendationBasis": "{{count}} piyasa sinyaline göre",
+    "notAdvice": "Yatırım tavsiyesi değildir",
+    "cryptoRank": "#{{rank}} sıra",
+    "rsiRange": {
+      "overbought": "Aşırı alım (>70)",
+      "overbought_zone": "Aşırı alıma yakın",
+      "neutral": "Nötr bölge",
+      "oversold_zone": "Aşırı satıma yakın",
+      "oversold": "Aşırı satım (<30)"
     }
   }
 }

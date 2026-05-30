@@ -51,6 +51,7 @@ export const ASSET_COLORS: Record<string, string> = {
   etf: "#8B5CF6", // violet
   crypto: "#F59E0B", // amber
   bond: "#3B82F6", // blue
+  fund: "#EC4899", // pink — TEFAS funds
   cash: "#9CA3AF", // gray
 };
 

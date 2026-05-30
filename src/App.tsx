@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Menu, Globe } from "lucide-react";
+import { Menu, Globe, LayoutDashboard, Briefcase, Wallet, Coins, Compass, Target, FileText, Settings as SettingsIcon, MessageSquare } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { onIdTokenChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { Sidebar } from "@/components/Sidebar";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { Portfolio } from "@/components/portfolio/Portfolio";
@@ -101,7 +103,7 @@ export default function App() {
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const { user, ready, setUser, setReady } = useAuthStore();
   const navigate = useNavigate();
-  const { activeConversationId } = useConversationStore();
+  const { activeConversationId, conversations } = useConversationStore();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const { seen: tourSeen, active: tourActive, start: startTour } = useTourStore();
@@ -110,6 +112,18 @@ export default function App() {
   const appPath = stripLanguagePrefix(location.pathname);
   const activeLanguage = currentLanguage ?? (isSupportedLanguage(i18n.language) ? i18n.language : "en");
   useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
+
+  // Sidebar collapsed state — lifted here so main content can sync its margin
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("sidebar_collapsed") === "true"; } catch { return false; }
+  });
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem("sidebar_collapsed", String(next)); } catch {}
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (currentLanguage && i18n.language !== currentLanguage) {
@@ -208,6 +222,14 @@ export default function App() {
     navigate(buildLocalizedPath(activeLanguage, `/chat/${conv.id}`));
   }
 
+  function handleNewChatMobile() {
+    if (activeConversationId) {
+      navigate(buildLocalizedPath(activeLanguage, `/chat/${activeConversationId}`));
+    } else {
+      navigate(buildLocalizedPath(activeLanguage, "/chat"));
+    }
+  }
+
   function handleLanguageChange(language: "en" | "tr") {
     void i18n.changeLanguage(language);
     navigate(buildLocalizedPath(language, location.pathname), { replace: true });
@@ -279,10 +301,37 @@ export default function App() {
     );
   }
 
+  // Page meta for header title + icon — titles resolved at render time with proper t() keys
+  const PAGE_META: Record<string, { title: string; icon: React.ElementType }> = {
+    "/dashboard": { title: t("nav.dashboard"), icon: LayoutDashboard },
+    "/portfolio":  { title: t("nav.portfolio"), icon: Briefcase      },
+    "/budget":     { title: t("nav.budget"),    icon: Wallet         },
+    "/funds":      { title: t("nav.funds"),     icon: Coins          },
+    "/discover":   { title: t("nav.discover"),  icon: Compass        },
+    "/goals":      { title: t("nav.goals"),     icon: Target         },
+    "/documents":  { title: t("nav.documents"), icon: FileText       },
+    "/settings":   { title: t("nav.settings"),  icon: SettingsIcon   },
+    "/chat":       { title: "Coach",            icon: MessageSquare  },
+  };
+  const matchedMeta = Object.entries(PAGE_META).find(([k]) => appPath === k || appPath.startsWith(k + "/"));
+  const pageMeta = matchedMeta?.[1] ?? null;
+
+  // Chat breadcrumb: show conversation title when on a chat route
+  const onChatRoute = appPath.startsWith("/chat");
+  const activeConv = onChatRoute
+    ? conversations.find((c) => c.id === activeConversationId) ?? null
+    : null;
+
+  // CurrencySwitcher only on financial pages where currency matters
+  const CURRENCY_PAGES = ["/dashboard", "/portfolio", "/budget", "/funds", "/goals"];
+  const showCurrency = CURRENCY_PAGES.some((p) => appPath === p || appPath.startsWith(p + "/"));
+
+  // Key for page transitions — top-level segment only so /chat/abc ↔ /chat/def doesn't re-animate
+  const transitionKey = appPath.split("/")[1] ?? "home";
+
   return (
     <div className="flex h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
       <DemoTour />
-
       {languageSwitcher}
 
       <Sidebar
@@ -291,40 +340,88 @@ export default function App() {
         activeConvId={activeConversationId}
         mobileOpen={mobileNavOpen}
         onMobileClose={() => setMobileNavOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapsed}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3 md:px-6">
+
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* ── Top header bar ── */}
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 md:px-5">
+          {/* Mobile: hamburger */}
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
-            className="rounded-lg p-2 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))] md:hidden"
+            className="rounded-lg p-1.5 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-2))] hover:text-[hsl(var(--text))] md:hidden"
             aria-label={t("openNav")}
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="text-sm font-semibold tracking-tight md:hidden">{t("appName")}</span>
-          <div className="ml-auto">
-            <CurrencySwitcher />
+
+          {/* Page title / breadcrumb — desktop */}
+          <div className="hidden md:flex items-center gap-2 min-w-0">
+            {pageMeta && (() => {
+              const Icon = pageMeta.icon;
+              return (
+                <>
+                  <Icon className="h-4 w-4 shrink-0 text-accent/60" />
+                  <span className="text-sm font-semibold tracking-tight truncate">
+                    {onChatRoute && activeConv?.title ? activeConv.title : pageMeta.title}
+                  </span>
+                </>
+              );
+            })()}
           </div>
-        </div>
-      <main className="flex-1 overflow-y-auto p-4 md:p-8">
-        <Routes>
-          <Route path="/" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
-          <Route path="/:lang/dashboard" element={<Dashboard />} />
-          <Route path="/:lang/portfolio" element={<Portfolio />} />
-          <Route path="/:lang/budget" element={<Budget />} />
-          <Route path="/:lang/funds" element={<Funds />} />
-          <Route path="/:lang/settings" element={<Settings />} />
-          <Route path="/:lang/goals" element={<Goals />} />
-          <Route path="/:lang/discover" element={<Discover />} />
-          <Route path="/:lang/documents" element={<Documents />} />
-          <Route path="/:lang/chat" element={<ChatRoute />} />
-          <Route path="/:lang/chat/:convId" element={<ChatRoute />} />
-          <Route path="/:lang" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
-          <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
-          <Route path="*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
-        </Routes>
-      </main>
+
+          {/* Mobile: app name */}
+          <span className="text-sm font-semibold tracking-tight md:hidden">{t("appName")}</span>
+
+          {/* Right side */}
+          <div className="ml-auto flex items-center gap-3">
+            {/* Backend health indicator */}
+            <span
+              className="hidden md:block h-2 w-2 rounded-full shrink-0"
+              style={{
+                backgroundColor: healthy === true ? "#22c55e" : healthy === false ? "#ef4444" : "#f59e0b",
+                boxShadow: healthy === true ? "0 0 6px rgba(34,197,94,0.6)" : undefined,
+              }}
+              title={healthy === true ? "Backend online" : healthy === false ? "Backend offline" : "Connecting…"}
+            />
+            {/* Only show currency switcher on financial pages */}
+            {showCurrency && <CurrencySwitcher />}
+          </div>
+        </header>
+
+        {/* ── Page content with transitions ── */}
+        <AnimatePresence mode="wait">
+          <motion.main
+            key={transitionKey}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+            className="flex-1 overflow-y-auto p-4 pb-20 md:p-8 md:pb-8"
+          >
+            <Routes location={location}>
+              <Route path="/" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
+              <Route path="/:lang/dashboard" element={<Dashboard />} />
+              <Route path="/:lang/portfolio" element={<Portfolio />} />
+              <Route path="/:lang/budget" element={<Budget />} />
+              <Route path="/:lang/funds" element={<Funds />} />
+              <Route path="/:lang/settings" element={<Settings />} />
+              <Route path="/:lang/goals" element={<Goals />} />
+              <Route path="/:lang/discover" element={<Discover />} />
+              <Route path="/:lang/documents" element={<Documents />} />
+              <Route path="/:lang/chat" element={<ChatRoute />} />
+              <Route path="/:lang/chat/:convId" element={<ChatRoute />} />
+              <Route path="/:lang" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
+              <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
+              <Route path="*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
+            </Routes>
+          </motion.main>
+        </AnimatePresence>
+
+        {/* Mobile bottom tab bar */}
+        <MobileBottomNav onChatPress={() => handleNewChatMobile()} />
       </div>
     </div>
   );

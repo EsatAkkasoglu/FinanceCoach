@@ -271,17 +271,36 @@ def _universe_cached(kind: str, today_iso: str) -> tuple[dict, ...]:
     )
 
 
+def _universe_row_for(code: str) -> dict | None:
+    """Find a fund's universe row (returns/risk/category) by code, mutual then
+    pension. Returns None if the bulk universe is unavailable or has no match."""
+    target = _fold_tr(code)
+    today = date_cls.today().isoformat()
+    for kind in ("YAT", "EMK"):
+        try:
+            universe = _universe_cached(kind, today_iso=today)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("universe lookup failed (%s) for %s: %s", kind, code, exc)
+            continue
+        for f in universe:
+            if _fold_tr(f.get("code") or "") == target:
+                return f
+    return None
+
+
 @tool
 def get_fund_quote(code: str) -> dict[str, Any]:
-    """Get the latest NAV (net asset value, in TL) and 1-day change for a
-    Turkish TEFAS fund.
+    """Get the latest NAV (net asset value, in TL), 1-day change, and trailing
+    return / risk metrics for a Turkish TEFAS fund.
 
     Args:
         code: 3-letter TEFAS fund code, e.g. 'AFA', 'IIH', 'TI2', 'NVT'.
               If the user gives a fund NAME instead, call search_fund first.
 
     Returns:
-        {code, title, price, change_pct, currency: "TRY", as_of, source}
+        {code, title, price, change_pct, currency: "TRY", as_of, source,
+         category, risk, return_1m, return_3m, return_6m, return_1y, return_ytd}
+        Return/risk fields are null when the TEFAS bulk universe is unavailable.
     """
     code = code.upper().strip()
     rows = _history_cached(code, days=10, today_iso=date_cls.today().isoformat())
@@ -292,12 +311,21 @@ def get_fund_quote(code: str) -> dict[str, Any]:
     price = latest["price"]
     prev_price = prev["price"] or price
     change_pct = ((price - prev_price) / prev_price * 100.0) if prev_price else 0.0
+
+    meta = _universe_row_for(code) or {}
     return {
         "code": code,
-        "title": latest["title"],
+        "title": latest["title"] or meta.get("title"),
         "price": round(price, 6),
         "change_pct": round(change_pct, 2),
         "currency": "TRY",
+        "category": meta.get("category"),
+        "risk": meta.get("risk"),
+        "return_1m": meta.get("return_1m"),
+        "return_3m": meta.get("return_3m"),
+        "return_6m": meta.get("return_6m"),
+        "return_1y": meta.get("return_1y"),
+        "return_ytd": meta.get("return_ytd"),
         "category_rank": latest.get("category_rank"),
         "category_total": latest.get("category_total"),
         "as_of": latest["date"],

@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Paperclip, X, FileText, FileSpreadsheet, FileCode, Image as ImageIcon, File as FileIcon, AlertCircle, UploadCloud } from "lucide-react";
+import { Send, Square, Trash2, Copy, Check, ChevronDown, ChevronRight, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Paperclip, X, FileText, FileSpreadsheet, FileCode, Image as ImageIcon, File as FileIcon, AlertCircle, UploadCloud, Mic } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
-import { streamChat, sendFeedback, autotitleConversation, parseDocument, type Citation as ApiCitation } from "@/lib/api";
+import { streamChat, sendFeedback, autotitleConversation, parseDocument, transcribeAudio, type Citation as ApiCitation } from "@/lib/api";
 import { parseToolResult } from "@/lib/parseToolResult";
 import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity, type MessageAttachment } from "@/store";
 import { cn } from "@/lib/cn";
 import { AgentBadge } from "./AgentBadge";
+import { AgentGraph } from "./AgentGraph";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 
 function pickRandom<T>(arr: T[], n: number): T[] {
@@ -159,6 +160,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const markAgentDone = useAgentVizStore((s) => s.markDone);
   const incrementAgentToolCount = useAgentVizStore((s) => s.incrementToolCount);
   const clearAgentEvents = useAgentVizStore((s) => s.clear);
+  const vizActive = useAgentVizStore((s) => Object.keys(s.events).length > 0);
   const updateTitle = useConversationStore((s) => s.updateTitle);
   const activeConv = useConversationStore((s) => s.conversations.find((c) => c.id === convId));
   const displayCurrency = useSettingsStore((s) => s.displayCurrency);
@@ -176,6 +178,10 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const toolActivitiesRef = useRef<ToolActivity[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const [stoppedPrompt, setStoppedPrompt] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const inFlightPromptRef = useRef<string | null>(null);
   const scrollAnchor = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -630,6 +636,61 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
     clearAgentEvents();
   }
 
+  async function startRecording() {
+    if (recording || transcribing) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      toast.error(t("voice.unsupported"));
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      toast.error(t("voice.micDenied"));
+      return;
+    }
+    const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    audioChunksRef.current = [];
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+    rec.onstop = async () => {
+      stream.getTracks().forEach((tr) => tr.stop());
+      const blob = new Blob(audioChunksRef.current, { type: rec.mimeType || "audio/webm" });
+      if (blob.size === 0) return;
+      setTranscribing(true);
+      try {
+        const text = await transcribeAudio(blob);
+        if (text.trim()) {
+          setInput((prev) => (prev ? `${prev} ${text}` : text));
+          textareaRef.current?.focus();
+        } else {
+          toast.error(t("voice.empty"));
+        }
+      } catch {
+        toast.error(t("voice.failed"));
+      } finally {
+        setTranscribing(false);
+      }
+    };
+    mediaRecorderRef.current = rec;
+    rec.start();
+    setRecording(true);
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+  }
+
+  function toggleRecording() {
+    if (recording) stopRecording();
+    else void startRecording();
+  }
+
   // Streaming + last assistant message empty → show "thinking" dots
   const thinkingFor = (() => {
     if (!streaming) return null;
@@ -824,6 +885,12 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           </div>
         )}
 
+        {vizActive && (
+          <div className="mt-4">
+            <AgentGraph />
+          </div>
+        )}
+
         <div
           className="relative mt-4"
           onDragEnter={onDragEnter}
@@ -879,6 +946,27 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                 disabled={streaming}
               />
             </div>
+            {!streaming && (
+              <button
+                type="button"
+                onClick={toggleRecording}
+                disabled={transcribing}
+                title={recording ? t("voice.stop") : t("voice.start")}
+                aria-label={recording ? t("voice.stop") : t("voice.start")}
+                className={cn(
+                  "flex h-11 w-11 items-center justify-center rounded-lg border transition-colors disabled:opacity-40",
+                  recording
+                    ? "border-loss bg-loss/15 text-loss animate-pulse"
+                    : "border-line bg-surface text-content-muted hover:border-accent hover:text-accent",
+                )}
+              >
+                {transcribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </button>
+            )}
             {streaming ? (
               <button
                 type="button"

@@ -3,6 +3,14 @@
   "placeholder": "Koçunuza sorun… (Yeni satır için Shift+Enter)",
   "send": "Gönder (Enter)",
   "stopGenerating": "Yanıtı durdur",
+  "voice": {
+    "start": "Sesli mesaj kaydet",
+    "stop": "Kaydı durdur",
+    "unsupported": "Bu ortamda sesli giriş desteklenmiyor.",
+    "micDenied": "Mikrofon erişimi reddedildi.",
+    "empty": "Hiçbir şey duyulamadı — tekrar deneyin.",
+    "failed": "Ses yazıya dökülemedi. Lütfen tekrar deneyin."
+  },
   "clearChat": "Sohbeti temizle",
   "confirmClear": "Tüm sohbet geçmişi temizlensin mi?",
   "tryOneOfThese": "Bunlardan birini deneyin:",

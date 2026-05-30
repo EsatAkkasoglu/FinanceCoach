@@ -17,6 +17,7 @@ const ASSET_OPTIONS = [
   { value: "etf", label: "ETF" },
   { value: "crypto", label: "Crypto" },
   { value: "bond", label: "Bond" },
+  { value: "fund", label: "Fund (TEFAS)" },
   { value: "cash", label: "Cash" },
 ];
 
@@ -42,6 +43,7 @@ const ASSET_CLASS_FROM_SUGGESTION: Record<string, HoldingInput["asset_class"]> =
   etf: "etf",
   bond: "bond",
   bond_yield: "bond",
+  fund: "fund",
 };
 
 export function HoldingFormModal({ open, onClose, onSaved, editing }: Props) {

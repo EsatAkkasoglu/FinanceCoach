@@ -1,0 +1,3857 @@
+Collected prompts and prompt-containing snippets from repository
+=
+
+File: CLAUDE.md
+------------------------------------------------------------
+# FinCoach — Claude Project Guide
+
+AI finance coach as a Windows desktop app. Tauri (React/TS) shell + Python FastAPI sidecar running a LangGraph supervisor over 7 specialist agents, all backed by Google Gemini.
+
+## Architecture
+
+```
+Tauri (React UI :1420)  ⇄  FastAPI sidecar (:8765)  ⇄  Gemini API
+                                    ↓
+                          SQLite (fincoach.db) + ChromaDB (chroma_db/)
+```
+
+- **Supervisor**: LLM-first router (Gemini structured output) with keyword fallback. Dispatches a single specialist per turn — no parallel orchestration yet.
+- **Streaming**: `/chat` is SSE via `astream_events(version="v2")`. Events: `agent_start`, `agent_done`, `tool_call`, `tool_result`, `citations`, `agent_message`, `token`, `done`, `error`.
+- **Persistence**: LangGraph `AsyncSqliteSaver` checkpointer keyed by `thread_id` — message history reloads automatically per conversation.
+
+## Layout
+
+```
+src/                    React frontend
+  components/{chat,dashboard,onboarding,portfolio,settings,ui}/
+  lib/api.ts            FastAPI client (fetch + SSE parser)
+  store/index.ts        Zustand store
+src-tauri/              Rust shell (sidecar spawn, tauri.conf.json)
+backend/
+  app/
+    main.py             FastAPI app + lifespan + endpoints
+    settings.py         pydantic-settings (env, model, paths)
+    agents/             supervisor.py + 7 specialists, llm.py, state.py
+    tools/              LangChain @tool wrappers (market, portfolio, news, fund, memory, user, symbol_resolver)
+    routers/budget.py
+    services/document_processor/   Multimodal PDF → transactions (google-genai SDK)
+    db/{models,session}.py         SQLAlchemy 2.x + init_db
+    legacy/             Vendored stock-analysis skill scripts
+  tests/                pytest (markers: network, slow)
+  pyproject.toml        uv-managed; ruff (line 100, py311)
+docs/NEXT_STEPS.md
+```
+
+## Commands
+
+Frontend (pnpm, run from repo root):
+```
+pnpm install
+pnpm dev              # Vite only
+pnpm tauri dev        # full desktop app (spawns sidecar in prod, not in dev)
+pnpm lint             # tsc --noEmit
+pnpm test             # vitest run
+pnpm tauri build      # MSI in src-tauri/target/release/bundle/msi/
+```
+
+Backend (uv, run from `backend/`):
+```
+uv sync
+uv run uvicorn app.main:app --reload --port 8765
+uv run pytest                             # all
+uv run pytest -m "not network"            # skip live API hits
+uv run ruff check .
+```
+
+Dev workflow: keep two terminals (backend + `pnpm tauri dev`). Sidecar auto-spawn is for the packaged build.
+
+## Conventions
+
+- **Python**: 3.11+, ruff (E,F,I,W,N,UP,B; ignore E501), `from __future__ import annotations` at top of modules. Pydantic v2 models for request/response. SQLAlchemy 2.x `select()` style.
+- **TypeScript**: strict, ESM, React 18, Tailwind + shadcn/ui (Radix primitives in `components/ui/`), Zustand for state, `react-hook-form` + `zod` for forms, `recharts` for charts, `reactflow` for the agent graph viz, `framer-motion` for animation, `sonner` for toasts.
+- **Single-user prototype**: everything is hardcoded to `user_id=1`. Don't add auth flows unless asked.
+- **API key safety**: `_safe_error_message` in `main.py` redacts Google API keys from any error surfaced to the client — preserve that whenever adding new error paths.
+- **CORS**: wide-open (`*`) — fine for local Tauri WebView2, do not ship as a public service.
+
+## Adding to the system
+
+- **New agent**: add module under `backend/app/agents/`, register in `AGENT_NODES` and `AgentName` Literal in `supervisor.py`, update `ROUTER_SYSTEM_PROMPT`.
+- **New tool**: `@tool`-decorated function under `backend/app/tools/`, then bind it in the relevant agent's `create_react_agent` call. Tool args/outputs must be JSON-serializable (the SSE layer JSON-dumps them).
+- **New endpoint**: add to `main.py` or a new router under `app/routers/`, then a typed wrapper in `src/lib/api.ts`.
+- **DB schema change**: edit `app/db/models.py`. Alembic is in deps but not yet wired — for the prototype, deleting `fincoach.db` and letting `init_db()` recreate is the current path. Confirm with the user before deleting.
+
+## External deps & keys
+
+`backend/.env` (copy from `.env.example`):
+- `GEMINI_API_KEY` — required
+- `NEWS_API_KEY` — for news_sentiment agent
+- `LANGSMITH_API_KEY` — optional tracing (`configure_langsmith()` reads it)
+
+Live data sources: yfinance, NewsAPI, TEFAS (Turkish funds, pre-warmed in a background thread on startup), SEC EDGAR via `edgartools`, fear-and-greed.
+
+## Gotchas
+
+- Tests marked `network` hit live APIs — skip in CI with `-m "not network"`.
+- The supervisor prompt assumes one agent per turn; if you change that, the SSE event ordering in `main.py` (`done_agents` set, `current_outer_agent` tracking) needs to handle interleaved worker events.
+- LangChain message `content` can be a list of structured parts (Gemini 3.x) — always run through `_normalize_content` before treating as a string.
+- `pnpm tauri dev` requires Rust + the Tauri prerequisites installed; the Vite dev server alone (`pnpm dev`) is fine for pure UI iteration but won't have `window.__TAURI__`.
+- Do not commit `fincoach.db*`, `chroma_db/`, `backend/.env`, or any vendored model artifacts.
+
+## Disclaimer
+
+Hackathon prototype — outputs are not financial advice. Don't add features that imply they are.
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\CLAUDE.md
+------------------------------------------------------------
+# FinCoach — Claude Project Guide
+
+AI finance coach as a Windows desktop app. Tauri (React/TS) shell + Python FastAPI sidecar running a LangGraph supervisor over 7 specialist agents, all backed by Google Gemini.
+
+## Architecture
+
+```
+Tauri (React UI :1420)  ⇄  FastAPI sidecar (:8765)  ⇄  Gemini API
+                                    ↓
+                          SQLite (fincoach.db) + ChromaDB (chroma_db/)
+```
+
+- **Supervisor**: LLM-first router (Gemini structured output) with keyword fallback. Dispatches a single specialist per turn — no parallel orchestration yet.
+- **Streaming**: `/chat` is SSE via `astream_events(version="v2")`. Events: `agent_start`, `agent_done`, `tool_call`, `tool_result`, `citations`, `agent_message`, `token`, `done`, `error`.
+- **Persistence**: LangGraph `AsyncSqliteSaver` checkpointer keyed by `thread_id` — message history reloads automatically per conversation.
+
+## Layout
+
+```
+src/                    React frontend
+  components/{chat,dashboard,onboarding,portfolio,settings,ui}/
+  lib/api.ts            FastAPI client (fetch + SSE parser)
+  store/index.ts        Zustand store
+src-tauri/              Rust shell (sidecar spawn, tauri.conf.json)
+backend/
+  app/
+    main.py             FastAPI app + lifespan + endpoints
+    settings.py         pydantic-settings (env, model, paths)
+    agents/             supervisor.py + 7 specialists, llm.py, state.py
+    tools/              LangChain @tool wrappers (market, portfolio, news, fund, memory, user, symbol_resolver)
+    routers/budget.py
+    services/document_processor/   Multimodal PDF → transactions (google-genai SDK)
+    db/{models,session}.py         SQLAlchemy 2.x + init_db
+    legacy/             Vendored stock-analysis skill scripts
+  tests/                pytest (markers: network, slow)
+  pyproject.toml        uv-managed; ruff (line 100, py311)
+docs/NEXT_STEPS.md
+```
+
+## Commands
+
+Frontend (pnpm, run from repo root):
+```
+pnpm install
+pnpm dev              # Vite only
+pnpm tauri dev        # full desktop app (spawns sidecar in prod, not in dev)
+pnpm lint             # tsc --noEmit
+pnpm test             # vitest run
+pnpm tauri build      # MSI in src-tauri/target/release/bundle/msi/
+```
+
+Backend (uv, run from `backend/`):
+```
+uv sync
+uv run uvicorn app.main:app --reload --port 8765
+uv run pytest                             # all
+uv run pytest -m "not network"            # skip live API hits
+uv run ruff check .
+```
+
+Dev workflow: keep two terminals (backend + `pnpm tauri dev`). Sidecar auto-spawn is for the packaged build.
+
+## Conventions
+
+- **Python**: 3.11+, ruff (E,F,I,W,N,UP,B; ignore E501), `from __future__ import annotations` at top of modules. Pydantic v2 models for request/response. SQLAlchemy 2.x `select()` style.
+- **TypeScript**: strict, ESM, React 18, Tailwind + shadcn/ui (Radix primitives in `components/ui/`), Zustand for state, `react-hook-form` + `zod` for forms, `recharts` for charts, `reactflow` for the agent graph viz, `framer-motion` for animation, `sonner` for toasts.
+- **Single-user prototype**: everything is hardcoded to `user_id=1`. Don't add auth flows unless asked.
+- **API key safety**: `_safe_error_message` in `main.py` redacts Google API keys from any error surfaced to the client — preserve that whenever adding new error paths.
+- **CORS**: wide-open (`*`) — fine for local Tauri WebView2, do not ship as a public service.
+
+## Adding to the system
+
+- **New agent**: add module under `backend/app/agents/`, register in `AGENT_NODES` and `AgentName` Literal in `supervisor.py`, update `ROUTER_SYSTEM_PROMPT`.
+- **New tool**: `@tool`-decorated function under `backend/app/tools/`, then bind it in the relevant agent's `create_react_agent` call. Tool args/outputs must be JSON-serializable (the SSE layer JSON-dumps them).
+- **New endpoint**: add to `main.py` or a new router under `app/routers/`, then a typed wrapper in `src/lib/api.ts`.
+- **DB schema change**: edit `app/db/models.py`. Alembic is in deps but not yet wired — for the prototype, deleting `fincoach.db` and letting `init_db()` recreate is the current path. Confirm with the user before deleting.
+
+## External deps & keys
+
+`backend/.env` (copy from `.env.example`):
+- `GEMINI_API_KEY` — required
+- `NEWS_API_KEY` — for news_sentiment agent
+- `LANGSMITH_API_KEY` — optional tracing (`configure_langsmith()` reads it)
+
+Live data sources: yfinance, NewsAPI, TEFAS (Turkish funds, pre-warmed in a background thread on startup), SEC EDGAR via `edgartools`, fear-and-greed.
+
+## Gotchas
+
+- Tests marked `network` hit live APIs — skip in CI with `-m "not network"`.
+- The supervisor prompt assumes one agent per turn; if you change that, the SSE event ordering in `main.py` (`done_agents` set, `current_outer_agent` tracking) needs to handle interleaved worker events.
+- LangChain message `content` can be a list of structured parts (Gemini 3.x) — always run through `_normalize_content` before treating as a string.
+- `pnpm tauri dev` requires Rust + the Tauri prerequisites installed; the Vite dev server alone (`pnpm dev`) is fine for pure UI iteration but won't have `window.__TAURI__`.
+- Do not commit `fincoach.db*`, `chroma_db/`, `backend/.env`, or any vendored model artifacts.
+
+## Disclaimer
+
+Hackathon prototype — outputs are not financial advice. Don't add features that imply they are.
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\advisor.py
+------------------------------------------------------------
+Investment Committee / Advisor — assembles an allocation framework.
+
+Runs AFTER the parallel specialist fan-out, ONLY when the strategist marks
+``requires_advisor=True`` (advisory-type questions: "what should I buy?",
+"is my portfolio balanced?", "how should I deploy this cash?").
+
+Input  : state["findings"] — structured outputs from each consulted specialist.
+Output : state["advisor_brief"] — a Pydantic-validated plan with allocation
+         bands, key risks, action steps, and an explicit "not financial
+         advice" disclaimer. The synthesizer renders it as prose.
+
+The advisor NEVER recommends specific tickers — it produces a *framework*
+(asset-class weights, considerations, next steps) so the disclaimer that
+this is not financial advice remains honest.
+"""
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+
+log = logging.getLogger("fincoach.advisor")
+
+
+class AllocationBand(BaseModel):
+    asset_class: str = Field(
+        description=(
+            "Asset class label, written in the SAME LANGUAGE as the user's "
+            "current message. Examples — English: 'Equity / ETF', 'Bonds', "
+            "'Cash', 'Gold', 'Crypto'. Turkish: 'Hisse Senedi / ETF', "
+            "'Tahvil', 'Nakit', 'Altın', 'Kripto'."
+        )
+    )
+    weight_pct_low: int = Field(ge=0, le=100)
+    weight_pct_high: int = Field(ge=0, le=100)
+    rationale: str = Field(description="One short sentence on why this weight for THIS user.")
+
+
+class AdvisorBrief(BaseModel):
+    """Structured plan produced by the Investment Committee."""
+    headline: str = Field(description="One-sentence framing of the recommendation.")
+    allocation: list[AllocationBand] = Field(
+        description="Asset-class allocation bands. Weights should roughly sum to 100% mid-band."
+    )
+    considerations: list[str] = Field(
+        description="3-5 bullet points the user must weigh (risk, time horizon, budget, concentration, taxes, FX, …)."
+    )
+    next_steps: list[str] = Field(
+        description="2-4 concrete next actions (e.g. 'Build emergency fund first', 'Open a TEFAS account', 'Set monthly auto-invest')."
+    )
+    open_questions: list[str] = Field(
+        default_factory=list,
+        description="Information still missing that would sharpen the plan (e.g. 'time horizon', 'tax residency').",
+    )
+
+
+ADVISOR_PROMPT =
+
+_advisor_llm = None
+
+
+def _get_llm():
+    global _advisor_llm
+    if _advisor_llm is None:
+        _advisor_llm = get_llm().with_structured_output(AdvisorBrief)
+    return _advisor_llm
+
+
+def _format_findings(findings: dict[str, Any]) -> str:
+    """Render the findings dict into a compact prompt section.
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\budget_coach.py
+------------------------------------------------------------
+Budget Coach — reports the user's cash-flow and savings capacity.
+
+Data-provider. Always returns a structured snapshot of monthly income,
+spending, savings rate and projected end-of-month spend. The Advisor uses
+this to size any investment recommendation.
+"""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+from sqlalchemy import select
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls
+from app.db.models import User
+from app.db.session import SessionLocal
+from app.tools.portfolio_tools import list_transactions
+from app.tools.user_tools import get_user_profile
+
+SYSTEM_PROMPT_DEFAULT_BASE =
+
+RISK_GUIDANCE_DEFAULT = {
+    "conservative": """
+RISK PROFILE: Conservative — target savings rate 25-30%. Note any
+discretionary category > 5% of income.""",
+    "balanced": """
+RISK PROFILE: Balanced — target savings rate 20-25%. Flag the top 3
+categories for optimization.""",
+    "aggressive": """
+RISK PROFILE: Aggressive — target savings rate 15-20%. Emphasize that
+sitting on excess cash is itself a drag.""",
+}
+
+SYSTEM_PROMPT_ROAST_BASE =
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\document_parser.py
+------------------------------------------------------------
+Document Parser agent — Gemini multimodal pipeline for bank statements,
+receipts, invoices.
+
+Input: PDF or image bytes (uploaded via /documents/upload).
+Output: list[dict] of structured transactions { date, amount, currency,
+    description, category, confidence }.
+"""
+from __future__ import annotations
+
+from langchain_core.messages import AIMessage
+
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings
+
+SYSTEM_PROMPT =
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\market_data.py
+------------------------------------------------------------
+Market Data agent — live prices, technicals, fundamentals, 8-dim analysis.
+
+Covers: US stocks, crypto, ETFs, indices, commodities (via ETF proxies),
+forex, Treasury yields, futures. Backed by Alpha Vantage (TIME_SERIES,
+GLOBAL_QUOTE, OVERVIEW, EARNINGS, DIVIDENDS, SMA, RSI, NEWS_SENTIMENT,
+TOP_GAINERS_LOSERS, TREASURY_YIELD, CURRENCY_EXCHANGE_RATE) with CoinGecko
+as a crypto-trending fallback.
+
+For named assets the agent resolves the ticker first via ``resolve_symbol``.
+"""
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.prebuilt import create_react_agent
+
+import app.services.coingecko as cg
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls
+from app.tools.market_tools import (
+    get_quote,
+    analyze_ticker_8dim,
+    get_dividend_metrics,
+    scan_hot_trends,
+    scan_rumors,
+    get_company_overview,
+    get_technical_indicators,
+)
+from app.tools.symbol_resolver import resolve_symbol, list_supported_categories
+from app.tools.fund_tools import (
+    get_fund_quote,
+    get_fund_history,
+    search_fund,
+    list_top_funds,
+)
+
+SYSTEM_PROMPT_BASE =
+
+RISK_GUIDANCE = {
+    "conservative": """
+RISK PROFILE: Conservative (0-50 score)
+RECOMMENDED ASSET CLASSES (prioritize in this order):
+- Blue-chip US stocks: AAPL, MSFT, JNJ, PG (low volatility, strong dividends)
+- Dividend-focused ETFs: VOY, VYM, SCHD (high dividend yield, stability)
+- Bond ETFs: BND, AGG, IEF (investment-grade bonds)
+- Defensive sectors: Utilities (XLU), Healthcare (XLV), Consumer Staples (XLP)
+- Turkish bond funds: stable government and corporate bonds
+
+ANALYSIS PRIORITIES (for each stock):
+- Dividend yield (emphasize consistent payers)
+- P/E ratio (lower = more stable)
+- Debt/equity ratio (lower is better)
+- 52-week volatility (avoid high-volatility names)
+
+AVOID: crypto, small-cap growth, emerging markets, speculative options""",
+    "balanced": """
+RISK PROFILE: Balanced (51-90 score)
+RECOMMENDED ASSET CLASSES (balanced mix):
+- Growth + Value stocks: Mix of AAPL, NVDA, MSFT with TSM, GIS
+- Diversified ETFs: VOO, VTI (broad market), QQQ (tech-heavy but quality)
+- Bond ETFs: BND, VBTLX (40-60% stock allocation)
+- Sector rotation: Include 2-3 sector ETFs for diversification
+- Turkish equity + bond funds: Mixed balanced portfolios
+
+ANALYSIS PRIORITIES (for each stock):
+- Growth rate vs. P/E ratio (balance both)
+- Dividend yield + capital appreciation potential
+- Sector exposure (ensure diversity)
+- 52-week performance trend
+
+SUGGESTIONS: Rebalance when single asset class drifts >20% from target""",
+    "aggressive": """
+RISK PROFILE: Aggressive (91-125 score)
+RECOMMENDED ASSET CLASSES (growth-focused):
+- Growth stocks: NVDA, AAPL (tech), TSLA, AMZN (disruptive)
+- Small-cap / micro-cap growth: QQQ, XLV sector rotation, emerging leaders
+- Crypto & alternative assets: BTC-USD, ETH-USD for diversification
+- High-growth sector ETFs: XLK (tech), FTEC (fintech), URTH (emerging markets)
+- Turkish small-cap / growth funds: Higher yield potential
+
+ANALYSIS PRIORITIES (for each stock):
+- Revenue growth rate (prioritize rapid growth)
+- Profit margin trajectory (expansion is key)
+- Volatility & momentum (OK with higher 52-week swing)
+- Market share gains in high-growth sectors
+
+SUGGESTIONS: Consider concentrated positions in high-conviction growth bets""",
+}
+
+
+def _build_prompt(risk_profile: str = "balanced") -> str:
+
+risk_guidance = RISK_GUIDANCE.get(risk_profile, RISK_GUIDANCE["balanced"])
+    return SYSTEM_PROMPT_BASE + "\n" + risk_guidance
+
+
+_TOOLS = [
+    resolve_symbol,
+    list_supported_categories,
+    get_quote,
+    get_company_overview,
+    get_technical_indicators,
+    analyze_ticker_8dim,
+    get_dividend_metrics,
+    scan_hot_trends,
+    scan_rumors,
+    # TEFAS Turkish funds
+    search_fund,
+    get_fund_quote,
+    get_fund_history,
+    list_top_funds,
+]
+
+def _latest_user_text(state: AgentState) -> str:
+    for message in reversed(state.get("messages", []) or []):
+        if isinstance(message, HumanMessage):
+            content = message.content
+            return content if isinstance(content, str) else str(content)
+    return ""
+
+
+def _wants_top_crypto_market_cap(text: str) -> bool:
+    text_l = text.lower()
+    return (
+        ("crypto" in text_l or "kripto" in text_l)
+        and ("market cap" in text_l or "market hac" in text_l or "piyasa değ" in text_l)
+        and ("top" in text_l or "ilk" in text_l or "en yüksek" in text_l)
+    )
+
+
+def _requested_limit(text: str, default: int = 5) -> int:
+    match = re.search(r"\b(?:top|ilk)?\s*(\d{1,2})\b", text.lower())
+    if not match:
+        return default
+    return max(1, min(10, int(match.group(1))))
+
+
+def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\memory.py
+------------------------------------------------------------
+Memory agent — RAG over the user's chat history and transactions.
+
+Used as the supervisor's *fallback* node when intent is unclear, and also
+to enrich other agents with relevant past context."""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls
+from app.tools.memory_tools import query_memory
+
+SYSTEM_PROMPT =
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\news_sentiment.py
+------------------------------------------------------------
+News & Sentiment agent — headlines, hot-trending tickers, rumor detection."""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls
+from app.tools.news_tools import search_news
+from app.tools.market_tools import scan_hot_trends, scan_rumors
+
+SYSTEM_PROMPT_BASE =
+
+RISK_GUIDANCE = {
+    "conservative": """
+RISK PROFILE: Conservative (0-50 score)
+NEWS FILTERING STRATEGY:
+- Prioritize: Blue-chip company earnings, dividend announcements, regulatory updates
+- Highlight: Stable industry news, dividend increases, credit rating upgrades
+- De-emphasize: Crypto news, pre-revenue startups, high-volatility sector moves
+- Rumor approach: Warn about M&A rumors but emphasize "unconfirmed whispers"
+- Company focus: Fortune 500 / S&P 500 companies, government bonds
+- Trends to avoid: Meme stocks, emerging cryptocurrencies, speculative SPACs
+
+ANALYSIS PRIORITIES:
+- Dividend sustainability and payout increases
+- Company stability metrics (debt, cash flow)
+- Regulatory & legal developments (positive for stability)""",
+    "balanced": """
+RISK PROFILE: Balanced (51-90 score)
+NEWS FILTERING STRATEGY:
+- Balance: Mix of blue-chip + growth company news
+- Highlight: Earnings beats, sector rotations, tech innovations, analyst upgrades
+- Include: Some M&A rumors (marked as "early signals"), IPO news, sector trends
+- Crypto news: Include with context ("volatile alternative asset")
+- Company focus: Mix of large-cap value + mid-cap growth
+- Trends to monitor: Emerging sectors (fintech, AI), sector rotation signals
+
+ANALYSIS PRIORITIES:
+- Earnings trends and guidance changes
+- Sector momentum shifts
+- Technology and competitive advantages
+- M&A and consolidation trends""",
+    "aggressive": """
+RISK PROFILE: Aggressive (91-125 score)
+NEWS FILTERING STRATEGY:
+- Focus: Growth companies, disruptive tech, emerging leaders, high-conviction bets
+- Highlight: Pre-revenue startup funding rounds, crypto ecosystem growth, M&A rumors
+- Include: Aggressive positioning on hot trends, emerging markets opportunities
+- Rumor approach: Highlight early M&A whispers as "alpha opportunities"
+- Company focus: Growth tech, biotech, small-cap movers, crypto ecosystem
+- Trends to follow: AI boom, metaverse plays, emerging markets, crypto protocols
+
+ANALYSIS PRIORITIES:
+- Revenue growth acceleration
+- Market share gains and disruption
+- Early-stage signals (before mainstream coverage)
+- Speculative opportunities (M&A, industry disruption, innovation cycles)""",
+}
+
+
+def _build_prompt(risk_profile: str = "balanced") -> str:
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\portfolio.py
+------------------------------------------------------------
+Portfolio specialist — reports the user's OWN holdings.
+
+Acts as a data-provider: always returns a structured snapshot of the
+user's current portfolio (or "no holdings on file"). Never refuses, never
+extends into news / market / budget commentary — the Investment Committee
+(advisor) integrates this with other specialists' findings.
+"""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls
+from app.tools.portfolio_tools import (
+    add_holding,
+    add_holding_by_value,
+    list_holdings,
+    list_transactions,
+    remove_holding,
+    set_cash_balance,
+)
+from app.tools.market_tools import get_quote
+
+SYSTEM_PROMPT_BASE =
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\risk_profiler.py
+------------------------------------------------------------
+Risk Profiler — reports the user's risk score and label.
+
+Data-provider. Always returns the current risk profile when called.
+The Investment Committee integrates this into allocation decisions.
+"""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls
+
+CONSERVATIVE_MAX = 50
+BALANCED_MAX = 90
+
+
+def score_to_profile(score: int) -> str:
+    if score <= CONSERVATIVE_MAX:
+        return "conservative"
+    if score <= BALANCED_MAX:
+        return "balanced"
+    return "aggressive"
+
+
+SYSTEM_PROMPT =
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\state.py
+------------------------------------------------------------
+Shared TypedDict state passed between LangGraph nodes."""
+from __future__ import annotations
+
+from typing import Annotated, Any, TypedDict
+
+from langgraph.graph.message import add_messages
+
+
+RESET_SENTINEL = "__reset__"
+
+
+def merge_findings(left: dict | None, right: dict | None) -> dict:
+    """Reducer for the ``findings`` field.
+
+    Specialists run in parallel and each returns ``{"findings": {<name>: {...}}}``.
+    LangGraph merges parallel branches by calling this reducer once per branch
+    with (accumulated, new). We do a shallow dict union — later writes from the
+    same agent (rare) overwrite earlier ones.
+
+    Reset semantics: passing ``{"__reset__": True}`` (or ``None``) replaces the
+    accumulated value with an empty dict. Used by the strategist at the start
+    of every turn so stale findings from prior turns don't leak forward.
+    """
+    if right is None or (isinstance(right, dict) and right.get(RESET_SENTINEL)):
+        return {}
+    if not left:
+        return dict(right or {})
+    if not right:
+        return dict(left)
+    out = dict(left)
+    out.update(right)
+    return out
+
+
+def append_list(left: list | None, right: list | None) -> list:
+    """Reducer that concatenates lists across parallel branches.
+
+    Reset semantics: passing ``None`` clears the accumulated list.
+    """
+    if right is None:
+        return []
+    if not left:
+        return list(right or [])
+    if not right:
+        return list(left)
+    return [*left, *right]
+
+
+class AgentState(TypedDict, total=False):
+    """State carried through the supervisor graph.
+
+    Fields:
+        messages         — running list of LangChain messages (auto-merged by add_messages)
+        user_id          — current user (set per-request from the bearer token)
+        risk_profile     — user's risk profile (conservative/balanced/aggressive)
+        plan             — strategist's execution plan for this turn
+        memory_hints     — top-k semantic snippets from past turns, fetched
+                           BEFORE planning to enrich the strategist's context
+        findings         — per-agent structured output, merged across parallel branches
+        advisor_brief    — advisor's allocation/plan framework (None if not needed)
+        next_action      — kept for legacy SSE handler (no longer drives routing)
+        agents_consulted — agents called this turn, in dispatch order
+        scratchpad       — free-form working memory between nodes
+        citations        — tool calls every worker made (merged for the UI)
+        suggestions      — follow-up prompts the synthesizer crafted for this turn
+        error            — structured error from the last worker (None on success)
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\supervisor.py
+------------------------------------------------------------
+Graph builder — FinCoach Capital hierarchy.
+
+Pipeline per user turn::
+
+    START
+      │
+      ▼
+    strategist  ──── plan() ────► dispatches to N specialists in parallel
+      │                                  │
+      │                                  ▼
+      │                       ┌── market_data ──┐
+      │                       │── portfolio ────│   each writes its own
+      │                       │── budget_coach ─│   findings entry into state
+      │                       │── risk_profiler │   (merged via reducer)
+      │                       │── news_sentiment│
+      │                       │── memory ───────│
+      │                       └── document_parser
+      │                                  │
+      │                                  ▼
+      │                            gather (sync barrier)
+      │                                  │
+      │                ┌─────────────────┴─────────────────┐
+      │           requires_advisor?                        │
+      │             yes │                              no  │
+      │                 ▼                                  │
+      │              advisor                               │
+      │                 │                                  │
+      │                 └──────────────┬───────────────────┘
+      │                                ▼
+      └──────────────────────► synthesizer ─► END
+
+The strategist makes ONE planning call up front instead of looping. Specialists
+run in parallel — N rounds compressed to 1. The advisor only runs when the
+question needs allocation/plan synthesis (decided by the strategist). The
+synthesizer always produces the final user-facing message.
+
+Public API preserved for ``app.main``:
+    AGENT_NODES        — name → callable map, used by the SSE handler
+    FINISH             — kept as a sentinel for legacy event handling
+    SYNTHESIZER_NODE   — name of the synthesizer node
+    ADVISOR_NODE       — name of the advisor node
+    STRATEGIST_NODE    — name of the strategist node
+    build_supervisor() — compile the graph (signature unchanged)
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Literal
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
+from pydantic import BaseModel, Field
+
+from app.agents.state import AgentState, RESET_SENTINEL
+from app.agents.llm import get_llm
+from app.agents._helpers import normalize_content
+from app.agents import (
+    market_data, portfolio, budget_coach, news_sentiment,
+    risk_profiler, memory, document_parser, synthesizer, advisor,
+)
+from app.tools.user_tools import get_user_profile
+
+log = logging.getLogger("fincoach.strategist")
+
+
+AGENT_NODES = {
+    "market_data": market_data.run,
+    "portfolio": portfolio.run,
+    "budget_coach": budget_coach.run,
+    "news_sentiment": news_sentiment.run,
+    "risk_profiler": risk_profiler.run,
+    "memory": memory.run,
+    "document_parser": document_parser.run,
+}
+
+STRATEGIST_NODE = "strategist"
+GATHER_NODE = "gather"
+ADVISOR_NODE = "advisor"
+SYNTHESIZER_NODE = "synthesizer"
+
+# Kept for backward compatibility with main.py imports.
+FINISH = "FINISH"
+
+SpecialistName = Literal[
+    "market_data",
+    "portfolio",
+    "budget_coach",
+    "news_sentiment",
+    "risk_profiler",
+    "memory",
+    "document_parser",
+]
+
+QuestionType = Literal["lookup", "client_state", "research", "advisory", "mixed", "follow_up"]
+
+
+# ── Strategist ───────────────────────────────────────────────────────────────
+
+
+class ExecutionPlan(BaseModel):
+    """Single-shot plan for this turn."""
+    specialists: list[SpecialistName] = Field(
+        description=(
+            "Specialists to consult — listed in priority order. ALL of them run "
+            "in parallel. Include EVERY desk whose data is needed. Empty list "
+            "means no specialist is required (rare — e.g. pure clarification)."
+        ),
+        min_length=0,
+        max_length=7,
+    )
+    requires_advisor: bool = Field(
+        description=(
+            "True ONLY if the user is asking for a recommendation / plan / "
+            "allocation guidance ('ne önerirsin?', 'should I buy?', "
+            "'is my portfolio balanced?', 'how to deploy this cash?'). "
+            "False for pure lookups ('BTC price?', 'latest news on Intel?') "
+            "and pure state reports ('show my portfolio')."
+        )
+    )
+    question_type: QuestionType = Field(
+        description=(
+            "lookup     = single fact ('BTC fiyatı?')\n"
+            "client_state = report on user's own data ('portföyüm', 'harcamalarım')\n"
+            "research   = market/news ('intel haberi', 'altın fonu önerisi')\n"
+            "advisory   = wants a plan / recommendation\n"
+            "mixed      = multiple of the above"
+        )
+    )
+    rationale: str = Field(
+        description="One short sentence (max 25 words) explaining the plan."
+    )
+    confidence: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How confident you are that this dispatch correctly matches the user's "
+            "intent. 0.9+ = obvious (single clear ask); 0.7-0.9 = solid; "
+            "0.5-0.7 = mixed intent or ambiguous wording; <0.5 = guessing. "
+            "Low scores cause the orchestrator to enrich memory or re-prompt."
+        ),
+    )
+
+
+STRATEGIST_PROMPT =
+
+_strategist_llm = None
+
+
+def _get_strategist_llm():
+    global _strategist_llm
+    if _strategist_llm is None:
+        _strategist_llm = get_llm().with_structured_output(ExecutionPlan)
+    return _strategist_llm
+
+
+def _keyword_fallback_plan(
+    user_text: str, has_prior_context: bool = False
+) -> ExecutionPlan:
+    """Used only if the structured-output LLM call fails."""
+    text = (user_text or "").lower().strip()
+    chosen: list[SpecialistName] = []
+
+    # Crude follow-up detection: short acknowledgement + prior context exists.
+    short = len(text) < 60
+    ack_words = ("tamam", "ok ", "okay", "evet", "anladım", "anladim", "yes ")
+    follow_up = has_prior_context and (
+        short and any(text.startswith(w) or text == w.strip() for w in ack_words)
+    )
+
+    advisory = (not follow_up) and any(
+        k in text
+        for k in (
+            "öner", "tavsiye", "ne yap", "ne alm", "ne satayım", "recommend",
+            "should i", "what should", "dengeli mi", "tahsis", "allocation",
+            "plan", "strateji",
+        )
+    )
+    if any(k in text for k in ("portföy", "portfolio", "holding", "elimde", "varlığım")):
+        chosen.append("portfolio")
+    if any(k in text for k in ("harcama", "bütçe", "budget", "spend", "saving", "tasarruf")):
+        chosen.append("budget_coach")
+    if any(k in text for k in ("haber", "news", "söylenti", "sentiment", "trend")):
+        chosen.append("news_sentiment")
+    if any(k in text for k in ("risk", "profil")):
+        chosen.append("risk_profiler")
+    if any(k in text for k in ("pdf", "ekstre", "statement", "dekont", "fatura")):
+        chosen.append("document_parser")
+    if advisory or not chosen:
+        # Default exposure to market_data for advisory or unclear queries.
+        if "market_data" not in chosen:
+            chosen.append("market_data")
+    if advisory:
+        for needed in ("budget_coach", "risk_profiler", "portfolio"):
+            if needed not in chosen:
+                chosen.append(needed)  # type: ignore[arg-type]
+
+    if follow_up:
+        q_type: QuestionType = "follow_up"
+    elif advisory:
+        q_type = "advisory"
+    else:
+        q_type = "lookup"
+
+    return ExecutionPlan(
+        specialists=chosen[:6],
+        requires_advisor=advisory,
+        question_type=q_type,
+        rationale="keyword fallback (LLM unavailable)",
+        confidence=0.4,
+    )
+
+
+def _last_user_text(messages: list) -> str:
+    for m in reversed(messages or []):
+        if isinstance(m, HumanMessage):
+            return normalize_content(getattr(m, "content", ""))
+    return ""
+
+
+def _extract_recent_turns(messages: list, k: int = 3) -> list[dict[str, str]]:
+    """Return the last ``k`` COMPLETED user/assistant turn pairs (oldest → newest).
+
+    "Completed" = a user message followed by at least one AI message before
+    the next user message. The synthesizer reply is the LAST AI message in
+    that span (intermediate specialist outputs are in there too but we only
+    surface the final user-facing reply).
+
+    The current (in-flight) turn — the trailing HumanMessage with no AI
+    reply yet — is excluded so the strategist focuses on it separately.
+    """
+    if not messages:
+        return []
+
+    # Find every HumanMessage index in order.
+    human_idxs = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
+    if not human_idxs:
+        return []
+
+    turns: list[dict[str, str]] = []
+    # Iterate over all but the last HumanMessage (that one is the current turn).
+    for i in range(len(human_idxs) - 1):
+        start = human_idxs[i]
+        end = human_idxs[i + 1]  # exclusive
+        user_text = normalize_content(getattr(messages[start], "content", "")).strip()
+        # Last AI message strictly between this human and the next is the
+        # synthesizer reply for that turn.
+        assistant_text = ""
+        for j in range(end - 1, start, -1):
+            if isinstance(messages[j], AIMessage):
+                assistant_text = normalize_content(
+                    getattr(messages[j], "content", "")
+                ).strip()
+                break
+        turns.append({"user": user_text, "assistant": assistant_text})
+
+    return turns[-k:]
+
+
+def _fetch_memory_hints(query: str, k: int = 3) -> list[dict[str, Any]]:
+    """Run a semantic search over the user's past chats / decisions BEFORE
+    the strategist plans, so the LLM knows about durable preferences ("I hate
+    crypto", "tax residency TR") that would otherwise require an explicit
+    memory-agent fan-out.
+
+    Best-effort: any failure (no collection, ChromaDB hiccup) returns [] —
+    the planner still runs normally without hints.
+    """
+    text = (query or "").strip()
+    if not text:
+        return []
+    try:
+        from app.tools.memory_tools import query_memory
+        hits = query_memory.invoke({"text": text, "k": k}) or []
+        if not isinstance(hits, list):
+            return []
+        cleaned: list[dict[str, Any]] = []
+        for h in hits:
+            if not isinstance(h, dict):
+                continue
+            snippet = (h.get("text") or "").strip()
+            if not snippet:
+                continue
+            cleaned.append({
+                "text": snippet[:300] + ("…" if len(snippet) > 300 else ""),
+                "metadata": h.get("metadata") or {},
+            })
+        return cleaned
+    except Exception as exc:  # noqa: BLE001
+        log.warning("memory hint fetch failed: %s", exc)
+        return []
+
+
+def _format_strategist_context(
+    turns: list[dict[str, str]],
+    prev_brief: dict[str, Any] | None,
+    current_query: str,
+    memory_hints: list[dict[str, Any]] | None = None,
+) -> str:
+    """Build the human-message payload for the strategist LLM."""
+    lines: list[str] = []
+
+    if turns:
+        lines.append("RECENT CONVERSATION (oldest → newest, EXCLUDES the current message):")
+        for i, t in enumerate(turns, 1):
+            u = t["user"][:400] + ("…" if len(t["user"]) > 400 else "")
+            a = t["assistant"][:500] + ("…" if len(t["assistant"]) > 500 else "")
+            lines.append(f"\n[turn -{len(turns) - i + 1}]")
+            lines.append(f"  USER: {u}")
+            lines.append(f"  ASSISTANT: {a or '(no reply on record)'}")
+        lines.append("")
+    else:
+        lines.append("RECENT CONVERSATION: (this is the FIRST turn — no prior context)")
+        lines.append("")
+
+    if prev_brief:
+        headline = (prev_brief.get("headline") or "").strip()
+        allocation = prev_brief.get("allocation") or []
+        if headline or allocation:
+            lines.append("PREVIOUS INVESTMENT COMMITTEE BRIEF (still on the table):")
+            if headline:
+                lines.append(f"  headline: {headline[:300]}")
+            if allocation:
+                alloc_strs = []
+                for band in allocation[:6]:
+                    if isinstance(band, dict):
+                        ac = band.get("asset_class", "?")
+                        lo = band.get("weight_pct_low", "?")
+                        hi = band.get("weight_pct_high", "?")
+                        alloc_strs.append(f"{ac} {lo}-{hi}%")
+                if alloc_strs:
+                    lines.append("  allocation: " + " / ".join(alloc_strs))
+            lines.append("")
+    else:
+        lines.append("PREVIOUS INVESTMENT COMMITTEE BRIEF: (none — no plan on the table yet)")
+        lines.append("")
+
+    if memory_hints:
+        lines.append("DURABLE MEMORY HITS (semantic search over past conversations — may or may not be relevant):")
+        for i, h in enumerate(memory_hints, 1):
+            snippet = (h.get("text") or "").strip()
+            if snippet:
+                lines.append(f"  {i}. {snippet}")
+        lines.append(
+            "  → Use these only if they meaningfully constrain the answer "
+            "(e.g. a stated preference, prior decision, or known fact about "
+            "the user). Ignore otherwise."
+        )
+        lines.append("")
+
+    lines.append(f"CURRENT USER MESSAGE:\n{current_query}")
+    lines.append("\nDecide the plan now.")
+    return "\n".join(lines)
+
+
+def _resolve_risk_profile(state: AgentState) -> str:
+    cached = state.get("risk_profile")
+    if cached:
+        return cached
+    try:
+        profile_data = get_user_profile.invoke({})
+        return profile_data.get("risk_profile", "balanced")
+    except Exception as exc:
+        log.warning("strategist: failed to fetch risk_profile: %s", exc)
+        return "balanced"
+
+
+def _strategist_node(state: AgentState) -> dict[str, Any]:
+    """Produce the execution plan and cache the risk profile."""
+    messages = state.get("messages") or []
+    user_text = _last_user_text(messages).strip()
+    risk_profile = _resolve_risk_profile(state)
+    recent_turns = _extract_recent_turns(messages, k=3)
+    prev_brief = state.get("advisor_brief")
+    # Proactive memory: pull durable preferences / facts from past turns BEFORE
+    # planning so the strategist can route on them.
+    memory_hints = _fetch_memory_hints(user_text, k=3) if user_text else []
+
+    log.info("")
+    log.info("┌── STRATEGIST ────────────────────────────────────────")
+    log.info("│  user query   : %s", (user_text[:140] + "…") if len(user_text) > 140 else user_text)
+    log.info("│  risk profile : %s", risk_profile)
+    log.info("│  prior turns  : %d", len(recent_turns))
+    log.info("│  prev brief   : %s", "yes" if prev_brief else "no")
+    log.info("│  memory hints : %d", len(memory_hints))
+
+    if not user_text:
+        log.info("│  decision     : empty query → memory fallback")
+        log.info("└──────────────────────────────────────────────────────")
+        return {
+            "plan": ExecutionPlan(
+                specialists=["memory"],
+                requires_advisor=False,
+                question_type="lookup",
+                rationale="empty query fallback",
+            ).model_dump(),
+            "risk_profile": risk_profile,
+            "memory_hints": memory_hints,
+            "next_action": "memory",
+            # Clear findings so the previous turn's findings don't leak into
+            # this turn's advisor / synthesizer.
+            "findings": {RESET_SENTINEL: True},
+            "agents_consulted": None,
+            "citations": None,
+            # advisor_brief deliberately NOT reset — when this turn has no
+            # advisor, the prior brief still represents "the plan on the
+            # table" and the synthesizer is allowed to reference it.
+        }
+
+    payload = _format_strategist_context(recent_turns, prev_brief, user_text, memory_hints)
+
+    plan: ExecutionPlan
+    try:
+        plan = _get_strategist_llm().invoke(
+            [SystemMessage(content=STRATEGIST_PROMPT), HumanMessage(content=payload)]
+        )
+    except Exception as exc:
+        log.warning("strategist LLM call failed (%s) — using keyword fallback", exc)
+        plan = _keyword_fallback_plan(
+            user_text, has_prior_context=bool(recent_turns or prev_brief)
+        )
+
+    # Dedupe and validate specialist list against AGENT_NODES.
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for name in plan.specialists:
+        if name in AGENT_NODES and name not in seen:
+            seen.add(name)
+            cleaned.append(name)
+    plan = plan.model_copy(update={"specialists": cleaned})
+
+    log.info("│  specialists  : %s", cleaned or "(none)")
+    log.info("│  advisor      : %s", plan.requires_advisor)
+    log.info("│  question_type: %s", plan.question_type)
+    log.info("│  confidence   : %.2f", plan.confidence)
+    log.info("│  rationale    : %s", plan.rationale)
+    log.info("└──────────────────────────────────────────────────────")
+
+    # Low-confidence + nothing memory-related was already routed → silently
+    # add the memory desk so the synthesizer has more to work with. This is
+    # cheap (one ReAct turn against ChromaDB) and avoids re-prompting.
+    if plan.confidence < 0.6 and "memory" not in cleaned and len(cleaned) < 6:
+        cleaned.append("memory")
+        plan = plan.model_copy(update={"specialists": cleaned})
+        log.info("   (low-confidence rescue) appended memory desk → %s", cleaned)
+
+    return {
+        "plan": plan.model_dump(),
+        "risk_profile": risk_profile,
+        "memory_hints": memory_hints,
+        "next_action": "FAN_OUT" if cleaned else FINISH,
+        # Reset turn-local accumulators so stale entries from prior turns
+        # don't leak into the advisor / synthesizer this turn.
+        "findings": {RESET_SENTINEL: True},
+        "agents_consulted": None,
+        "citations": None,
+        # See above: advisor_brief is deliberately not reset.
+    }
+
+
+# ── Routing ──────────────────────────────────────────────────────────────────
+
+
+def _dispatch_from_strategist(state: AgentState) -> list[Send] | str:
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\agents\synthesizer.py
+------------------------------------------------------------
+Communications Desk — produces the single user-facing reply + suggestions.
+
+Reads:
+  • state["plan"]          — strategist's plan (drives follow-up vs new-plan mode)
+  • state["findings"]      — per-specialist structured outputs from THIS turn
+  • state["advisor_brief"] — Investment Committee's allocation framework
+                              (present when newly produced this turn OR
+                              persisted from a prior turn — see WHEN TO USE)
+  • state["messages"]      — full history (last assistant reply is the
+                              context for follow-up suggestions)
+
+Output:
+  • messages              — one AIMessage with the user-facing prose
+  • suggestions           — 2-4 short follow-up prompts the UI shows as chips
+
+Final structured output from the Communications Desk."""
+    reply: str = Field(
+        description=(
+            "The user-facing message in the user's language. Markdown allowed. "
+            "Length depends on question_type — see prompt rules."
+        )
+    )
+    suggestions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "2-4 short follow-up prompts the user can tap. Each is a complete, "
+            "ready-to-send user message in the user's language. They MUST be "
+            "actionable with FinCoach Capital's existing capabilities (see "
+            "CAPABILITY MAP in the prompt). Order: most relevant first."
+        ),
+        min_length=0,
+        max_length=4,
+    )
+
+
+SYNTHESIZER_PROMPT =
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\backend\app\services\document_processor\gemini_processor.py
+------------------------------------------------------------
+GeminiDocumentProcessor — native google-genai pipeline.
+
+One round-trip: PDF/image/docx bytes → Gemini multimodal → structured JSON
+matching a Pydantic schema. We deliberately bypass the LangChain wrapper
+here because:
+  - LangChain's `with_structured_output` is looser than Gemini's native
+    response_schema (which enforces JSON Schema server-side).
+  - The File API (>18 MB or persistent reuse) is first-class only in the
+    native SDK.
+  - This is a one-shot call; no tool/agent orchestration to gain from.
+
+Chat / multi-agent flow keeps using LangChain — see app/agents/.
+"""
+from __future__ import annotations
+
+import logging
+from typing import TypeVar
+
+from pydantic import BaseModel, ValidationError
+
+from app.services.document_processor.base import (
+    DocumentSource,
+    DocumentStorage,
+    NoOpStorage,
+    ProcessorError,
+)
+from app.services.document_processor.schemas import ProfileExtraction
+from app.settings import settings
+
+log = logging.getLogger("fincoach.document_processor")
+
+T = TypeVar("T", bound=BaseModel)
+
+
+PROFILE_PROMPT =
+
+
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\src\components\onboarding\data.ts
+------------------------------------------------------------
+
+export interface QuizQuestion {
+  id: string;
+  prompt: string;
+  options: QuizOption[];
+}
+
+...
+export const RISK_QUIZ: QuizQuestion[] = [
+  {
+    id: "drawdown",
+    prompt: "Your $10,000 investment drops to $7,000 in a week. What do you do?",
+    options: [
+      { label: "Sell everything to stop the bleeding", points: 0 },
+      { label: "Sell some, keep the rest", points: 8 },
+...
+  },
+  {
+    id: "horizon",
+    prompt: "When do you need this money?",
+    options: [
+      { label: "Within 1 year", points: 0 },
+      { label: "1-3 years", points: 10 },
+...
+  },
+  {
+    id: "allocation",
+    prompt: "Pick the portfolio you'd be most comfortable with.",
+    options: [
+      { label: "100% bonds, all stability", points: 0 },
+      { label: "60/40 stocks/bonds, classic", points: 10 },
+...
+  },
+  {
+    id: "hot_tip",
+    prompt: "A friend mentions a hot crypto. You...",
+    options: [
+      { label: "Ignore it — speculation isn't your thing", points: 5 },
+      { label: "Research it for a few days first", points: 15 },
+...
+  },
+  {
+    id: "long_drawdown",
+    prompt: "A bear market drops your portfolio 30%. After a year it's still down. You...",
+    options: [
+      { label: "Pull everything out", points: 0 },
+      { label: "Pause new contributions", points: 10 },
+...
+
+
+File: .claude\worktrees\elastic-cartwright-5a8bcc\src\components\onboarding\StepRiskQuiz.tsx
+------------------------------------------------------------
+          >
+            <div className="mb-3 text-sm font-medium">
+              <span className="mr-2 text-[hsl(var(--text-muted))]">{idx + 1}.</span>
+              {q.prompt}
+            </div>
+            <div className="grid gap-2">
+              {q.options.map((o) => {
+...
+
+
+File: .learnings\LEARNINGS.md
+------------------------------------------------------------
+# Learnings
+
+## [LRN-20260518-001] correction
+
+**Logged**: 2026-05-18T12:40:00Z
+**Priority**: high
+**Status**: resolved
+**Area**: backend
+
+### Summary
+Chat agents had no visibility into the user's Goals table — synthesizer asked the user for target amount / date even when the goal was already in the DB.
+
+### Details
+The `Goal` model existed and was exposed via `/goals` CRUD endpoints, but:
+- No `@tool` wrapped goal reads, so agents (advisor, budget_coach, etc.) could never call them.
+- `synthesizer._format_user_context` injected risk_profile, monthly_income, and holdings into every reply but **omitted goals**.
+- The strategist router prompt and keyword-fallback had no goal-related keywords (hedef, biriktir, peşinat, on track, emergency fund), so goal questions weren't even routed to a goal-aware desk.
+- Result: when user asked "ev hedefime ulaşmak için aylık ne biriktirmeliyim?", the LLM had no choice but to template a generic allocation table and ask back for amount + vade — even though both were already in `goal` rows.
+
+### Suggested Action (applied)
+1. New `backend/app/tools/goal_tools.py` with `list_user_goals` and `update_goal_progress` `@tool` wrappers. `list_user_goals` returns each goal with progress_pct, days_left, months_left, monthly_savings_needed, plus a summary aggregate.
+2. Wired both tools into `budget_coach` agent (single owner of "am I on track" questions); updated its `_TOOLS` and prompt to require `list_user_goals` whenever goals are in scope, and forbid asking the user for values already in the tool output.
+3. Extended `synthesizer._format_user_context` to append a compact `goals=[title cur/target (pct%) need~X/mo for Yd]` line so even when budget_coach isn't dispatched, the synthesizer has the data inline.
+4. Added a `GOALS RULE` block to `SYNTHESIZER_PROMPT` forbidding "what's your target amount?" style questions when a matching goal is in USER PROFILE, and a `Goals (READ + WRITE)` capability section to the CAPABILITY MAP for suggestion-picking.
+5. Strategist router: documented `budget_coach` as the goal-question owner, added a goal-routing example, and expanded the keyword fallback with hedef / biriktir / peşinat / acil fon / on track / emergency fund.
+
+### Metadata
+- Source: user_feedback (screenshot of synthesizer asking "Hedeflediğiniz evin yaklaşık değeri nedir?" while user already had "Ev peşinatı 410.000/1.500.000" goal saved)
+- Related Files:
+  - `backend/app/tools/goal_tools.py` (new)
+  - `backend/app/agents/budget_coach.py`
+  - `backend/app/agents/synthesizer.py`
+  - `backend/app/agents/supervisor.py`
+- Tags: agents, prompt-engineering, tool-binding, personalization
+
+### Resolution
+- **Resolved**: 2026-05-18T12:40:00Z
+- **Notes**: Backend hot-reloaded successfully. End-to-end test recommended: ask "ev hedefim için aylık ne biriktirmeliyim?" with a goal seeded — expected to quote 410.000 / 1.500.000 and compute monthly_savings_needed from days_left rather than asking for input.
+
+---
+
+## [LRN-20260518-002] best_practice
+
+**Logged**: 2026-05-18T12:50:00Z
+**Priority**: high
+**Status**: resolved
+**Area**: backend
+
+### Summary
+Synthesizer + strategist were producing structurally identical "Önerilen Stratejik Dağılım + Neden bu öneri?" replies on every advisory turn, regardless of whether the user actually asked for an allocation plan. Felt canned.
+
+### Details
+Two coupled problems with the prompts:
+
+1. **Strategist defaulted advisory ON for too many questions.** The prompt said "For advisory questions, default to a genuinely holistic answer …" with the full 5-desk lineup. State-style goal questions ("yolda mıyım", "şuanki tempoda yeter mi", "aylık ne biriktirmeliyim") were getting `requires_advisor=True`, which fired the Investment Committee unnecessarily.
+
+2. **Synthesizer's advisory mode REQUIRED an allocation table.** The prompt literally said "Required structure: Start with verdict… Include a compact markdown allocation/action table… Why this recommendation? section…". Once `requires_advisor=True` and `advisor_brief` existed, the template was mandatory. Hence every reply looked like a clone.
+
+Tried fixing with keyword lists first — user correctly pushed back that keywords are brittle and the prompts themselves were the problem.
+
+### Suggested Action (applied)
+Rewrote both prompts around two principles, not keyword lists:
+
+**Synthesizer** (`SYNTHESIZER_PROMPT`):
+- Replaced the rigid "REPLY MODE RULES" with a "HOW TO SHAPE THE REPLY — PRINCIPLE, NOT TEMPLATE" section centered on: *the SHAPE of the reply must match the SHAPE of the question*.
+- Added an explicit **ANTI-TEMPLATE** block listing the canned patterns to avoid (allocation table grafted onto verification questions, recurring Risk/Security/Growth triplet, boilerplate openings, generic closers).
+- Introduced a **speech-act classifier** the synthesizer applies to the current message: verification / quantification / fact / data-rich / plan-request / explain / follow-up / mixed → and a short paragraph each for what good output looks like for that act.
+- Added a **VARIETY HEURISTIC**: glance at the last 1-2 assistant replies in RECENT CONVERSATION; if the draft repeats headings/openings, rewrite. Two consecutive replies should not look like clones.
+- Updated the runtime payload nudge to say `advisor_brief` is INPUT, not OUTPUT — render only the parts that answer THIS question.
+
+**Strategist** (`STRATEGIST_PROMPT`):
+- Replaced "default to advisor ON for advisory questions" with an explicit test: *"If I answer this with just data and one sentence of judgment, is the user satisfied?" — if yes, advisor is NOT needed.*
+- Listed concrete advisor=TRUE vs advisor=FALSE shapes with goal-progress / quantification examples on the FALSE side and "rebuild plan / how to allocate" on the TRUE side.
+- Added the rationale: triggering advisor unnecessarily produces canned allocation-table replies.
+
+Key principle change: the prompts now express *intent* (match shape, avoid templates, default to data-only) rather than keyword-based routing.
+
+### Metadata
+- Source: user_feedback ("her cevap aynı format, statik kelimelerle çözülmez, promptu geliştir")
+- Related Files:
+  - `backend/app/agents/synthesizer.py`
+  - `backend/app/agents/supervisor.py`
+- Tags: prompt-engineering, anti-template, speech-acts, intent-classification
+
+### Resolution
+- **Resolved**: 2026-05-18T12:50:00Z
+- **Notes**: Backend hot-reloaded. Next test: ask both "ev hedefime yetişiyor muyum" (should now be a short verification reply with numbers, no allocation table) and "ev hedefime göre nasıl yatırım yapayım" (should still produce a full plan with the allocation table) — the two replies must look structurally different.
+
+---
+
+
+
+File: backend\app\main.py
+------------------------------------------------------------
+FastAPI sidecar entrypoint. Spawned by Tauri on app launch.
+
+Endpoints:
+    GET  /health              — liveness probe (used by Tauri to wait for ready)
+    POST /chat                 — SSE-streamed multi-agent chat response
+    GET  /portfolio            — list holdings
+    POST /portfolio/holdings   — add holding
+    POST /documents/upload     — multimodal PDF / image parse
+    GET  /briefing             — daily personalized brief
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+import uuid
+from contextlib import asynccontextmanager
+from datetime import date as date_cls, datetime
+from typing import Literal
+
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from langchain_core.messages import HumanMessage, AIMessage
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sse_starlette.sse import EventSourceResponse
+
+from app.settings import configure_langsmith, settings
+from app.auth import current_user_id_var, get_current_user_id
+from app.auth.routes import router as auth_router
+from app.tools._cache import cache_reset
+from app.db.models import Conversation, Goal, Holding, MessageFeedback, User
+from app.db.session import SessionLocal, init_db
+from app.agents.supervisor import (
+    ADVISOR_NODE,
+    AGENT_NODES,
+    STRATEGIST_NODE,
+    SYNTHESIZER_NODE,
+    build_supervisor,
+)
+from app.routers.admin import router as admin_router
+from app.routers.budget import router as budget_router
+from app.routers.funds import router as funds_router
+from app.routers.fx import router as fx_router
+from app.routers.insights import router as insights_router
+from app.routers.memory import router as memory_router
+from app.routers.networth import router as networth_router
+from app.routers.symbols import router as symbols_router
+from app.services.document_processor.router import router as documents_router
+
+log = logging.getLogger("fincoach")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+_GOOGLE_API_KEY_RE = re.compile(r"AIza[0-9A-Za-z_-]{20,}")
+
+
+def _safe_error_message(exc: Exception) -> str:
+    """Return a client-safe error without leaking provider API keys."""
+    message = _GOOGLE_API_KEY_RE.sub("[REDACTED_GOOGLE_API_KEY]", str(exc))
+    if "CONSUMER_SUSPENDED" in message or "has been suspended" in message:
+        return (
+            "Gemini API key is suspended. Create or rotate to a restricted Gemini API key "
+            "for generativelanguage.googleapis.com, update backend/.env, and restart the backend."
+        )
+    return message
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log.info("FinCoach starting up (demo_mode=%s)", settings.demo_mode)
+    configure_langsmith()
+    init_db()
+
+    import threading
+    from app.tools.fund_tools import prewarm_universe
+
+    if settings.using_postgres:
+        from psycopg_pool import AsyncConnectionPool
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        # Neon (serverless Postgres) closes idle server-side connections after
+        # ~5 min. Cloud Run min-instances=0 means the instance may restart with
+        # stale pool connections, causing "the connection is closed" errors.
+        # min_size=0: no persistent connections while idle.
+        # max_idle=60: evict connections idle for >60 s before Neon closes them.
+        from psycopg.rows import dict_row
+        pool = AsyncConnectionPool(
+            settings.checkpointer_url,
+            min_size=0,
+            max_size=5,
+            max_idle=60.0,
+            open=False,
+            # Must match from_conn_string defaults: autocommit + no prepared
+            # statements (Neon serverless doesn't support them across connections)
+            # + dict_row so LangGraph checkpoint queries parse correctly.
+            kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        )
+        await pool.open()
+        try:
+            checkpointer = AsyncPostgresSaver(pool)
+            await checkpointer.setup()
+            app.state.supervisor = build_supervisor(checkpointer=checkpointer)
+            log.info("Supervisor built with AsyncPostgresSaver (psycopg pool); port %d", settings.port)
+            threading.Thread(target=prewarm_universe, daemon=True, name="tefas-prewarm").start()
+            yield
+        finally:
+            await pool.close()
+    else:
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        async with AsyncSqliteSaver.from_conn_string(settings.db_path) as checkpointer:
+            app.state.supervisor = build_supervisor(checkpointer=checkpointer)
+            log.info("Supervisor built with AsyncSqliteSaver; port %d", settings.port)
+            threading.Thread(target=prewarm_universe, daemon=True, name="tefas-prewarm").start()
+            yield
+
+    log.info("FinCoach shutting down")
+
+
+app = FastAPI(title="FinCoach API", version="0.1.0", lifespan=lifespan)
+
+
+# Firebase Hosting rewrites `/api/**` to this Cloud Run service and forwards
+# the full path unchanged, so the backend sees `/api/health` etc. Strip the
+# prefix at the ASGI layer so local dev (no prefix) and prod (with prefix)
+# both route to the same handlers.
+@app.middleware("http")
+async def strip_api_prefix(request, call_next):
+    scope = request.scope
+    path: str = scope.get("path", "")
+    if path.startswith("/api/"):
+        scope["path"] = path[len("/api"):]
+        raw_path = scope.get("raw_path")
+        if isinstance(raw_path, bytes) and raw_path.startswith(b"/api/"):
+            scope["raw_path"] = raw_path[len(b"/api"):]
+    return await call_next(request)
+
+
+# Allow all origins (Tauri WebView2 + Firebase Hosting + local dev).
+# Explicit allow_headers ensures CORS headers appear on error responses too.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["Content-Type", "Authorization"],
+    max_age=600,
+)
+
+app.include_router(auth_router)
+app.include_router(documents_router)
+app.include_router(budget_router)
+app.include_router(fx_router)
+app.include_router(funds_router)
+app.include_router(symbols_router)
+app.include_router(insights_router)
+app.include_router(memory_router)
+app.include_router(networth_router)
+app.include_router(admin_router)
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "version": "0.1.0",
+        "demo_mode": settings.demo_mode,
+        "model": settings.gemini_model,
+    }
+
+
+# ── Conversation management ──────────────────────────────────────────────────
+
+@app.post("/conversations")
+async def create_conversation(payload: dict, user_id: int = Depends(get_current_user_id)):
+    """Create a new conversation thread and return its metadata."""
+    conv_id = str(uuid.uuid4())
+    thread_id = str(uuid.uuid4())
+    title = (payload.get("title") or "").strip() or None
+    now = datetime.utcnow()
+    with SessionLocal() as db:
+        conv = Conversation(
+            id=conv_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            title=title,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(conv)
+        db.commit()
+    return {"id": conv_id, "thread_id": thread_id, "title": title, "created_at": now.isoformat()}
+
+
+@app.get("/conversations")
+async def list_conversations(user_id: int = Depends(get_current_user_id)):
+    """Return all non-archived conversations for the user, newest first."""
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(Conversation)
+            .where(Conversation.user_id == user_id, Conversation.archived == 0)
+            .order_by(Conversation.updated_at.desc())
+        ).scalars().all()
+        return [
+            {
+                "id": c.id,
+                "thread_id": c.thread_id,
+                "title": c.title,
+                "created_at": c.created_at.isoformat(),
+                "updated_at": c.updated_at.isoformat(),
+            }
+            for c in rows
+        ]
+
+
+@app.patch("/conversations/{conv_id}")
+async def update_conversation(
+    conv_id: str, payload: dict, user_id: int = Depends(get_current_user_id)
+):
+    """Update conversation title."""
+    with SessionLocal() as db:
+        conv = db.execute(
+            select(Conversation).where(Conversation.id == conv_id, Conversation.user_id == user_id)
+        ).scalar_one_or_none()
+        if conv is None:
+            raise HTTPException(status_code=404, detail="conversation not found")
+        if "title" in payload:
+            conv.title = payload["title"]
+        db.commit()
+    return {"ok": True}
+
+
+# ── Message feedback (thumbs up / down) ──────────────────────────────────────
+
+class FeedbackIn(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=64)
+    message_id: str = Field(min_length=1, max_length=64)
+    rating: Literal["up", "down"]
+    reason: str | None = None
+    agent: str | None = None
+    excerpt: str | None = None
+
+
+@app.post("/feedback")
+async def post_feedback(payload: FeedbackIn, user_id: int = Depends(get_current_user_id)):
+    """Upsert a thumbs-up / thumbs-down rating on a specific assistant message.
+
+    Re-rating the same ``message_id`` overwrites the prior row (last write
+    wins) rather than stacking. Best-effort: callers should treat 200 OK and
+    silent failure equally — this never gates the chat UI.
+    """
+    excerpt = (payload.excerpt or "").strip()
+    if len(excerpt) > 400:
+        excerpt = excerpt[:400]
+    reason = (payload.reason or "").strip() or None
+
+    with SessionLocal() as db:
+        row = db.execute(
+            select(MessageFeedback).where(
+                MessageFeedback.user_id == user_id,
+                MessageFeedback.thread_id == payload.thread_id,
+                MessageFeedback.message_id == payload.message_id,
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            row = MessageFeedback(
+                user_id=user_id,
+                thread_id=payload.thread_id,
+                message_id=payload.message_id,
+                rating=payload.rating,
+                reason=reason,
+                agent=payload.agent,
+                excerpt=excerpt or None,
+            )
+            db.add(row)
+        else:
+            row.rating = payload.rating
+            row.reason = reason
+            if payload.agent:
+                row.agent = payload.agent
+            if excerpt:
+                row.excerpt = excerpt
+        db.commit()
+    return {"ok": True, "rating": payload.rating}
+
+
+@app.post("/conversations/{conv_id}/autotitle")
+async def autotitle_conversation(
+    conv_id: str, payload: dict, user_id: int = Depends(get_current_user_id)
+):
+    """Generate a short (4-6 word) title from the user's first message via Gemini."""
+    message: str = (payload.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message required")
+    with SessionLocal() as db:
+        conv = db.execute(
+            select(Conversation).where(Conversation.id == conv_id, Conversation.user_id == user_id)
+        ).scalar_one_or_none()
+        if conv is None:
+            raise HTTPException(status_code=404, detail="conversation not found")
+
+    title = message[:60]
+    try:
+        from app.agents.llm import get_llm
+        prompt = (
+            "Generate a concise 4-6 word title for a finance chat that starts with "
+            "the message below. Match the user's language (English or Turkish). "
+            "Return ONLY the title — no quotes, no punctuation at the end, no prefix.\n\n"
+            f"Message: {message[:500]}"
+        )
+        resp = await get_llm().ainvoke(prompt)
+        raw = getattr(resp, "content", "")
+        if isinstance(raw, list):
+            raw = " ".join(part.get("text", "") if isinstance(part, dict) else str(part) for part in raw)
+        candidate = str(raw).strip().strip('"\'').strip()
+        candidate = candidate.splitlines()[0] if candidate else ""
+        if candidate:
+            title = candidate[:80]
+    except Exception as exc:
+        log.warning("autotitle fallback (%s): %s", conv_id, _safe_error_message(exc))
+
+    with SessionLocal() as db:
+        conv = db.execute(
+            select(Conversation).where(Conversation.id == conv_id, Conversation.user_id == user_id)
+        ).scalar_one_or_none()
+        if conv is not None:
+            conv.title = title
+            db.commit()
+    return {"ok": True, "title": title}
+
+
+@app.delete("/conversations/{conv_id}")
+async def delete_conversation(conv_id: str, user_id: int = Depends(get_current_user_id)):
+
+
+
+
+File: backend\app\agents\advisor.py
+------------------------------------------------------------
+Investment Committee / Advisor — assembles an allocation framework.
+
+Runs AFTER the parallel specialist fan-out, ONLY when the strategist marks
+``requires_advisor=True`` (advisory-type questions: "what should I buy?",
+"is my portfolio balanced?", "how should I deploy this cash?").
+
+Input  : state["findings"] — structured outputs from each consulted specialist.
+Output : state["advisor_brief"] — a Pydantic-validated plan with allocation
+         bands, key risks, action steps, and an explicit "not financial
+         advice" disclaimer. The synthesizer renders it as prose.
+
+The advisor NEVER recommends specific tickers — it produces a *framework*
+(asset-class weights, considerations, next steps) so the disclaimer that
+this is not financial advice remains honest.
+"""
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+
+log = logging.getLogger("fincoach.advisor")
+
+
+class ReasoningDriver(BaseModel):
+    """One concrete factor that influenced an allocation decision.
+
+    Used for XAI ("why this recommendation") — connects each weight to a
+    specific data point the specialists actually returned.
+    """
+    source: str = Field(
+        description=(
+            "Which specialist or signal produced this factor. One of: "
+            "'risk_profiler', 'market_data', 'portfolio', 'budget', "
+            "'news', 'memory', 'user_input'."
+        )
+    )
+    factor: str = Field(
+        description=(
+            "One short clause naming the concrete observation in the user's "
+            "language. Examples: 'Risk skoru 78 (balanced)', "
+            "'Portföyde NVDA %42 ağırlık', 'Aylık nakit fazlası 3.500 TL', "
+            "'VOO 6 aylık trend +12%'."
+        )
+    )
+    impact: str = Field(
+        description=(
+            "How this factor moved the allocation, in the user's language. "
+            "Examples: 'hisse payını yukarı çeker', 'nakit tamponu artırır', "
+            "'tek hisseye konsantrasyonu sınırlar', 'nötr'."
+        )
+    )
+
+
+class AllocationBand(BaseModel):
+    asset_class: str = Field(
+        description=(
+            "Asset class label, written in the SAME LANGUAGE as the user's "
+            "current message. Examples — English: 'Equity / ETF', 'Bonds', "
+            "'Cash', 'Gold', 'Crypto'. Turkish: 'Hisse Senedi / ETF', "
+            "'Tahvil', 'Nakit', 'Altın', 'Kripto'."
+        )
+    )
+    weight_pct_low: int = Field(ge=0, le=100)
+    weight_pct_high: int = Field(ge=0, le=100)
+    rationale: str = Field(description="One short sentence on why this weight for THIS user.")
+    drivers: list[ReasoningDriver] = Field(
+        default_factory=list,
+        description=(
+            "2-4 concrete drivers (source + factor + impact) that produced "
+            "THIS band's weight. Pull directly from specialist findings — "
+            "do not invent factors that were not in the inputs."
+        ),
+    )
+
+
+class AdvisorBrief(BaseModel):
+    """Structured plan produced by the Investment Committee."""
+    headline: str = Field(description="One-sentence framing of the recommendation.")
+    allocation: list[AllocationBand] = Field(
+        description="Asset-class allocation bands. Weights should roughly sum to 100% mid-band."
+    )
+    considerations: list[str] = Field(
+        description="3-5 bullet points the user must weigh (risk, time horizon, budget, concentration, taxes, FX, …)."
+    )
+    next_steps: list[str] = Field(
+        description="2-4 concrete next actions (e.g. 'Build emergency fund first', 'Open a TEFAS account', 'Set monthly auto-invest')."
+    )
+    open_questions: list[str] = Field(
+        default_factory=list,
+        description="Information still missing that would sharpen the plan (e.g. 'time horizon', 'tax residency').",
+    )
+    why_summary: str = Field(
+        default="",
+        description=(
+            "1-2 sentences (in the user's language) summarising the dominant "
+            "reasons this overall plan took its shape. Should reference the "
+            "user's risk profile and the most influential specialist signal."
+        ),
+    )
+    key_drivers: list[ReasoningDriver] = Field(
+        default_factory=list,
+        description=(
+            "3-5 dominant factors that shaped the OVERALL plan (not band-"
+            "specific). These power the XAI 'Why this recommendation?' panel."
+        ),
+    )
+
+
+ADVISOR_PROMPT =
+
+_advisor_llm = None
+
+
+def _get_llm():
+    global _advisor_llm
+    if _advisor_llm is None:
+        _advisor_llm = get_llm().with_structured_output(AdvisorBrief)
+    return _advisor_llm
+
+
+def _format_findings(findings: dict[str, Any]) -> str:
+    """Render the findings dict into a compact prompt section.
+
+
+
+
+File: backend\app\agents\budget_coach.py
+------------------------------------------------------------
+Budget Coach — reports the user's cash-flow and savings capacity.
+
+Data-provider. Always returns a structured snapshot of monthly income,
+spending, savings rate and projected end-of-month spend. The Advisor uses
+this to size any investment recommendation.
+"""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+from sqlalchemy import select
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
+from app.db.models import User
+from app.db.session import SessionLocal
+from app.tools.portfolio_tools import list_transactions
+from app.tools.user_tools import get_user_profile
+from app.tools.goal_tools import create_user_goal, list_user_goals, update_goal_progress
+
+SYSTEM_PROMPT_DEFAULT_BASE =
+
+RISK_GUIDANCE_DEFAULT = {
+    "conservative": """
+RISK PROFILE: Conservative — target savings rate 25-30%. Note any
+discretionary category > 5% of income.""",
+    "balanced": """
+RISK PROFILE: Balanced — target savings rate 20-25%. Flag the top 3
+categories for optimization.""",
+    "aggressive": """
+RISK PROFILE: Aggressive — target savings rate 15-20%. Emphasize that
+sitting on excess cash is itself a drag.""",
+}
+
+SYSTEM_PROMPT_ROAST_BASE =
+
+
+
+
+File: backend\app\agents\document_parser.py
+------------------------------------------------------------
+Document Parser agent — retrieval-augmented Q&A over uploaded documents.
+
+When the user uploads a PDF or image, the document_processor service extracts
+text (including labels and numbers read off chart screenshots) and embeds the
+chunks into the ``document_chunks`` ChromaDB collection.
+
+This agent is invoked by the strategist whenever a question may be answered
+from those uploaded documents. It is a ReAct agent with two tools:
+
+* ``search_documents(query, k)`` — semantic retrieval of relevant chunks.
+* ``list_uploaded_documents()``  — enumerate indexed files (for disambiguation).
+
+The agent never relies on the document content being inlined into chat
+history. Each turn it re-queries the index, so follow-up questions about a
+document that was attached many turns ago still work.
+"""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.tools.document_tools import list_uploaded_documents, search_documents
+
+
+SYSTEM_PROMPT =
+
+_agent = None
+
+
+def _build_agent():
+    return create_react_agent(
+        get_llm(),
+        tools=[search_documents, list_uploaded_documents],
+        prompt=SYSTEM_PROMPT,
+    )
+
+
+async def run(state: AgentState) -> AgentState:
+
+
+
+
+File: backend\app\agents\llm.py
+------------------------------------------------------------
+LLM factories + token-usage logging."""
+from __future__ import annotations
+
+import logging
+from functools import lru_cache
+from typing import Any
+
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+from app.settings import settings
+
+logger = logging.getLogger("fincoach.tokens")
+
+# Gemini 3.1 Flash-Lite pricing (USD per 1M tokens, standard tier)
+_INPUT_COST_PER_M  = 0.25
+_OUTPUT_COST_PER_M = 1.50
+
+
+def _read_token_usage(response: Any) -> tuple[int, int]:
+    """Extract (input_tokens, output_tokens) from a LangChain ``LLMResult``.
+
+    Different ``langchain-google-genai`` versions stash usage in different
+    places. We probe every known location in priority order:
+
+      1. ``response.llm_output["token_usage"]``      (older path)
+      2. ``response.llm_output["usage_metadata"]``   (intermediate path)
+      3. ``response.generations[*][*].message.usage_metadata``  (current path —
+         AIMessage.usage_metadata standardized by LangChain)
+      4. ``response.generations[*][*].generation_info["usage_metadata"]``
+         (streaming / Gemini-specific path)
+
+    Returns (0, 0) if nothing is found — never raises.
+    """
+    inp = 0
+    out = 0
+
+    llm_output = getattr(response, "llm_output", None) or {}
+    if isinstance(llm_output, dict):
+        for key in ("token_usage", "usage_metadata"):
+            usage = llm_output.get(key) or {}
+            if isinstance(usage, dict):
+                inp = inp or usage.get("input_tokens") or usage.get("prompt_token_count") or 0
+                out = out or usage.get("output_tokens") or usage.get("candidates_token_count") or 0
+
+    if inp or out:
+        return int(inp), int(out)
+
+    # Walk per-generation usage. Streaming responses always populate this.
+    for gen_list in getattr(response, "generations", None) or []:
+        for gen in gen_list or []:
+            msg = getattr(gen, "message", None)
+            usage = getattr(msg, "usage_metadata", None) if msg is not None else None
+            if not isinstance(usage, dict):
+                info = getattr(gen, "generation_info", None) or {}
+                usage = info.get("usage_metadata") if isinstance(info, dict) else None
+            if isinstance(usage, dict):
+                inp += int(usage.get("input_tokens") or usage.get("prompt_token_count") or 0)
+                out += int(usage.get("output_tokens") or usage.get("candidates_token_count") or 0)
+
+    return inp, out
+
+
+class TokenLogger(BaseCallbackHandler):
+
+
+
+
+File: backend\app\agents\market_data.py
+------------------------------------------------------------
+Market Data agent — live prices, technicals, fundamentals, 8-dim analysis.
+
+Covers: US stocks, crypto, ETFs, indices, commodities (via ETF proxies),
+forex, Treasury yields, futures. Backed by yfinance (no key, no rate limits)
+with CoinGecko for crypto trending.
+
+For named assets the agent resolves the ticker first via ``resolve_symbol``.
+"""
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.prebuilt import create_react_agent
+
+import app.services.coingecko as cg
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
+from app.tools.market_tools import (
+    get_quote,
+    analyze_ticker_8dim,
+    get_dividend_metrics,
+    get_bist_dividend_leaders,
+    get_bist_movers,
+    get_us_movers,
+    scan_hot_trends,
+    scan_rumors,
+    get_company_overview,
+    get_technical_indicators,
+)
+from app.tools.symbol_resolver import resolve_symbol, list_supported_categories
+from app.tools.fund_tools import (
+    get_fund_quote,
+    get_fund_history,
+    search_fund,
+    list_top_funds,
+)
+
+SYSTEM_PROMPT_BASE =
+
+RISK_GUIDANCE = {
+    "conservative": """
+RISK PROFILE: Conservative (0-50 score)
+RECOMMENDED ASSET CLASSES (prioritize in this order):
+- Blue-chip US stocks: AAPL, MSFT, JNJ, PG (low volatility, strong dividends)
+- Dividend-focused ETFs: VOY, VYM, SCHD (high dividend yield, stability)
+- Bond ETFs: BND, AGG, IEF (investment-grade bonds)
+- Defensive sectors: Utilities (XLU), Healthcare (XLV), Consumer Staples (XLP)
+- Turkish bond funds: stable government and corporate bonds
+
+ANALYSIS PRIORITIES (for each stock):
+- Dividend yield (emphasize consistent payers)
+- P/E ratio (lower = more stable)
+- Debt/equity ratio (lower is better)
+- 52-week volatility (avoid high-volatility names)
+
+AVOID: crypto, small-cap growth, emerging markets, speculative options""",
+    "balanced": """
+RISK PROFILE: Balanced (51-90 score)
+RECOMMENDED ASSET CLASSES (balanced mix):
+- Growth + Value stocks: Mix of AAPL, NVDA, MSFT with TSM, GIS
+- Diversified ETFs: VOO, VTI (broad market), QQQ (tech-heavy but quality)
+- Bond ETFs: BND, VBTLX (40-60% stock allocation)
+- Sector rotation: Include 2-3 sector ETFs for diversification
+- Turkish equity + bond funds: Mixed balanced portfolios
+
+ANALYSIS PRIORITIES (for each stock):
+- Growth rate vs. P/E ratio (balance both)
+- Dividend yield + capital appreciation potential
+- Sector exposure (ensure diversity)
+- 52-week performance trend
+
+SUGGESTIONS: Rebalance when single asset class drifts >20% from target""",
+    "aggressive": """
+RISK PROFILE: Aggressive (91-125 score)
+RECOMMENDED ASSET CLASSES (growth-focused):
+- Growth stocks: NVDA, AAPL (tech), TSLA, AMZN (disruptive)
+- Small-cap / micro-cap growth: QQQ, XLV sector rotation, emerging leaders
+- Crypto & alternative assets: BTC-USD, ETH-USD for diversification
+- High-growth sector ETFs: XLK (tech), FTEC (fintech), URTH (emerging markets)
+- Turkish small-cap / growth funds: Higher yield potential
+
+ANALYSIS PRIORITIES (for each stock):
+- Revenue growth rate (prioritize rapid growth)
+- Profit margin trajectory (expansion is key)
+- Volatility & momentum (OK with higher 52-week swing)
+- Market share gains in high-growth sectors
+
+SUGGESTIONS: Consider concentrated positions in high-conviction growth bets""",
+}
+
+
+def _build_prompt(risk_profile: str = "balanced") -> str:
+
+risk_guidance = RISK_GUIDANCE.get(risk_profile, RISK_GUIDANCE["balanced"])
+    return SYSTEM_PROMPT_BASE + "\n" + risk_guidance
+
+
+_TOOLS = [
+    resolve_symbol,
+    list_supported_categories,
+    get_quote,
+    get_company_overview,
+    get_technical_indicators,
+    analyze_ticker_8dim,
+    get_dividend_metrics,
+    get_bist_dividend_leaders,
+    get_bist_movers,
+    get_us_movers,
+    scan_hot_trends,
+    scan_rumors,
+    # TEFAS Turkish funds
+    search_fund,
+    get_fund_quote,
+    get_fund_history,
+    list_top_funds,
+]
+
+def _latest_user_text(state: AgentState) -> str:
+    for message in reversed(state.get("messages", []) or []):
+        if isinstance(message, HumanMessage):
+            content = message.content
+            return content if isinstance(content, str) else str(content)
+    return ""
+
+
+def _wants_top_crypto_market_cap(text: str) -> bool:
+    text_l = text.lower()
+    return (
+        ("crypto" in text_l or "kripto" in text_l)
+        and ("market cap" in text_l or "market hac" in text_l or "piyasa değ" in text_l)
+        and ("top" in text_l or "ilk" in text_l or "en yüksek" in text_l)
+    )
+
+
+def _requested_limit(text: str, default: int = 5) -> int:
+    match = re.search(r"\b(?:top|ilk)?\s*(\d{1,2})\b", text.lower())
+    if not match:
+        return default
+    return max(1, min(10, int(match.group(1))))
+
+
+def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
+
+
+
+
+File: backend\app\agents\memory.py
+------------------------------------------------------------
+Memory agent — RAG over the user's chat history and transactions.
+
+Used as the supervisor's *fallback* node when intent is unclear, and also
+to enrich other agents with relevant past context."""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
+from app.tools.memory_tools import query_memory
+
+SYSTEM_PROMPT =
+
+
+
+
+File: backend\app\agents\news_sentiment.py
+------------------------------------------------------------
+News & Sentiment agent — headlines, hot-trending tickers, rumor detection."""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
+from app.tools.news_tools import search_news
+from app.tools.market_tools import scan_hot_trends, scan_rumors
+
+SYSTEM_PROMPT_BASE =
+
+RISK_GUIDANCE = {
+    "conservative": """
+RISK PROFILE: Conservative (0-50 score)
+NEWS FILTERING STRATEGY:
+- Prioritize: Blue-chip company earnings, dividend announcements, regulatory updates
+- Highlight: Stable industry news, dividend increases, credit rating upgrades
+- De-emphasize: Crypto news, pre-revenue startups, high-volatility sector moves
+- Rumor approach: Warn about M&A rumors but emphasize "unconfirmed whispers"
+- Company focus: Fortune 500 / S&P 500 companies, government bonds
+- Trends to avoid: Meme stocks, emerging cryptocurrencies, speculative SPACs
+
+ANALYSIS PRIORITIES:
+- Dividend sustainability and payout increases
+- Company stability metrics (debt, cash flow)
+- Regulatory & legal developments (positive for stability)""",
+    "balanced": """
+RISK PROFILE: Balanced (51-90 score)
+NEWS FILTERING STRATEGY:
+- Balance: Mix of blue-chip + growth company news
+- Highlight: Earnings beats, sector rotations, tech innovations, analyst upgrades
+- Include: Some M&A rumors (marked as "early signals"), IPO news, sector trends
+- Crypto news: Include with context ("volatile alternative asset")
+- Company focus: Mix of large-cap value + mid-cap growth
+- Trends to monitor: Emerging sectors (fintech, AI), sector rotation signals
+
+ANALYSIS PRIORITIES:
+- Earnings trends and guidance changes
+- Sector momentum shifts
+- Technology and competitive advantages
+- M&A and consolidation trends""",
+    "aggressive": """
+RISK PROFILE: Aggressive (91-125 score)
+NEWS FILTERING STRATEGY:
+- Focus: Growth companies, disruptive tech, emerging leaders, high-conviction bets
+- Highlight: Pre-revenue startup funding rounds, crypto ecosystem growth, M&A rumors
+- Include: Aggressive positioning on hot trends, emerging markets opportunities
+- Rumor approach: Highlight early M&A whispers as "alpha opportunities"
+- Company focus: Growth tech, biotech, small-cap movers, crypto ecosystem
+- Trends to follow: AI boom, metaverse plays, emerging markets, crypto protocols
+
+ANALYSIS PRIORITIES:
+- Revenue growth acceleration
+- Market share gains and disruption
+- Early-stage signals (before mainstream coverage)
+- Speculative opportunities (M&A, industry disruption, innovation cycles)""",
+}
+
+
+def _build_prompt(risk_profile: str = "balanced") -> str:
+
+
+
+
+File: backend\app\agents\portfolio.py
+------------------------------------------------------------
+Portfolio specialist — reports the user's OWN holdings.
+
+Acts as a data-provider: always returns a structured snapshot of the
+user's current portfolio (or "no holdings on file"). Never refuses, never
+extends into news / market / budget commentary — the Investment Committee
+(advisor) integrates this with other specialists' findings.
+"""
+from __future__ import annotations
+
+from langgraph.prebuilt import create_react_agent
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, extract_tool_calls, recent_conversation_turns
+from app.tools.portfolio_tools import (
+    add_holding,
+    add_holding_by_value,
+    list_holdings,
+    list_transactions,
+    remove_holding,
+    set_cash_balance,
+)
+from app.tools.market_tools import get_quote
+from app.tools.fund_tools import get_fund_quote, search_fund
+
+SYSTEM_PROMPT_BASE =
+
+
+
+
+File: backend\app\agents\risk_profiler.py
+------------------------------------------------------------
+Risk Profiler — reports the user's risk score and label.
+
+Data-provider on the Investment Committee. ALWAYS returns a structured
+``RiskProfileBrief`` so the Advisor and the XAI ("why this recommendation")
+panel can quote concrete drivers — score, profile, suggested equity band,
+2-3 reasoning sentences, and the factors that shaped the profile.
+"""
+from __future__ import annotations
+
+import logging
+import re
+from typing import Any
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
+
+from app.agents.llm import get_llm
+from app.agents.state import AgentState
+from app.agents._helpers import build_findings, normalize_content
+from app.agents.advisor import ReasoningDriver
+
+log = logging.getLogger("fincoach.risk_profiler")
+
+CONSERVATIVE_MAX = 50
+BALANCED_MAX = 90
+
+
+def score_to_profile(score: int) -> str:
+    if score <= CONSERVATIVE_MAX:
+        return "conservative"
+    if score <= BALANCED_MAX:
+        return "balanced"
+    return "aggressive"
+
+
+def _equity_band_for(profile: str) -> tuple[int, int]:
+    if profile == "conservative":
+        return (20, 40)
+    if profile == "aggressive":
+        return (70, 90)
+    return (40, 70)
+
+
+class RiskProfileBrief(BaseModel):
+    """Structured XAI-ready report from the Chief Risk Officer."""
+    score: int = Field(ge=0, le=125, description="Current risk score, 0-125.")
+    profile: str = Field(description="conservative | balanced | aggressive")
+    equity_low: int = Field(ge=0, le=100, description="Suggested equity lower bound %.")
+    equity_high: int = Field(ge=0, le=100, description="Suggested equity upper bound %.")
+    reasoning: list[str] = Field(
+        default_factory=list,
+        description=(
+            "2-3 short sentences (user's language) explaining what THIS score "
+            "implies for allocation choices — volatility tolerance, time "
+            "horizon assumption, equity sleeve sizing."
+        ),
+    )
+    drivers: list[ReasoningDriver] = Field(
+        default_factory=list,
+        description=(
+            "2-3 concrete drivers behind the profile. Sources: 'user_input' "
+            "(quiz result, explicit override), 'risk_profiler' (the score "
+            "itself), 'memory' (prior preference)."
+        ),
+    )
+
+
+SYSTEM_PROMPT =
+
+
+
+
+File: backend\app\agents\state.py
+------------------------------------------------------------
+Shared TypedDict state passed between LangGraph nodes."""
+from __future__ import annotations
+
+from typing import Annotated, Any, TypedDict
+
+from langgraph.graph.message import add_messages
+
+
+RESET_SENTINEL = "__reset__"
+
+
+def merge_findings(left: dict | None, right: dict | None) -> dict:
+    """Reducer for the ``findings`` field.
+
+    Specialists run in parallel and each returns ``{"findings": {<name>: {...}}}``.
+    LangGraph merges parallel branches by calling this reducer once per branch
+    with (accumulated, new). We do a shallow dict union — later writes from the
+    same agent (rare) overwrite earlier ones.
+
+    Reset semantics: passing ``{"__reset__": True}`` (or ``None``) replaces the
+    accumulated value with an empty dict. Used by the strategist at the start
+    of every turn so stale findings from prior turns don't leak forward.
+    """
+    if right is None or (isinstance(right, dict) and right.get(RESET_SENTINEL)):
+        return {}
+    if not left:
+        return dict(right or {})
+    if not right:
+        return dict(left)
+    out = dict(left)
+    out.update(right)
+    return out
+
+
+def append_list(left: list | None, right: list | None) -> list:
+    """Reducer that concatenates lists across parallel branches.
+
+    Reset semantics: passing ``None`` clears the accumulated list.
+    """
+    if right is None:
+        return []
+    if not left:
+        return list(right or [])
+    if not right:
+        return list(left)
+    return [*left, *right]
+
+
+def last_write_wins(left: Any, right: Any) -> Any:
+    """Reducer that takes the latest non-None value.
+
+    Used for scalar state fields that multiple parallel branches may write to
+    (e.g. ``error``). The last branch to execute wins; None is treated as
+    'no update' so a successful branch doesn't clear a prior error.
+    """
+    return right if right is not None else left
+
+
+class AgentState(TypedDict, total=False):
+    """State carried through the supervisor graph.
+
+    Fields:
+        messages         — running list of LangChain messages (auto-merged by add_messages)
+        user_id          — current user (set per-request from the bearer token)
+        risk_profile     — user's risk profile (conservative/balanced/aggressive)
+        plan             — strategist's execution plan for this turn
+        memory_hints     — top-k semantic snippets from past turns, fetched
+                           BEFORE planning to enrich the strategist's context
+        findings         — per-agent structured output, merged across parallel branches
+        advisor_brief    — advisor's allocation/plan framework (None if not needed)
+        next_action      — kept for legacy SSE handler (no longer drives routing)
+        agents_consulted — agents called this turn, in dispatch order
+        scratchpad       — free-form working memory between nodes
+        citations        — tool calls every worker made (merged for the UI)
+        suggestions      — follow-up prompts the synthesizer crafted for this turn
+        error            — structured error from the last worker (None on success)
+
+
+
+
+File: backend\app\agents\supervisor.py
+------------------------------------------------------------
+Graph builder — FinCoach Capital hierarchy.
+
+Pipeline per user turn::
+
+    START
+      │
+      ▼
+    strategist  ──── plan() ────► dispatches to N specialists in parallel
+      │                                  │
+      │                                  ▼
+      │                       ┌── market_data ──┐
+      │                       │── portfolio ────│   each writes its own
+      │                       │── budget_coach ─│   findings entry into state
+      │                       │── risk_profiler │   (merged via reducer)
+      │                       │── news_sentiment│
+      │                       │── memory ───────│
+      │                       └── document_parser
+      │                                  │
+      │                                  ▼
+      │                            gather (sync barrier)
+      │                                  │
+      │                ┌─────────────────┴─────────────────┐
+      │           requires_advisor?                        │
+      │             yes │                              no  │
+      │                 ▼                                  │
+      │              advisor                               │
+      │                 │                                  │
+      │                 └──────────────┬───────────────────┘
+      │                                ▼
+      └──────────────────────► synthesizer ─► END
+
+The strategist makes ONE planning call up front instead of looping. Specialists
+run in parallel — N rounds compressed to 1. The advisor only runs when the
+question needs allocation/plan synthesis (decided by the strategist). The
+synthesizer always produces the final user-facing message.
+
+Public API preserved for ``app.main``:
+    AGENT_NODES        — name → callable map, used by the SSE handler
+    FINISH             — kept as a sentinel for legacy event handling
+    SYNTHESIZER_NODE   — name of the synthesizer node
+    ADVISOR_NODE       — name of the advisor node
+    STRATEGIST_NODE    — name of the strategist node
+    build_supervisor() — compile the graph (signature unchanged)
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Literal
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
+from pydantic import BaseModel, Field
+
+from app.agents.state import AgentState, RESET_SENTINEL
+from app.agents.llm import get_llm
+from app.agents._helpers import normalize_content
+from app.agents import (
+    market_data, portfolio, budget_coach, news_sentiment,
+    risk_profiler, memory, document_parser, synthesizer, advisor,
+)
+from app.tools.user_tools import get_user_profile
+
+log = logging.getLogger("fincoach.strategist")
+
+
+AGENT_NODES = {
+    "market_data": market_data.run,
+    "portfolio": portfolio.run,
+    "budget_coach": budget_coach.run,
+    "news_sentiment": news_sentiment.run,
+    "risk_profiler": risk_profiler.run,
+    "memory": memory.run,
+    "document_parser": document_parser.run,
+}
+
+STRATEGIST_NODE = "strategist"
+GATHER_NODE = "gather"
+ADVISOR_NODE = "advisor"
+SYNTHESIZER_NODE = "synthesizer"
+
+# Kept for backward compatibility with main.py imports.
+FINISH = "FINISH"
+
+SpecialistName = Literal[
+    "market_data",
+    "portfolio",
+    "budget_coach",
+    "news_sentiment",
+    "risk_profiler",
+    "memory",
+    "document_parser",
+]
+
+QuestionType = Literal["lookup", "client_state", "research", "advisory", "mixed", "follow_up"]
+
+
+# ── Strategist ───────────────────────────────────────────────────────────────
+
+
+class ExecutionPlan(BaseModel):
+    """Single-shot plan for this turn."""
+    specialists: list[SpecialistName] = Field(
+        description=(
+            "Specialists to consult — listed in priority order. ALL of them run "
+            "in parallel. Include EVERY desk whose data is needed. Empty list "
+            "means no specialist is required (rare — e.g. pure clarification)."
+        ),
+        min_length=0,
+        max_length=7,
+    )
+    requires_advisor: bool = Field(
+        description=(
+            "True ONLY if the user is asking for a recommendation / plan / "
+            "allocation guidance ('ne önerirsin?', 'should I buy?', "
+            "'is my portfolio balanced?', 'how to deploy this cash?'). "
+            "False for pure lookups ('BTC price?', 'latest news on Intel?') "
+            "and pure state reports ('show my portfolio')."
+        )
+    )
+    question_type: QuestionType = Field(
+        description=(
+            "lookup     = single fact ('BTC fiyatı?')\n"
+            "client_state = report on user's own data ('portföyüm', 'harcamalarım')\n"
+            "research   = market/news ('intel haberi', 'altın fonu önerisi')\n"
+            "advisory   = wants a plan / recommendation\n"
+            "mixed      = multiple of the above"
+        )
+    )
+    rationale: str = Field(
+        description="One short sentence (max 25 words) explaining the plan."
+    )
+    confidence: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How confident you are that this dispatch correctly matches the user's "
+            "intent. 0.9+ = obvious (single clear ask); 0.7-0.9 = solid; "
+            "0.5-0.7 = mixed intent or ambiguous wording; <0.5 = guessing. "
+            "Low scores cause the orchestrator to enrich memory or re-prompt."
+        ),
+    )
+
+
+STRATEGIST_PROMPT =
+
+_strategist_llm = None
+
+
+def _get_strategist_llm():
+    global _strategist_llm
+    if _strategist_llm is None:
+        _strategist_llm = get_llm().with_structured_output(ExecutionPlan)
+    return _strategist_llm
+
+
+def _keyword_fallback_plan(
+    user_text: str,
+    has_prior_context: bool = False,
+    has_uploaded_documents: bool = False,
+) -> ExecutionPlan:
+    """Used only if the structured-output LLM call fails."""
+    text = (user_text or "").lower().strip()
+    chosen: list[SpecialistName] = []
+
+    # Crude follow-up detection: short acknowledgement + prior context exists.
+    short = len(text) < 60
+    ack_words = ("tamam", "ok ", "okay", "evet", "anladım", "anladim", "yes ")
+    follow_up = has_prior_context and (
+        short and any(text.startswith(w) or text == w.strip() for w in ack_words)
+    )
+
+    advisory = (not follow_up) and any(
+        k in text
+        for k in (
+            "öner", "tavsiye", "ne yap", "ne alm", "ne satayım", "recommend",
+            "should i", "what should", "dengeli mi", "tahsis", "allocation",
+            "plan", "strategy", "strateji", "analyze", "analyse", "analysis",
+            "what do you think", "is it good", "suitable", "uygun mu",
+        )
+    )
+    if any(k in text for k in ("portföy", "portfolio", "holding", "elimde", "varlığım")):
+        chosen.append("portfolio")
+    if any(
+        k in text
+        for k in (
+            "harcama", "bütçe", "budget", "spend", "saving", "tasarruf",
+            "hedef", "goal", "biriktir", "peşinat", "acil fon",
+            "emergency fund", "on track", "yolda", "yeter mi", "tempo",
+        )
+    ):
+        chosen.append("budget_coach")
+    if any(k in text for k in ("haber", "news", "söylenti", "sentiment", "trend")):
+        chosen.append("news_sentiment")
+    if any(k in text for k in ("risk", "profil")):
+        chosen.append("risk_profiler")
+    # Explicit document keywords always pull in document_parser.
+    if any(k in text for k in ("pdf", "ekstre", "statement", "dekont", "fatura")):
+        chosen.append("document_parser")
+    # If any document is indexed, route doc-flavoured questions there too.
+    # Trade-setup vocabulary (entry / TP / SL / position / level) in any
+    # language is a strong signal the user is asking about an attached note.
+    elif has_uploaded_documents and any(
+        k in text
+        for k in (
+            "tp", "sl", "stop", "hedef", "giriş", "giris", "entry",
+            "pozisyon", "position", "seviye", "level", "long", "short",
+            "yayın", "yayin", "not", "notu", "belge", "doküman", "dokuman",
+            "dosya", "file", "document", "yüklediğim", "yukledigim",
+            "uploaded", "ekledim",
+        )
+    ):
+        chosen.append("document_parser")
+    if advisory or not chosen:
+        # Default exposure to market_data for advisory or unclear queries.
+        if "market_data" not in chosen:
+            chosen.append("market_data")
+    if advisory:
+        for needed in ("budget_coach", "risk_profiler", "portfolio", "market_data", "news_sentiment"):
+            if needed not in chosen:
+                chosen.append(needed)  # type: ignore[arg-type]
+
+    if follow_up:
+        q_type: QuestionType = "follow_up"
+    elif advisory:
+        q_type = "advisory"
+    else:
+        q_type = "lookup"
+
+    return ExecutionPlan(
+        specialists=chosen[:6],
+        requires_advisor=advisory,
+        question_type=q_type,
+        rationale="keyword fallback (LLM unavailable)",
+        confidence=0.4,
+    )
+
+
+def _last_user_text(messages: list) -> str:
+    for m in reversed(messages or []):
+        if isinstance(m, HumanMessage):
+            return normalize_content(getattr(m, "content", ""))
+    return ""
+
+
+def _extract_recent_turns(messages: list, k: int = 3) -> list[dict[str, str]]:
+    """Return the last ``k`` COMPLETED user/assistant turn pairs (oldest → newest).
+
+    "Completed" = a user message followed by at least one AI message before
+    the next user message. The synthesizer reply is the LAST AI message in
+    that span (intermediate specialist outputs are in there too but we only
+    surface the final user-facing reply).
+
+    The current (in-flight) turn — the trailing HumanMessage with no AI
+    reply yet — is excluded so the strategist focuses on it separately.
+    """
+    if not messages:
+        return []
+
+    # Find every HumanMessage index in order.
+    human_idxs = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
+    if not human_idxs:
+        return []
+
+    turns: list[dict[str, str]] = []
+    # Iterate over all but the last HumanMessage (that one is the current turn).
+    for i in range(len(human_idxs) - 1):
+        start = human_idxs[i]
+        end = human_idxs[i + 1]  # exclusive
+        user_text = normalize_content(getattr(messages[start], "content", "")).strip()
+        # Last AI message strictly between this human and the next is the
+        # synthesizer reply for that turn.
+        assistant_text = ""
+        for j in range(end - 1, start, -1):
+            if isinstance(messages[j], AIMessage):
+                assistant_text = normalize_content(
+                    getattr(messages[j], "content", "")
+                ).strip()
+                break
+        turns.append({"user": user_text, "assistant": assistant_text})
+
+    return turns[-k:]
+
+
+def _fetch_uploaded_documents() -> list[dict[str, Any]]:
+    """Best-effort enumeration of files indexed for the user, used to enrich
+    the strategist context so it knows when to route to document_parser.
+
+    Returns ``[{"filename": str, "chunks": int}, ...]`` (empty on failure).
+    The call hits Chroma's local persistent client — cheap, no network.
+    """
+    try:
+        from app.tools.document_tools import list_uploaded_documents
+        hits = list_uploaded_documents.invoke({}) or []
+        return hits if isinstance(hits, list) else []
+    except Exception as exc:  # noqa: BLE001
+        log.warning("uploaded-documents lookup failed: %s", exc)
+        return []
+
+
+def _fetch_memory_hints(query: str, k: int = 3) -> list[dict[str, Any]]:
+    """Run a semantic search over the user's past chats / decisions BEFORE
+    the strategist plans, so the LLM knows about durable preferences ("I hate
+    crypto", "tax residency TR") that would otherwise require an explicit
+    memory-agent fan-out.
+
+    Best-effort: any failure (no collection, ChromaDB hiccup) returns [] —
+    the planner still runs normally without hints.
+    """
+    text = (query or "").strip()
+    if not text:
+        return []
+    try:
+        from app.tools.memory_tools import query_memory
+        hits = query_memory.invoke({"text": text, "k": k}) or []
+        if not isinstance(hits, list):
+            return []
+        cleaned: list[dict[str, Any]] = []
+        for h in hits:
+            if not isinstance(h, dict):
+                continue
+            snippet = (h.get("text") or "").strip()
+            if not snippet:
+                continue
+            cleaned.append({
+                "text": snippet[:300] + ("…" if len(snippet) > 300 else ""),
+                "metadata": h.get("metadata") or {},
+            })
+        return cleaned
+    except Exception as exc:  # noqa: BLE001
+        log.warning("memory hint fetch failed: %s", exc)
+        return []
+
+
+def _format_strategist_context(
+    turns: list[dict[str, str]],
+    prev_brief: dict[str, Any] | None,
+    current_query: str,
+    memory_hints: list[dict[str, Any]] | None = None,
+    uploaded_documents: list[dict[str, Any]] | None = None,
+) -> str:
+    """Build the human-message payload for the strategist LLM."""
+    lines: list[str] = []
+
+    if turns:
+        lines.append("RECENT CONVERSATION (oldest → newest, EXCLUDES the current message):")
+        for i, t in enumerate(turns, 1):
+            u = t["user"][:600] + ("…" if len(t["user"]) > 600 else "")
+            a = t["assistant"][:1500] + ("…" if len(t["assistant"]) > 1500 else "")
+            lines.append(f"\n[turn -{len(turns) - i + 1}]")
+            lines.append(f"  USER: {u}")
+            lines.append(f"  ASSISTANT: {a or '(no reply on record)'}")
+        lines.append("")
+    else:
+        lines.append("RECENT CONVERSATION: (this is the FIRST turn — no prior context)")
+        lines.append("")
+
+    if prev_brief:
+        headline = (prev_brief.get("headline") or "").strip()
+        allocation = prev_brief.get("allocation") or []
+        if headline or allocation:
+            lines.append("PREVIOUS INVESTMENT COMMITTEE BRIEF (still on the table):")
+            if headline:
+                lines.append(f"  headline: {headline[:300]}")
+            if allocation:
+                alloc_strs = []
+                for band in allocation[:6]:
+                    if isinstance(band, dict):
+                        ac = band.get("asset_class", "?")
+                        lo = band.get("weight_pct_low", "?")
+                        hi = band.get("weight_pct_high", "?")
+                        alloc_strs.append(f"{ac} {lo}-{hi}%")
+                if alloc_strs:
+                    lines.append("  allocation: " + " / ".join(alloc_strs))
+            lines.append("")
+    else:
+        lines.append("PREVIOUS INVESTMENT COMMITTEE BRIEF: (none — no plan on the table yet)")
+        lines.append("")
+
+    if uploaded_documents:
+        lines.append(
+            "UPLOADED DOCUMENTS (already extracted and embedded — the "
+            "document_parser desk can retrieve passages on demand; the text "
+            "is NOT in chat history):"
+        )
+        for d in uploaded_documents[:8]:
+            name = (d.get("filename") or "(unknown)").strip()
+            chunks = d.get("chunks") or 0
+            lines.append(f"  - {name} ({chunks} chunk(s) indexed)")
+        lines.append(
+            "  → If the current question may be answered from any of these "
+            "files (trade levels, positions, statement line items, anything "
+            "the user asked about a previously attached document), include "
+            "document_parser in the specialist list."
+        )
+        lines.append("")
+    else:
+        lines.append("UPLOADED DOCUMENTS: (none — the user has not attached any files)")
+        lines.append("")
+
+    if memory_hints:
+        lines.append("DURABLE MEMORY HITS (semantic search over past conversations — may or may not be relevant):")
+        for i, h in enumerate(memory_hints, 1):
+            snippet = (h.get("text") or "").strip()
+            if snippet:
+                lines.append(f"  {i}. {snippet}")
+        lines.append(
+            "  → Use these only if they meaningfully constrain the answer "
+            "(e.g. a stated preference, prior decision, or known fact about "
+            "the user). Ignore otherwise."
+        )
+        lines.append("")
+
+    lines.append(f"CURRENT USER MESSAGE:\n{current_query}")
+    lines.append("\nDecide the plan now.")
+    return "\n".join(lines)
+
+
+def _resolve_risk_profile(state: AgentState) -> str:
+    cached = state.get("risk_profile")
+    if cached:
+        return cached
+    try:
+        profile_data = get_user_profile.invoke({})
+        return profile_data.get("risk_profile", "balanced")
+    except Exception as exc:
+        log.warning("strategist: failed to fetch risk_profile: %s", exc)
+        return "balanced"
+
+
+def _strategist_node(state: AgentState) -> dict[str, Any]:
+    """Produce the execution plan and cache the risk profile."""
+    messages = state.get("messages") or []
+    user_text = _last_user_text(messages).strip()
+    risk_profile = _resolve_risk_profile(state)
+    recent_turns = _extract_recent_turns(messages, k=3)
+    prev_brief = state.get("advisor_brief")
+    # Proactive memory: pull durable preferences / facts from past turns BEFORE
+    # planning so the strategist can route on them.
+    memory_hints = _fetch_memory_hints(user_text, k=3) if user_text else []
+    uploaded_documents = _fetch_uploaded_documents()
+
+    log.info("")
+    log.info("┌── STRATEGIST ────────────────────────────────────────")
+    log.info("│  user query   : %s", (user_text[:140] + "…") if len(user_text) > 140 else user_text)
+    log.info("│  risk profile : %s", risk_profile)
+    log.info("│  prior turns  : %d", len(recent_turns))
+    log.info("│  prev brief   : %s", "yes" if prev_brief else "no")
+    log.info("│  memory hints : %d", len(memory_hints))
+    log.info("│  uploaded docs: %d", len(uploaded_documents))
+
+    if not user_text:
+        log.info("│  decision     : empty query → memory fallback")
+        log.info("└──────────────────────────────────────────────────────")
+        return {
+            "plan": ExecutionPlan(
+                specialists=["memory"],
+                requires_advisor=False,
+                question_type="lookup",
+                rationale="empty query fallback",
+            ).model_dump(),
+            "risk_profile": risk_profile,
+            "memory_hints": memory_hints,
+            "next_action": "memory",
+            # Clear findings so the previous turn's findings don't leak into
+            # this turn's advisor / synthesizer.
+            "findings": {RESET_SENTINEL: True},
+            "agents_consulted": None,
+            "citations": None,
+            # advisor_brief deliberately NOT reset — when this turn has no
+            # advisor, the prior brief still represents "the plan on the
+            # table" and the synthesizer is allowed to reference it.
+        }
+
+    payload = _format_strategist_context(
+        recent_turns, prev_brief, user_text, memory_hints, uploaded_documents,
+    )
+
+    plan: ExecutionPlan
+    try:
+        plan = _get_strategist_llm().invoke(
+            [SystemMessage(content=STRATEGIST_PROMPT), HumanMessage(content=payload)]
+        )
+    except Exception as exc:
+        log.warning("strategist LLM call failed (%s) — using keyword fallback", exc)
+        plan = _keyword_fallback_plan(
+            user_text,
+            has_prior_context=bool(recent_turns or prev_brief),
+            has_uploaded_documents=bool(uploaded_documents),
+        )
+
+    # Dedupe and validate specialist list against AGENT_NODES.
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for name in plan.specialists:
+        if name in AGENT_NODES and name not in seen:
+            seen.add(name)
+            cleaned.append(name)
+    plan = plan.model_copy(update={"specialists": cleaned})
+
+    log.info("│  specialists  : %s", cleaned or "(none)")
+    log.info("│  advisor      : %s", plan.requires_advisor)
+    log.info("│  question_type: %s", plan.question_type)
+    log.info("│  confidence   : %.2f", plan.confidence)
+    log.info("│  rationale    : %s", plan.rationale)
+    log.info("└──────────────────────────────────────────────────────")
+
+    # Low-confidence + nothing memory-related was already routed → silently
+    # add the memory desk so the synthesizer has more to work with. This is
+    # cheap (one ReAct turn against ChromaDB) and avoids re-prompting.
+    if plan.confidence < 0.6 and "memory" not in cleaned and len(cleaned) < 6:
+        cleaned.append("memory")
+        plan = plan.model_copy(update={"specialists": cleaned})
+        log.info("   (low-confidence rescue) appended memory desk → %s", cleaned)
+
+    return {
+        "plan": plan.model_dump(),
+        "risk_profile": risk_profile,
+        "memory_hints": memory_hints,
+        "next_action": "FAN_OUT" if cleaned else FINISH,
+        # Reset turn-local accumulators so stale entries from prior turns
+        # don't leak into the advisor / synthesizer this turn.
+        "findings": {RESET_SENTINEL: True},
+        "agents_consulted": None,
+        "citations": None,
+        # See above: advisor_brief is deliberately not reset.
+    }
+
+
+# ── Routing ──────────────────────────────────────────────────────────────────
+
+
+def _dispatch_from_strategist(state: AgentState) -> list[Send] | str:
+
+
+
+
+File: backend\app\agents\synthesizer.py
+------------------------------------------------------------
+Communications Desk — produces the single user-facing reply + suggestions.
+
+Reads:
+  • state["plan"]          — strategist's plan (drives follow-up vs new-plan mode)
+  • state["findings"]      — per-specialist structured outputs from THIS turn
+  • state["advisor_brief"] — Investment Committee's allocation framework
+                              (present when newly produced this turn OR
+                              persisted from a prior turn — see WHEN TO USE)
+  • state["messages"]      — full history (last assistant reply is the
+                              context for follow-up suggestions)
+
+Output:
+  • messages              — one AIMessage with the user-facing prose
+  • suggestions           — 2-4 short follow-up prompts the UI shows as chips
+
+Final structured output from the Communications Desk."""
+    reply: str = Field(
+        description=(
+            "The user-facing message in the user's language. Markdown allowed. "
+            "Length depends on question_type — see prompt rules."
+        )
+    )
+    suggestions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "2-4 short follow-up prompts the user can tap. Each is a complete, "
+            "ready-to-send user message in the user's language. They MUST be "
+            "actionable with FinCoach Capital's existing capabilities (see "
+            "CAPABILITY MAP in the prompt). Order: most relevant first."
+        ),
+        min_length=0,
+        max_length=4,
+    )
+
+
+SYNTHESIZER_PROMPT =
+
+
+
+
+File: backend\app\agents\_helpers.py
+------------------------------------------------------------
+Shared helpers used by every specialist agent.
+
+Exposes:
+  • ``extract_tool_calls`` — pull tool invocations from a ReAct agent's message
+    history so they can be surfaced as citation chips in the UI.
+  • ``normalize_content`` — flatten LangChain content (str or list-of-parts).
+  • ``build_findings`` — wrap a specialist's run output into the structured
+    ``findings`` entry the advisor and synthesizer consume.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any
+
+
+def extract_tool_calls(messages: list) -> list[dict[str, Any]]:
+    """Walk the message history a ReAct agent produced and pull every
+    ``tool_call`` it issued. Each entry is a small JSON-friendly dict the
+    frontend renders as a citation chip.
+
+    LangChain stores tool calls on AIMessage in two slightly different
+    shapes depending on provider; we handle both.
+    """
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        tool_calls = getattr(msg, "tool_calls", None) or []
+        for tc in tool_calls:
+            if isinstance(tc, dict):
+                name = tc.get("name") or tc.get("function", {}).get("name")
+                args = tc.get("args") or tc.get("arguments") or {}
+            else:
+                name = getattr(tc, "name", None)
+                args = getattr(tc, "args", None) or {}
+            if name:
+                out.append({"tool": name, "args": args})
+    return out
+
+
+def normalize_content(content: Any) -> str:
+    """Flatten LangChain content (str or list-of-parts) into plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for p in content:
+            if isinstance(p, str):
+                parts.append(p)
+            elif isinstance(p, dict) and isinstance(p.get("text"), str):
+                parts.append(p["text"])
+        return "".join(parts)
+    return str(content) if content is not None else ""
+
+
+def latest_human_turn(messages: list) -> list:
+    """Return only the current user turn for specialist ReAct agents.
+
+    The supervisor checkpoint stores prior specialist outputs in ``messages``.
+    Passing that whole list back into every specialist repeats old analysis and
+    tool results, which can burn through per-minute input-token quota quickly.
+    """
+    from langchain_core.messages import HumanMessage
+
+    for msg in reversed(messages or []):
+        if isinstance(msg, HumanMessage):
+            return [msg]
+    return []
+
+
+def recent_conversation_turns(
+    messages: list, k: int = 2, max_assistant_chars: int = 2000
+) -> list:
+    """Return the last ``k`` completed user/assistant pairs plus the current
+    user turn, with tool-call noise stripped.
+
+    Built for specialists that need ANAPHORA RESOLUTION ("bu fonları ekle",
+    "as you said above") — they must see the prior synthesizer reply to
+    extract referenced tickers/amounts. We keep ONLY the final user-facing
+    assistant message per past turn (the synthesizer output) and drop all
+    intermediate ReAct scratchpad / tool messages, which keeps token use
+    bounded.
+
+    Shape returned (oldest → newest):
+        [HumanMessage(turn-k), AIMessage(reply-k),
+         ...,
+         HumanMessage(turn-1), AIMessage(reply-1),
+         HumanMessage(current)]
+    """
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    if not messages:
+        return []
+
+    human_idxs = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
+    if not human_idxs:
+        return []
+
+    # Walk completed turns (every human idx except the last, which is the
+    # in-flight turn). For each, find the LAST AIMessage with non-empty text
+    # content before the next human — that is the synthesizer reply.
+    pairs: list[tuple[Any, Any]] = []
+    for i in range(len(human_idxs) - 1):
+        start = human_idxs[i]
+        end = human_idxs[i + 1]
+        user_msg = messages[start]
+        reply_msg = None
+        for j in range(end - 1, start, -1):
+            m = messages[j]
+            if not isinstance(m, AIMessage):
+                continue
+            # Skip tool-only AIMessages (no text content). Tool-call planning
+            # messages have empty content + a tool_calls list; the synthesizer
+            # output is the one with actual prose.
+            text = normalize_content(getattr(m, "content", "")).strip()
+            if not text:
+                continue
+            reply_msg = m
+            break
+        if reply_msg is not None:
+            # Truncate the prior reply so a long allocation table doesn't
+            # balloon the next prompt. The anaphora targets (ticker codes,
+            # amounts) sit in the first ~1-2k chars of any normal reply.
+            text = normalize_content(getattr(reply_msg, "content", ""))
+            if len(text) > max_assistant_chars:
+                text = text[:max_assistant_chars] + "…"
+                reply_msg = AIMessage(content=text)
+            pairs.append((user_msg, reply_msg))
+
+    pairs = pairs[-k:]
+
+    out: list = []
+    for u, a in pairs:
+        out.append(u)
+        out.append(a)
+    # Append the current (in-flight) human message.
+    out.append(messages[human_idxs[-1]])
+    return out
+
+
+def _summarize_tool_output(output: Any, max_len: int = 600) -> Any:
+
+
+
+
+File: backend\app\services\document_processor\gemini_processor.py
+------------------------------------------------------------
+GeminiDocumentProcessor — native google-genai pipeline.
+
+One round-trip: PDF/image/docx bytes → Gemini multimodal → structured JSON
+matching a Pydantic schema. We deliberately bypass the LangChain wrapper
+here because:
+  - LangChain's `with_structured_output` is looser than Gemini's native
+    response_schema (which enforces JSON Schema server-side).
+  - The File API (>18 MB or persistent reuse) is first-class only in the
+    native SDK.
+  - This is a one-shot call; no tool/agent orchestration to gain from.
+
+Chat / multi-agent flow keeps using LangChain — see app/agents/.
+"""
+from __future__ import annotations
+
+import logging
+from typing import TypeVar
+
+from pydantic import BaseModel, ValidationError
+
+from app.services.document_processor.base import (
+    DocumentSource,
+    DocumentStorage,
+    NoOpStorage,
+    ProcessorError,
+)
+from app.services.document_processor.schemas import ProfileExtraction
+from app.settings import settings
+
+log = logging.getLogger("fincoach.document_processor")
+
+
+def _extract_pdf_text(data: bytes) -> str:
+    """Cheap text extraction via pdfplumber (no API call). Returns empty string on failure."""
+    try:
+        import io
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            return "\n".join(p.extract_text() or "" for p in pdf.pages).strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+T = TypeVar("T", bound=BaseModel)
+
+
+VISION_DUMP_PROMPT =
+
+PROFILE_PROMPT =
+
+class GeminiDocumentProcessor:
+    """Stateless wrapper around google-genai for one-shot document parsing."""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        vision_model: str | None = None,
+        extract_model: str | None = None,
+        storage: DocumentStorage | None = None,
+    ) -> None:
+        self._api_key = api_key or settings.gemini_api_key
+        # `model` stays as the legacy default (used by `_extract`, single-shot multimodal+schema).
+        # `vision_model` and `extract_model` let callers split the two-pass PDF pipeline so the
+        # cheapest model is used per role. Each falls back to `model`, then to settings.
+        self._model = model or settings.gemini_model
+        self._vision_model = vision_model or settings.vision_model or self._model
+        self._extract_model = extract_model or settings.extract_model or self._model
+        self._storage = storage or NoOpStorage()
+        if not self._api_key:
+            raise ProcessorError("GEMINI_API_KEY is not configured")
+        log.info(
+            "document_processor models | default=%s | vision=%s | extract=%s",
+            self._model, self._vision_model, self._extract_model,
+        )
+
+    def extract_profile(self, source: DocumentSource) -> ProfileExtraction:
+        """Parse a profile-relevant document. Storage hook fires before the LLM call.
+
+        Strategy:
+        - Text-rich PDFs (banka ekstresi vb.): pdfplumber → text-only call (cheap, 1 call).
+        - Image-heavy PDFs (chart screenshots): two-pass —
+            (1) vision dump call (no schema, focused on reading numbers off charts)
+            (2) structured extraction from the dumped text (cheap text-only call).
+          This gives much better numeric accuracy than a single multimodal+schema call.
+        - Other (images, docx): single multimodal+schema call (current behavior).
+        """
+        if source.mime_type == "application/pdf":
+            pre_text = _extract_pdf_text(source.data)
+            pages_estimate = max(1, source.size_bytes // (100 * 1024))
+            if len(pre_text) > pages_estimate * 200:
+                log.info("PDF is text-rich (%d chars); skipping multimodal call", len(pre_text))
+                prompt_with_text = PROFILE_PROMPT + f"\n\nDocument text:\n{pre_text}"
+                result = self._extract_text_only(prompt_with_text)
+                if not result.extracted_text:
+                    result = result.model_copy(update={"extracted_text": pre_text})
+                return result
+
+            log.info("PDF is image-heavy (%d chars extracted); two-pass vision+schema", len(pre_text))
+            vision_dump = self._vision_dump(source)
+            prompt_with_text = (
+                PROFILE_PROMPT
+                + "\n\nDocument text (already extracted from the file, INCLUDING chart numbers):\n"
+                + vision_dump
+            )
+            result = self._extract_text_only(prompt_with_text)
+            # Always overwrite extracted_text with the high-fidelity vision dump.
+            return result.model_copy(update={"extracted_text": vision_dump})
+
+        return self._extract(source, ProfileExtraction, PROFILE_PROMPT)
+
+    def _vision_dump(self, source: DocumentSource) -> str:
+
+from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=self._api_key)
+        if source.needs_file_api:
+            uploaded = client.files.upload(
+                file=source.data,
+                config={"mime_type": source.mime_type, "display_name": source.filename},
+            )
+            doc_part = types.Part.from_uri(file_uri=uploaded.uri, mime_type=source.mime_type)
+        else:
+            doc_part = types.Part.from_bytes(data=source.data, mime_type=source.mime_type)
+
+        try:
+            response = client.models.generate_content(
+                model=self._vision_model,
+                contents=[doc_part, VISION_DUMP_PROMPT],
+                config=types.GenerateContentConfig(temperature=0.0),
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise ProcessorError(f"Gemini vision dump failed: {exc}") from exc
+
+        text = (getattr(response, "text", "") or "").strip()
+        if not text:
+            raise ProcessorError("Gemini vision dump returned empty text")
+        return text
+
+    def _extract_text_only(self, prompt: str) -> ProfileExtraction:
+
+
+
+
+File: backend\scripts\test_chart_reader.py
+------------------------------------------------------------
+Test harness for the chart-reading pipeline.
+
+Runs three different extraction strategies against a single PDF (typically a
+Telegram "Yayın Notu" with trade-setup charts) and prints their outputs side
+by side so we can compare which strategy reads entry / TP / SL correctly.
+
+Usage (from backend/):
+    uv run python scripts/test_chart_reader.py "C:/path/to/yayin_notu.pdf"
+    uv run python scripts/test_chart_reader.py "C:/path/to/yayin_notu.pdf" --only B
+    uv run python scripts/test_chart_reader.py "C:/path/to/yayin_notu.pdf" --asset SOL
+
+Strategies:
+  A) Production two-pass pipeline (GeminiDocumentProcessor.extract_profile).
+  B) Single-shot multimodal: PDF + role-aware prompt -> JSON list of setups.
+  C) Per-page: split PDF into one image per page, ask the model to extract a
+     single trade setup from each page. Highest fidelity, costs N calls.
+
+All three use the model configured in settings (GEMINI_VISION_MODEL).
+
+You are reading a Turkish crypto/markets "Yayın Notu" PDF.
+Each bullet introduces ONE asset followed by ONE TradingView chart screenshot.
+
+For every asset, extract a TradeSetup with the trader's intent. Use the chart's
+COLOR CODING as ground truth:
+  - GREEN/TEAL filled rectangle = take-profit zone for a long (or entry zone for a short).
+    TOP edge of the green box = TP target; BOTTOM edge = entry price.
+  - RED/MAROON filled rectangle below price = stop-loss zone for a long.
+    The number labelling its lower edge = SL.
+  - For SHORT setups colors invert: red box above price = TP going down, green box = entry/SL above.
+  - Cyan/blue arrows show the expected price path — they disambiguate long vs short.
+  - Labels like "2X", "3X", "Halit Pozu" = leverage, NOT price levels.
+  - Yellow horizontal lines = key S/R, not entry/TP/SL unless the colored box sits on them.
+  - The right-axis highlighted price = current price; do not report it as a level.
+
+Rules:
+- Read pixels exactly; do not round or paraphrase numbers.
+- If the bullet says the asset is "pas" / "bulaşmalık değil" / "devam" with no trade box,
+  emit a TradeSetup with direction="unclear" and entry=tp=sl=null. Still include it.
+- Note must be the verbatim Turkish bullet text after the ticker.
+- Confidence: 0.9+ when both boxes and arrows are unambiguous, <0.5 when guessing.
+"""
+
+
+def run_strategy_b(processor: GeminiDocumentProcessor, source: DocumentSource) -> TradeSetupList:
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=processor._api_key)  # noqa: SLF001
+    doc_part = types.Part.from_bytes(data=source.data, mime_type=source.mime_type)
+    response = client.models.generate_content(
+        model=processor._vision_model,  # noqa: SLF001
+        contents=[doc_part, SINGLE_SHOT_PROMPT],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=TradeSetupList,
+            temperature=0.0,
+        ),
+    )
+    parsed = getattr(response, "parsed", None)
+    if isinstance(parsed, TradeSetupList):
+        return parsed
+    return TradeSetupList.model_validate_json(response.text)
+
+
+# ---------------------------------------------------------------------------
+# Strategy C — per-page rendering
+# ---------------------------------------------------------------------------
+PER_PAGE_PROMPT =
+
+
+
+
+File: scripts\collect_prompts.py
+------------------------------------------------------------
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[1]
+output_file = root / "prompts_all.txt"
+text_exts = {'.py', '.md', '.mdx', '.ts', '.tsx', '.js', '.jsx', '.json', '.yaml', '.yml', '.txt', '.html', '.cfg', '.ini'}
+
+found_files = []
+...
+text_exts = {'.py', '.md', '.mdx', '.ts', '.tsx', '.js', '.jsx', '.json', '.yaml', '.yml', '.txt', '.html', '.cfg', '.ini'}
+
+found_files = []
+prompt_blocks = 0
+
+def extract_triple_quoted(text):
+    pattern = re.compile(r'(["\']{3})(.*?prompt.*?)(\1)', re.S | re.I)
+...
+prompt_blocks = 0
+
+def extract_triple_quoted(text):
+    pattern = re.compile(r'(["\']{3})(.*?prompt.*?)(\1)', re.S | re.I)
+    return [m.group(2).strip() for m in pattern.finditer(text)]
+
+with open(output_file, 'w', encoding='utf-8') as out:
+...
+    return [m.group(2).strip() for m in pattern.finditer(text)]
+
+with open(output_file, 'w', encoding='utf-8') as out:
+    out.write('Collected prompts and prompt-containing snippets from repository\n')
+    out.write('=\n\n')
+    for dirpath, dirnames, filenames in os.walk(root):
+        # skip common binary or virtual env dirs
+...
+        dirnames[:] = [d for d in dirnames if d not in skip_dirs]
+        for fname in filenames:
+            fpath = Path(dirpath) / fname
+            if fpath.suffix.lower() not in text_exts and not fname.lower().endswith('.prompt.md'):
+                continue
+            try:
+                text = fpath.read_text(encoding='utf-8')
+...
+                    text = fpath.read_text(encoding='latin-1')
+                except Exception:
+                    continue
+            if re.search(r'prompt', text, re.I):
+                found_files.append(str(fpath.relative_to(root)))
+                out.write(f'File: {fpath.relative_to(root)}\n')
+                out.write('-' * 60 + '\n')
+...
+                found_files.append(str(fpath.relative_to(root)))
+                out.write(f'File: {fpath.relative_to(root)}\n')
+                out.write('-' * 60 + '\n')
+                # for python-like files, try to extract triple-quoted strings that contain 'prompt'
+                if fpath.suffix.lower() in {'.py', '.ts', '.js', '.jsx', '.tsx'}:
+                    blocks = extract_triple_quoted(text)
+                    if blocks:
+...
+                    if blocks:
+                        for b in blocks:
+                            out.write(b + '\n\n')
+                            prompt_blocks += 1
+                        out.write('\n')
+                    else:
+                        # fallback: show matching lines with context
+...
+                        # fallback: show matching lines with context
+                        lines = text.splitlines()
+                        for i, line in enumerate(lines):
+                            if re.search(r'prompt', line, re.I):
+                                start = max(0, i-3)
+                                end = min(len(lines), i+4)
+                                snippet = '\n'.join(lines[start:end])
+...
+                    # for md/json/yaml and others: include whole file if it's markdown or show snippets
+                    if fpath.suffix.lower() in {'.md', '.mdx'}:
+                        out.write(text + '\n')
+                        prompt_blocks += 1
+                    else:
+                        lines = text.splitlines()
+                        for i, line in enumerate(lines):
+...
+                    else:
+                        lines = text.splitlines()
+                        for i, line in enumerate(lines):
+                            if re.search(r'prompt', line, re.I):
+                                start = max(0, i-3)
+                                end = min(len(lines), i+4)
+                                snippet = '\n'.join(lines[start:end])
+...
+                out.write('\n\n')
+
+    out.write('Summary:\n')
+    out.write(f'Files containing "prompt": {len(found_files)}\n')
+    out.write(f'Extracted prompt-like blocks (approx): {prompt_blocks}\n')
+
+print(f'Wrote {output_file}')
+...
+
+    out.write('Summary:\n')
+    out.write(f'Files containing "prompt": {len(found_files)}\n')
+    out.write(f'Extracted prompt-like blocks (approx): {prompt_blocks}\n')
+
+print(f'Wrote {output_file}')
+...
+
+
+File: src\components\chat\ChatPanel.tsx
+------------------------------------------------------------
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const toolActivitiesRef = useRef<ToolActivity[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const [stoppedPrompt, setStoppedPrompt] = useState<string | null>(null);
+  const inFlightPromptRef = useRef<string | null>(null);
+  const scrollAnchor = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+...
+  const toolActivitiesRef = useRef<ToolActivity[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const [stoppedPrompt, setStoppedPrompt] = useState<string | null>(null);
+  const inFlightPromptRef = useRef<string | null>(null);
+  const scrollAnchor = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastAsstId = useRef<string | null>(null);
+...
+      }));
+      agentContext = buildAgentContextFromMeta(messageAttachments);
+    }
+    const finalText = (userText || t("attach.implicitPrompt")) + agentContext;
+    const displayContent = userText; // clean — attachments render as chips
+    const userId = `u-${Date.now()}`;
+    const asstId = `a-${Date.now()}`;
+...
+    setInput("");
+    setAttachments([]);
+    setStreaming(true);
+    setStoppedPrompt(null);
+    inFlightPromptRef.current = finalText;
+    clearAgentEvents();
+    setActiveAgent(null);
+...
+    setAttachments([]);
+    setStreaming(true);
+    setStoppedPrompt(null);
+    inFlightPromptRef.current = finalText;
+    clearAgentEvents();
+    setActiveAgent(null);
+    setToolActivities([]);
+...
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") {
+        appendToken(convId, asstId, "\n\n_Stopped by user._");
+        if (inFlightPromptRef.current) setStoppedPrompt(inFlightPromptRef.current);
+      } else {
+        appendToken(convId, asstId, `\n\n_Error: ${(err as Error).message}_`);
+      }
+...
+      }
+    } finally {
+      abortRef.current = null;
+      inFlightPromptRef.current = null;
+      setStreaming(false);
+      setActiveAgent(null);
+      // Persist completed steps into the message before clearing transient state.
+...
+          <div ref={scrollAnchor} />
+        </div>
+
+        {stoppedPrompt && !streaming && (
+          <div className="mt-4 flex items-center justify-between rounded-lg border border-line bg-surface px-3 py-2 text-xs">
+            <span className="text-content-muted">
+              {t("responseStopped")}
+...
+            <button
+              type="button"
+              onClick={() => {
+                const p = stoppedPrompt;
+                setStoppedPrompt(null);
+                void send(p);
+              }}
+...
+              type="button"
+              onClick={() => {
+                const p = stoppedPrompt;
+                setStoppedPrompt(null);
+                void send(p);
+              }}
+              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:opacity-90"
+...
+
+
+File: src\components\documents\Documents.tsx
+------------------------------------------------------------
+        </div>
+        <div>
+          <p className="text-sm font-semibold">
+            {parsing ? t("parsing") : t("dropPrompt")}
+          </p>
+          <p className="mt-1 text-xs text-content-muted">
+            {t("fileHint")}
+...
+
+
+File: src\components\onboarding\data.ts
+------------------------------------------------------------
+
+export interface QuizQuestion {
+  id: string;
+  prompt: string;
+  options: QuizOption[];
+}
+
+...
+export const RISK_QUIZ: QuizQuestion[] = [
+  {
+    id: "drawdown",
+    prompt: "Your $10,000 investment drops to $7,000 in a week. What do you do?",
+    options: [
+      { label: "Sell everything to stop the bleeding", points: 0 },
+      { label: "Sell some, keep the rest", points: 8 },
+...
+  },
+  {
+    id: "horizon",
+    prompt: "When do you need this money?",
+    options: [
+      { label: "Within 1 year", points: 0 },
+      { label: "1-3 years", points: 10 },
+...
+  },
+  {
+    id: "allocation",
+    prompt: "Pick the portfolio you'd be most comfortable with.",
+    options: [
+      { label: "100% bonds, all stability", points: 0 },
+      { label: "60/40 stocks/bonds, classic", points: 10 },
+...
+  },
+  {
+    id: "hot_tip",
+    prompt: "A friend mentions a hot crypto. You...",
+    options: [
+      { label: "Ignore it — speculation isn't your thing", points: 5 },
+      { label: "Research it for a few days first", points: 15 },
+...
+  },
+  {
+    id: "long_drawdown",
+    prompt: "A bear market drops your portfolio 30%. After a year it's still down. You...",
+    options: [
+      { label: "Pull everything out", points: 0 },
+      { label: "Pause new contributions", points: 10 },
+...
+
+
+File: src\components\onboarding\StepRiskQuiz.tsx
+------------------------------------------------------------
+      <div className="space-y-4">
+        {RISK_QUIZ.map((q, idx) => {
+          const qTr = riskTr.risk.questions[q.id as keyof typeof riskTr.risk.questions] as
+            | { prompt: string; options: string[] }
+            | undefined;
+          const prompt = qTr?.prompt ?? q.prompt;
+          const optionLabels: string[] = q.options.map((o, oi) => qTr?.options[oi] ?? o.label);
+...
+          const qTr = riskTr.risk.questions[q.id as keyof typeof riskTr.risk.questions] as
+            | { prompt: string; options: string[] }
+            | undefined;
+          const prompt = qTr?.prompt ?? q.prompt;
+          const optionLabels: string[] = q.options.map((o, oi) => qTr?.options[oi] ?? o.label);
+
+          return (
+...
+            >
+              <div className="mb-3 text-sm font-medium">
+                <span className="mr-2 text-content-muted">{idx + 1}.</span>
+                {prompt}
+              </div>
+              <div className="grid gap-2">
+                {q.options.map((o, oi) => {
+...
+
+
+File: src\i18n\locales\en\chat.json
+------------------------------------------------------------
+    "maxReached": "Up to {{max}} files per message",
+    "someSkipped": "{{skipped}} file(s) skipped — limit reached",
+    "waitForUpload": "Please wait for uploads to finish",
+    "implicitPrompt": "Please analyse the attached files.",
+    "contextHeader": "{{count}} file(s) attached",
+    "summaryText": "{{lines}} lines · {{chars}} chars",
+    "summaryGeneric": "{{kind}} analysed",
+...
+
+
+File: src\i18n\locales\en\documents.json
+------------------------------------------------------------
+{
+  "title": "Documents",
+  "subtitle": "Drop a bank statement or portfolio screenshot — the Coach reads it for you.",
+  "dropPrompt": "Drop a file or click to upload",
+  "parsing": "AI is reading the document…",
+  "fileHint": "PDF, image, DOCX, CSV · up to 50 MB · nothing is stored",
+  "fileTooLarge": "File exceeds 50 MB limit",
+...
+
+
+File: src\i18n\locales\en\onboarding.json
+------------------------------------------------------------
+    "inProgress": "in progress",
+    "questions": {
+      "drawdown": {
+        "prompt": "Your $10,000 investment drops to $7,000 in a week. What do you do?",
+        "options": [
+          "Sell everything to stop the bleeding",
+          "Sell some, keep the rest",
+...
+        ]
+      },
+      "horizon": {
+        "prompt": "When do you need this money?",
+        "options": [
+          "Within 1 year",
+          "1-3 years",
+...
+        ]
+      },
+      "allocation": {
+        "prompt": "Pick the portfolio you'd be most comfortable with.",
+        "options": [
+          "100% bonds, all stability",
+          "60/40 stocks/bonds, classic",
+...
+        ]
+      },
+      "hot_tip": {
+        "prompt": "A friend mentions a hot crypto. You...",
+        "options": [
+          "Ignore it — speculation isn't your thing",
+          "Research it for a few days first",
+...
+        ]
+      },
+      "long_drawdown": {
+        "prompt": "A bear market drops your portfolio 30%. After a year it's still down. You...",
+        "options": [
+          "Pull everything out",
+          "Pause new contributions",
+...
+
+
+File: src\i18n\locales\tr\chat.json
+------------------------------------------------------------
+    "maxReached": "Mesaj başına en fazla {{max}} dosya",
+    "someSkipped": "{{skipped}} dosya atlandı — limit doldu",
+    "waitForUpload": "Yüklemelerin bitmesini bekleyin",
+    "implicitPrompt": "Eklenen dosyaları analiz et lütfen.",
+    "contextHeader": "{{count}} dosya eklendi",
+    "summaryText": "{{lines}} satır · {{chars}} karakter",
+    "summaryGeneric": "{{kind}} analiz edildi",
+...
+
+
+File: src\i18n\locales\tr\documents.json
+------------------------------------------------------------
+{
+  "title": "Belgeler",
+  "subtitle": "Banka ekstrenizi veya portföy ekran görüntünüzü bırakın — Koç sizin için okusun.",
+  "dropPrompt": "Dosya bırakın veya yüklemek için tıklayın",
+  "parsing": "Yapay zeka belgeyi okuyor…",
+  "fileHint": "PDF, görsel, DOCX, CSV · 50 MB'a kadar · hiçbir şey saklanmaz",
+  "fileTooLarge": "Dosya 50 MB sınırını aşıyor",
+...
+
+
+File: src\i18n\locales\tr\onboarding.json
+------------------------------------------------------------
+    "inProgress": "devam ediyor",
+    "questions": {
+      "drawdown": {
+        "prompt": "10.000 TL'lik yatırımınız bir haftada 7.000 TL'ye düşüyor. Ne yaparsınız?",
+        "options": [
+          "Kanamayı durdurmak için her şeyi satarım",
+          "Bir kısmını satar, kalanını tutarım",
+...
+        ]
+      },
+      "horizon": {
+        "prompt": "Bu paraya ne zaman ihtiyacınız olacak?",
+        "options": [
+          "1 yıl içinde",
+          "1-3 yıl",
+...
+        ]
+      },
+      "allocation": {
+        "prompt": "En rahat hissedeceğiniz portföyü seçin.",
+        "options": [
+          "%100 tahvil, tam istikrar",
+          "%60/%40 hisse/tahvil, klasik",
+...
+        ]
+      },
+      "hot_tip": {
+        "prompt": "Bir arkadaşınız sıcak bir kripto bahsediyor. Siz…",
+        "options": [
+          "Görmezden gelirim — spekülasyon benim işim değil",
+          "Önce birkaç gün araştırırım",
+...
+        ]
+      },
+      "long_drawdown": {
+        "prompt": "Ayı piyasası portföyünüzü %30 düşürdü. Bir yıl sonra hâlâ düşükte. Siz…",
+        "options": [
+          "Her şeyi çekerim",
+          "Yeni katkıları dururum",
+...
+
+
+Summary:
+Files containing "prompt": 44
+Extracted prompt-like blocks (approx): 50
