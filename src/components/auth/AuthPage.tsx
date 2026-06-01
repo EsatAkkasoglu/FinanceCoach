@@ -35,6 +35,7 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [demoStatusMsg, setDemoStatusMsg] = useState<string | null>(null);
   const setUser = useAuthStore((s) => s.setUser);
 
   const busy = submitting || googleLoading || demoLoading;
@@ -74,15 +75,34 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
   async function handleDemo() {
     if (demoLoading) return;
     setDemoLoading(true);
+    setDemoStatusMsg(null);
+
+    // Show "server warming up" hint after 6 s — Cloud Run cold starts take 30-90 s.
+    const warmupHint = setTimeout(() => {
+      setDemoStatusMsg(t("demoServerWarming", { defaultValue: "Sunucu hazırlanıyor, lütfen bekleyin..." }));
+    }, 6_000);
+
     try {
       const user = await loginDemo();
       setUser(user);
       toast.success("Demo hesabına giriş yapıldı. İyi keşifler!");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Demo girişi başarısız";
+      const isNetwork =
+        err instanceof TypeError ||
+        (err instanceof DOMException &&
+          (err.name === "TimeoutError" || err.name === "AbortError"));
+      const msg = isNetwork
+        ? t("demoServerBusy", {
+            defaultValue: "Sunucu başlatılıyor, lütfen birkaç saniye sonra tekrar deneyin.",
+          })
+        : err instanceof Error
+          ? err.message
+          : "Demo girişi başarısız";
       toast.error(msg);
     } finally {
+      clearTimeout(warmupHint);
       setDemoLoading(false);
+      setDemoStatusMsg(null);
     }
   }
 
@@ -121,7 +141,11 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
             {demoLoading ? t("demoLoading") : t("demoPrimary")}
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </button>
-          <p className="mt-2 text-center text-caption text-content-muted">{t("demoReassure")}</p>
+          {demoStatusMsg ? (
+            <p className="mt-2 text-center text-caption text-amber-400">{demoStatusMsg}</p>
+          ) : (
+            <p className="mt-2 text-center text-caption text-content-muted">{t("demoReassure")}</p>
+          )}
 
           {/* Divider */}
           <div className="relative my-5">

@@ -148,7 +148,11 @@ export async function logout(): Promise<void> {
 }
 
 export async function loginDemo(): Promise<AuthUser> {
-  const r = await fetch(`${API_BASE}/auth/demo`, { method: "POST" });
+  const r = await fetch(`${API_BASE}/auth/demo`, {
+    method: "POST",
+    // Allow 60 s — Cloud Run may be cold-starting (30-90 s first request).
+    signal: AbortSignal.timeout(60_000),
+  });
   if (!r.ok) {
     const d = await r.json().catch(() => ({ detail: r.statusText }));
     throw new Error((d as { detail?: string }).detail || "Demo login failed");

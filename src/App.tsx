@@ -180,29 +180,42 @@ export default function App() {
     // onIdTokenChanged fires on login, logout AND silent token refresh (~1 hr).
     // This keeps the local user state in sync without showing "session expired".
     return onIdTokenChanged(auth, async (firebaseUser) => {
+      // Cap the initial session restore at 8 s so a Cloud Run cold start
+      // doesn't leave the app stuck on the loading splash for 25+ seconds.
+      // After the cap, ready=true fires and the user sees the login page.
+      let timedOut = false;
+      const earlyReady = setTimeout(() => {
+        timedOut = true;
+        setReady(true);
+      }, 8_000);
+
       try {
         if (firebaseUser) {
           const u = await fetchMe();
-          if (u) setUser(u);
           // if fetchMe fails (backend unreachable), keep the existing user state
           // rather than logging out — the user is still authenticated with Firebase
+          if (!timedOut && u) setUser(u);
         } else if (localStorage.getItem(DEMO_TOKEN_KEY)) {
           // Demo login: no Firebase user but we have a backend JWT
           const u = await fetchMe();
-          if (u) {
-            setUser(u);
-          } else {
-            localStorage.removeItem(DEMO_TOKEN_KEY);
-            setUser(null);
+          if (!timedOut) {
+            if (u) {
+              setUser(u);
+            } else {
+              localStorage.removeItem(DEMO_TOKEN_KEY);
+              setUser(null);
+            }
           }
         } else {
-          setUser(null);
+          if (!timedOut) setUser(null);
         }
       } catch {
         // fetchMe threw (network error, timeout, etc.) — keep existing auth state
         // and still mark as ready so the UI doesn't hang on the loading screen.
       } finally {
-        setReady(true);
+        clearTimeout(earlyReady);
+        if (!timedOut) setReady(true);
+        timedOut = true;
       }
     });
   }, [setUser, setReady]);
