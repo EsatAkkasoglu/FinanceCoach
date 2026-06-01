@@ -58,11 +58,14 @@ export default {
         overline:  ["0.6875rem",{ lineHeight: "1.2", letterSpacing: "0.06em", fontWeight: "600" }],
       },
       borderRadius: {
-        lg: "14px",
-        xl: "18px",
+        lg: "14px",   // inner elements (tiles, skeletons, buttons)
+        xl: "18px",   // legacy / modals
+        "2xl": "22px", // cards & hero — single canonical card radius
       },
       boxShadow: {
         glow: "0 0 24px -4px rgba(31, 181, 122, 0.45)",
+        // Canonical card hover lift — replaces per-card inline shadow literals.
+        "card-hover": "0 0 0 1px rgba(31, 181, 122, 0.15), 0 8px 24px rgba(0, 0, 0, 0.2)",
       },
       keyframes: {
         "agent-pulse": {

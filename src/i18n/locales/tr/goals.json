@@ -8,6 +8,45 @@
   "pctReached": "%{{pct}} ulaşıldı",
   "remainingToGo": "{{remaining}} kaldı",
   "validationError": "Başlık ve pozitif bir hedef tutarı gereklidir.",
+  "savingsQuest": "Birikim Görevi",
+  "confirmDelete": "\"{{title}}\" silinsin mi?",
+  "deleted": "Hedef silindi",
+  "updated": "Hedef güncellendi",
+  "created": "Hedef oluşturuldu 🎯",
+  "currencyLabel": "Para birimi",
+  "monthlyPreview": "Bu hedefe ulaşmak için aylık yaklaşık <b>{{amount}}</b> biriktirmeniz gerekecek.",
+  "levels": {
+    "beginner": "Başlangıç",
+    "saver": "Birikimci",
+    "hero": "Kahraman",
+    "legend": "Efsane"
+  },
+  "achievements": {
+    "firstLabel": "İlk Adım",
+    "firstDesc": "İlk hedefini oluştur",
+    "halfwayLabel": "Yarı Yolda",
+    "halfwayDesc": "Bir hedefte %50'ye ulaş",
+    "completeLabel": "Tamamcı",
+    "completeDesc": "Bir hedefi tamamla",
+    "multiLabel": "Çok Hedefli",
+    "multiDesc": "3 veya daha fazla hedef oluştur"
+  },
+  "summary": {
+    "totalTarget": "Toplam Hedef",
+    "saved": "Biriktirilen",
+    "pctComplete": "%{{pct}} tamamlandı",
+    "completed": "Tamamlanan",
+    "goalsUnit": "hedef"
+  },
+  "card": {
+    "completedBadge": "Tamamlandı",
+    "monthlyNeeded": "Bu hedefe ulaşmak için aylık <b>{{amount}}</b> biriktirmelisiniz",
+    "amountPlaceholder": "Tutar ({{ccy}})",
+    "add": "Ekle",
+    "custom": "Özel",
+    "milestoneReached": "Kilometre taşı — %{{pct}}! 🔥",
+    "congrats": "Tebrikler! Bu hedefe ulaştınız. 🎉"
+  },
   "form": {
     "editTitle": "Hedefi düzenle",
     "newTitle": "Yeni hedef",

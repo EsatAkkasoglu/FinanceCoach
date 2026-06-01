@@ -237,7 +237,7 @@ export function Budget() {
           <TrendBand trend={trend} txs={txs} fx={fx} />
 
           {summary && (
-            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <CategoriesDonut summary={summary} fx={fx} trend={trend} />
               <UpcomingCharges summary={summary} fx={fx} />
             </div>
@@ -443,7 +443,7 @@ function SummaryRow({ summary, fx }: { summary: BudgetSummary | null; fx: UseFxR
 function TrendBand({
   trend, txs, fx,
 }: { trend: BudgetTrend | null; txs: Transaction[]; fx: UseFxRates }) {
-  const { t } = useTranslation("budget");
+  const { t, i18n } = useTranslation("budget");
 
   // Build the 30-day spend heatmap from expense transactions (client-side).
   const heatCells = useMemo<HeatCell[]>(() => {
@@ -482,8 +482,12 @@ function TrendBand({
     else insight = { text: t("trend.surplusNarrowing"), tone: "neutral" };
   }
 
-  const monthLabel = (iso: string) =>
-    new Date(iso + "-01").toLocaleDateString([], { month: "short" });
+  const monthLabel = (iso: string) => {
+    // Backend sends each month as a full ISO date (YYYY-MM-DD). Tolerate a bare
+    // YYYY-MM too, and never render "Invalid Date".
+    const d = new Date(iso.length <= 7 ? `${iso}-01T00:00:00` : `${iso}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(i18n.language, { month: "short" });
+  };
 
   return (
     <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -760,12 +764,12 @@ function CategoriesDonut({ summary, fx, trend }: { summary: BudgetSummary; fx: U
       <h2 className="text-sm font-semibold">{t("topCategories")}</h2>
       <p className="text-[11px] text-content-muted">{t("whereMoneyWent")}</p>
 
-      <div className="mt-4 flex gap-5">
+      <div className="mt-4 flex gap-4">
         {/* Donut */}
-        <div className="relative h-36 w-36 shrink-0">
+        <div className="relative h-32 w-32 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={items} dataKey="value" nameKey="name" innerRadius={42} outerRadius={64} paddingAngle={2}>
+              <Pie data={items} dataKey="value" nameKey="name" innerRadius={38} outerRadius={58} paddingAngle={2}>
                 {items.map((_, i) => (
                   <Cell key={i} fill={paletteAt(i)} stroke="none" />
                 ))}
@@ -838,7 +842,7 @@ function UpcomingCharges({ summary, fx }: { summary: BudgetSummary; fx: UseFxRat
   }, [summary]);
 
   return (
-    <section className="card lg:col-span-2">
+    <section className="card">
       <header className="mb-2 flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold">{t("upcomingTitle")}</h2>

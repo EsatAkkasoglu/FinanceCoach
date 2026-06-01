@@ -10,7 +10,7 @@
  * - "+amount" floating label on each contribution
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -32,6 +32,8 @@ import { Button } from "@/components/ui/Button";
 import { Field, TextInput } from "@/components/ui/Field";
 import { GoalsHero } from "./GoalsHero";
 import { CircularProgress } from "./CircularProgress";
+import { CoinBurst, Confetti, Odometer } from "./Juice";
+import { cardEntrance, floatLabel, pressable, shake, SPRING } from "./feel";
 
 // ── Icon registry ─────────────────────────────────────────────────────────────
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -76,7 +78,7 @@ const CONTRIBUTE_AMOUNTS: Record<string, number[]> = {
 // ── Gamification helpers ──────────────────────────────────────────────────────
 
 interface LevelInfo {
-  label: string;
+  labelKey: string;
   color: string;
   minXp: number;
   maxXp: number;
@@ -84,10 +86,10 @@ interface LevelInfo {
 }
 
 const LEVELS: LevelInfo[] = [
-  { label: "Başlangıç",  color: "text-slate-400",   minXp: 0,    maxXp: 2500,  icon: <Star className="h-4 w-4" /> },
-  { label: "Birikimci",  color: "text-emerald-400", minXp: 2500, maxXp: 5000,  icon: <Flame className="h-4 w-4" /> },
-  { label: "Kahraman",   color: "text-yellow-400",  minXp: 5000, maxXp: 7500,  icon: <Trophy className="h-4 w-4" /> },
-  { label: "Efsane",     color: "text-purple-400",  minXp: 7500, maxXp: 10000, icon: <Award className="h-4 w-4" /> },
+  { labelKey: "levels.beginner", color: "text-slate-400",   minXp: 0,    maxXp: 2500,  icon: <Star className="h-4 w-4" /> },
+  { labelKey: "levels.saver",    color: "text-emerald-400", minXp: 2500, maxXp: 5000,  icon: <Flame className="h-4 w-4" /> },
+  { labelKey: "levels.hero",     color: "text-yellow-400",  minXp: 5000, maxXp: 7500,  icon: <Trophy className="h-4 w-4" /> },
+  { labelKey: "levels.legend",   color: "text-purple-400",  minXp: 7500, maxXp: 10000, icon: <Award className="h-4 w-4" /> },
 ];
 
 function getLevelInfo(xp: number): LevelInfo & { progress: number } {
@@ -98,8 +100,8 @@ function getLevelInfo(xp: number): LevelInfo & { progress: number } {
 
 interface Achievement {
   key: string;
-  label: string;
-  desc: string;
+  labelKey: string;
+  descKey: string;
   icon: React.ReactNode;
   unlocked: boolean;
 }
@@ -110,29 +112,29 @@ function getAchievements(goals: Goal[]): Achievement[] {
   return [
     {
       key: "first",
-      label: "İlk Adım",
-      desc: "İlk hedefini oluştur",
+      labelKey: "achievements.firstLabel",
+      descKey: "achievements.firstDesc",
       icon: <Target className="h-4 w-4" />,
       unlocked: goals.length >= 1,
     },
     {
       key: "halfway",
-      label: "Yarı Yolda",
-      desc: "Bir hedefte %50'ye ulaş",
+      labelKey: "achievements.halfwayLabel",
+      descKey: "achievements.halfwayDesc",
       icon: <Zap className="h-4 w-4" />,
       unlocked: halfwayAny,
     },
     {
       key: "complete",
-      label: "Tamamcı",
-      desc: "Bir hedefi tamamla",
+      labelKey: "achievements.completeLabel",
+      descKey: "achievements.completeDesc",
       icon: <Trophy className="h-4 w-4" />,
       unlocked: completed.length >= 1,
     },
     {
       key: "multi",
-      label: "Çok Hedefli",
-      desc: "3 veya daha fazla hedef oluştur",
+      labelKey: "achievements.multiLabel",
+      descKey: "achievements.multiDesc",
       icon: <Flame className="h-4 w-4" />,
       unlocked: goals.length >= 3,
     },
@@ -143,6 +145,9 @@ function getAchievements(goals: Goal[]): Achievement[] {
 
 export function Goals() {
   const { t } = useTranslation("goals");
+  // Dynamic-key lookup (level labels are computed) — i18n's typed keys don't
+  // allow a plain string, so narrow to a simple signature for these.
+  const td = t as unknown as (key: string) => string;
   const { convert } = useFxRates();
   const [goals, setGoals] = useState<Goal[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -178,11 +183,11 @@ export function Goals() {
   }
 
   async function handleDelete(goal: Goal) {
-    if (!window.confirm(`"${goal.title}" silinsin mi?`)) return;
+    if (!window.confirm(t("confirmDelete", { title: goal.title }))) return;
     try {
       await deleteGoal(goal.id);
       setGoals((prev) => prev?.filter((g) => g.id !== goal.id) ?? null);
-      toast.success("Hedef silindi");
+      toast.success(t("deleted"));
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -213,7 +218,7 @@ export function Goals() {
         <GoalsHero />
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div>
-            <p className="text-overline uppercase text-emerald-400/70">Savings Quest</p>
+            <p className="text-overline uppercase text-emerald-400/70">{t("savingsQuest")}</p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
               {t("title")}
             </h1>
@@ -231,7 +236,7 @@ export function Goals() {
             <div className="relative z-10 mt-6">
               <div className="flex items-center justify-between text-xs">
                 <span className={cn("flex items-center gap-1.5 font-semibold", lvl.color)}>
-                  {lvl.icon} {lvl.label}
+                  {lvl.icon} {td(lvl.labelKey)}
                 </span>
                 <span className="text-white/65 tabular-nums">{stats.xp.toLocaleString()} / 10 000 XP</span>
               </div>
@@ -301,6 +306,8 @@ export function Goals() {
 // ── Achievement badges row ────────────────────────────────────────────────────
 
 function AchievementsRow({ goals }: { goals: Goal[] }) {
+  const { t } = useTranslation("goals");
+  const td = t as unknown as (key: string) => string;
   const achievements = getAchievements(goals);
   return (
     <div className="flex flex-wrap gap-2">
@@ -309,7 +316,7 @@ function AchievementsRow({ goals }: { goals: Goal[] }) {
           key={a.key}
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          title={a.desc}
+          title={td(a.descKey)}
           className={cn(
             "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all",
             a.unlocked
@@ -320,7 +327,7 @@ function AchievementsRow({ goals }: { goals: Goal[] }) {
           <span className={a.unlocked ? "text-emerald-400" : "text-content-muted"}>
             {a.icon}
           </span>
-          {a.label}
+          {td(a.labelKey)}
           {a.unlocked && (
             <CheckCircle2 className="h-3 w-3 text-emerald-400" />
           )}
@@ -338,12 +345,13 @@ function SummaryBanner({
   stats: { total: number; saved: number; pct: number; completed: number; count: number; xp: number };
 }) {
   const ccy = useSettingsStore((s) => s.displayCurrency);
+  const { t } = useTranslation("goals");
   return (
     <div className="grid grid-cols-3 gap-3">
       {[
-        { label: "Toplam Hedef",  value: formatCurrency(stats.total, ccy),   sub: null,                    color: "" },
-        { label: "Biriktirilen",  value: formatCurrency(stats.saved, ccy),   sub: `%${stats.pct.toFixed(0)} tamamlandı`, color: "text-gain" },
-        { label: "Tamamlanan",    value: `${stats.completed} / ${stats.count}`, sub: "hedef",              color: stats.completed > 0 ? "text-yellow-400" : "" },
+        { label: t("summary.totalTarget"), value: formatCurrency(stats.total, ccy),   sub: null,                                              color: "" },
+        { label: t("summary.saved"),       value: formatCurrency(stats.saved, ccy),   sub: t("summary.pctComplete", { pct: stats.pct.toFixed(0) }), color: "text-gain" },
+        { label: t("summary.completed"),   value: `${stats.completed} / ${stats.count}`, sub: t("summary.goalsUnit"),                          color: stats.completed > 0 ? "text-yellow-400" : "" },
       ].map(({ label, value, sub, color }) => (
         <div key={label} className="card text-center">
           <p className="text-overline uppercase text-content-muted">{label}</p>
@@ -365,14 +373,19 @@ function GoalCard({
   onContribute: (delta: number) => void;
   onDelete: () => void;
 }) {
+  const { t, i18n } = useTranslation("goals");
   const { t: tCommon } = useTranslation("common");
+  const pctStr = (n: number) => (i18n.language === "tr" ? `%${n}` : `${n}%`);
   const ccy = useSettingsStore((s) => s.displayCurrency);
   const { convert } = useFxRates();
   const [customMode, setCustomMode] = useState(false);
   const [customVal, setCustomVal] = useState("");
   const [floatingLabels, setFloatingLabels] = useState<{ id: number; amount: number }[]>([]);
   const [pulse, setPulse] = useState(false);
+  const [burstKey, setBurstKey] = useState<number | null>(null);
+  const [errorShake, setErrorShake] = useState(false);
   const labelId = useRef(0);
+  const prevPct = useRef<number | null>(null);
 
   const goalCcy = (goal.currency || "TRY").toUpperCase();
   const currentRaw = goal.current_amount ?? 0;
@@ -382,6 +395,19 @@ function GoalCard({
   const pct = target > 0 ? Math.min(100, (current / target) * 100) : 0;
   const remaining = Math.max(0, target - current);
   const completed = currentRaw >= targetRaw;
+
+  // Detect a crossed 25/50/75/100 milestone → pop + reward toast.
+  useEffect(() => {
+    const prev = prevPct.current;
+    if (prev != null && pct > prev) {
+      const crossed = [25, 50, 75, 100].find((m) => prev < m && pct >= m);
+      if (crossed) {
+        toast.success(t("card.milestoneReached", { pct: crossed }), { duration: 2000 });
+      }
+    }
+    prevPct.current = pct;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pct]);
 
   const daysLeft = useMemo(() => {
     if (!goal.target_date) return null;
@@ -401,13 +427,14 @@ function GoalCard({
 
   function fireContribute(amt: number) {
     onContribute(amt);
-    // Floating label
+    // Floating "+amount" label
     const id = ++labelId.current;
     setFloatingLabels((prev) => [...prev, { id, amount: amt }]);
     setTimeout(() => setFloatingLabels((prev) => prev.filter((l) => l.id !== id)), 1200);
-    // Ring pulse
+    // Ring pulse + coin burst (only on positive deposits)
     setPulse(true);
     setTimeout(() => setPulse(false), 600);
+    if (amt > 0) setBurstKey(Date.now());
   }
 
   function handleCustomSubmit(e: React.FormEvent) {
@@ -416,6 +443,10 @@ function GoalCard({
     if (!isNaN(n) && n !== 0) {
       fireContribute(n);
       setCustomVal(""); setCustomMode(false);
+    } else {
+      // Rejection: shake the input.
+      setErrorShake(true);
+      setTimeout(() => setErrorShake(false), 380);
     }
   }
 
@@ -423,16 +454,18 @@ function GoalCard({
 
   return (
     <motion.section
-      variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
-      transition={{ type: "spring", stiffness: 260, damping: 22 }}
+      variants={cardEntrance}
+      whileHover={completed ? undefined : { y: -3 }}
+      transition={SPRING.settle}
       className={cn(
-        "card flex flex-col gap-4 transition-shadow",
+        "card relative flex flex-col gap-4 transition-shadow",
         completed
           ? "ring-1 ring-gain/40 shadow-[0_0_24px_#22c55e18]"
-          : "hover:shadow-lg",
+          : "hover:shadow-card-hover",
         pulse && "ring-1 ring-accent/50",
       )}
     >
+      <Confetti fire={completed} />
       {/* ── Card header ── */}
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -455,18 +488,21 @@ function GoalCard({
               </span>
             </CircularProgress>
 
+            {/* Coin burst on contribution */}
+            <CoinBurst fireKey={burstKey} />
+
             {/* Floating +amount labels */}
             <AnimatePresence>
               {floatingLabels.map(({ id, amount }) => (
                 <motion.div
                   key={id}
-                  initial={{ opacity: 1, y: 0, x: "-50%" }}
-                  animate={{ opacity: 0, y: -40, x: "-50%" }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 1 }}
-                  className="pointer-events-none absolute left-1/2 top-0 text-xs font-bold text-gain"
+                  {...floatLabel}
+                  className={cn(
+                    "pointer-events-none absolute left-1/2 top-0 text-xs font-bold",
+                    amount >= 0 ? "text-gain" : "text-loss",
+                  )}
                 >
-                  +{formatCurrency(amount, ccy)}
+                  {amount >= 0 ? "+" : "−"}{formatCurrency(Math.abs(amount), ccy)}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -481,7 +517,7 @@ function GoalCard({
                   initial={{ scale: 0 }} animate={{ scale: 1 }}
                   className="shrink-0 rounded-full bg-gain/15 px-2 py-0.5 text-[10px] font-medium text-gain"
                 >
-                  ✓ Tamamlandı
+                  ✓ {t("card.completedBadge")}
                 </motion.span>
               )}
             </div>
@@ -489,11 +525,11 @@ function GoalCard({
             {/* Progress text */}
             <p className="mt-0.5 text-xs text-content-muted">
               <span className={cn("font-semibold", completed ? "text-gain" : "text-content")}>
-                {formatCurrency(current, ccy)}
+                <Odometer value={current} format={(n) => formatCurrency(n, ccy)} />
               </span>
               {" / "}{formatCurrency(target, ccy)}
               <span className={cn("ml-2 font-medium", pct >= 75 ? "text-gain" : pct >= 50 ? "text-accent" : "text-content-muted")}>
-                %{pct.toFixed(0)}
+                {pctStr(Math.round(pct))}
               </span>
             </p>
 
@@ -513,10 +549,10 @@ function GoalCard({
 
         {/* Edit / delete */}
         <div className="flex shrink-0 gap-0.5">
-          <button onClick={onEdit} className="rounded p-1.5 text-content-muted hover:bg-surface-raised hover:text-content transition" aria-label="Düzenle">
+          <button onClick={onEdit} className="rounded p-1.5 text-content-muted hover:bg-surface-raised hover:text-content transition" aria-label={tCommon("edit")}>
             <Pencil className="h-3.5 w-3.5" />
           </button>
-          <button onClick={onDelete} className="rounded p-1.5 text-content-muted hover:bg-surface-raised hover:text-loss transition" aria-label="Sil">
+          <button onClick={onDelete} className="rounded p-1.5 text-content-muted hover:bg-surface-raised hover:text-loss transition" aria-label={tCommon("delete")}>
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -530,9 +566,12 @@ function GoalCard({
         <div className="flex items-center gap-2 rounded-lg bg-surface-raised px-3 py-2 text-[11px]">
           <TrendingUp className="h-3.5 w-3.5 shrink-0 text-accent" />
           <span className="text-content-muted">
-            Hedefe ulaşmak için aylık{" "}
-            <span className="font-semibold text-content">{formatCurrency(monthlyNeeded, ccy)}</span>
-            {" "}biriktirmeniz gerekiyor
+            <Trans
+              t={t}
+              i18nKey="card.monthlyNeeded"
+              values={{ amount: formatCurrency(monthlyNeeded, ccy) }}
+              components={{ b: <span className="font-semibold text-content" /> }}
+            />
           </span>
         </div>
       )}
@@ -541,47 +580,57 @@ function GoalCard({
       {!completed && (
         <div>
           {customMode ? (
-            <form onSubmit={handleCustomSubmit} className="flex gap-2">
+            <motion.form
+              onSubmit={handleCustomSubmit}
+              className="flex gap-2"
+              variants={shake}
+              animate={errorShake ? "shake" : "idle"}
+            >
               <input
                 autoFocus
                 type="number"
                 value={customVal}
                 onChange={(e) => setCustomVal(e.target.value)}
-                placeholder={`Tutar (${ccy})`}
-                className="flex-1 rounded-lg border border-line bg-surface-raised px-3 py-1.5 text-sm outline-none focus:border-accent"
+                placeholder={t("card.amountPlaceholder", { ccy })}
+                className={cn(
+                  "flex-1 rounded-lg border bg-surface-raised px-3 py-1.5 text-sm outline-none transition focus:ring-2 focus:ring-accent/20",
+                  errorShake ? "border-loss" : "border-line focus:border-accent",
+                )}
               />
-              <button type="submit" className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition">
-                Ekle
-              </button>
+              <motion.button {...pressable} type="submit" className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition">
+                {t("card.add")}
+              </motion.button>
               <button type="button" onClick={() => { setCustomMode(false); setCustomVal(""); }}
                 className="rounded-lg border border-line px-3 py-1.5 text-xs text-content-muted hover:bg-surface-raised transition">
-                İptal
+                {tCommon("cancel")}
               </button>
-            </form>
+            </motion.form>
           ) : (
             <div className="flex flex-wrap gap-2">
               {quickAmounts.map((amt) => (
                 <motion.button
                   key={amt}
-                  whileTap={{ scale: 0.93 }}
+                  {...pressable}
+                  whileHover={{ y: -2 }}
                   onClick={() => fireContribute(amt)}
-                  className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs font-medium text-content-muted transition hover:border-gain hover:bg-gain/10 hover:text-gain"
+                  className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs font-medium text-content-muted transition-colors hover:border-gain hover:bg-gain/10 hover:text-gain"
                 >
                   +{formatCurrency(amt, ccy)}
                 </motion.button>
               ))}
               <motion.button
-                whileTap={{ scale: 0.93 }}
+                {...pressable}
+                whileHover={{ y: -2 }}
                 onClick={() => fireContribute(-(quickAmounts[0]))}
-                className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs font-medium text-content-muted transition hover:border-loss hover:bg-loss/10 hover:text-loss"
+                className="rounded-full border border-line bg-surface-raised px-3 py-1 text-xs font-medium text-content-muted transition-colors hover:border-loss hover:bg-loss/10 hover:text-loss"
               >
-                -{formatCurrency(quickAmounts[0], ccy)}
+                −{formatCurrency(quickAmounts[0], ccy)}
               </motion.button>
               <button
                 onClick={() => setCustomMode(true)}
                 className="rounded-full border border-dashed border-line px-3 py-1 text-xs text-content-muted transition hover:border-accent hover:text-accent"
               >
-                <Zap className="mr-1 inline h-3 w-3" />Özel
+                <Zap className="mr-1 inline h-3 w-3" />{t("card.custom")}
               </button>
             </div>
           )}
@@ -595,8 +644,10 @@ function GoalCard({
           animate={{ opacity: 1, scale: 1 }}
           className="flex items-center gap-2 rounded-lg bg-gain/10 px-3 py-2 text-xs font-medium text-gain ring-1 ring-gain/20"
         >
-          <Trophy className="h-4 w-4 text-yellow-400" />
-          Tebrikler! Bu hedefe ulaştınız. 🎉
+          <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={SPRING.reward}>
+            <Trophy className="h-4 w-4 text-yellow-400" />
+          </motion.span>
+          {t("card.congrats")}
         </motion.div>
       )}
     </motion.section>
@@ -606,6 +657,8 @@ function GoalCard({
 // ── Milestone track ───────────────────────────────────────────────────────────
 
 function MilestoneTrack({ pct }: { pct: number }) {
+  const { i18n } = useTranslation("goals");
+  const pctStr = (n: number) => (i18n.language === "tr" ? `%${n}` : `${n}%`);
   const milestones = [25, 50, 75, 100];
 
   return (
@@ -665,7 +718,7 @@ function MilestoneTrack({ pct }: { pct: number }) {
               )}
               style={isLast ? {} : { left: `${m}%` }}
             >
-              %{m}
+              {pctStr(m)}
             </span>
           );
         })}
@@ -677,6 +730,7 @@ function MilestoneTrack({ pct }: { pct: number }) {
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const { t } = useTranslation("goals");
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -690,12 +744,12 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       >
         <Target className="h-8 w-8" />
       </motion.div>
-      <h2 className="text-base font-semibold">Henüz hedef yok</h2>
+      <h2 className="text-base font-semibold">{t("noGoals")}</h2>
       <p className="mt-1 max-w-sm text-sm text-content-muted">
-        Birikim hedefinizi belirleyin — ev peşinatı, acil fon, tatil veya istediğiniz herhangi bir şey.
+        {t("noGoalsDesc")}
       </p>
       <Button className="mt-5" onClick={onCreate}>
-        <Plus className="h-4 w-4" /> İlk hedefi oluştur
+        <Plus className="h-4 w-4" /> {t("createFirstGoal")}
       </Button>
     </motion.div>
   );
@@ -769,8 +823,8 @@ function GoalFormModal({
         icon: form.icon,
         currency: form.currency,
       };
-      if (editing) { await updateGoal(editing.id, payload); toast.success("Hedef güncellendi"); }
-      else { await createGoal(payload); toast.success("Hedef oluşturuldu 🎯"); }
+      if (editing) { await updateGoal(editing.id, payload); toast.success(t("updated")); }
+      else { await createGoal(payload); toast.success(t("created")); }
       onSaved();
     } catch (e) {
       toast.error((e as Error).message);
@@ -829,7 +883,7 @@ function GoalFormModal({
           </div>
         </Field>
 
-        <Field label="Para birimi">
+        <Field label={t("currencyLabel")}>
           <div className="flex gap-2">
             {(["TRY", "USD", "EUR"] as const).map((c) => (
               <button key={c} type="button"
@@ -872,10 +926,12 @@ function GoalFormModal({
           <div className="flex items-start gap-2 rounded-lg bg-accent/10 px-3 py-2.5 text-xs">
             <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
             <span className="text-content-muted">
-              Bu hedefe ulaşmak için aylık yaklaşık{" "}
-              <span className="font-semibold text-content">
-                {formatCurrency(monthlyPreview, form.currency)}
-              </span>{" "}biriktirmeniz gerekecek.
+              <Trans
+                t={t}
+                i18nKey="monthlyPreview"
+                values={{ amount: formatCurrency(monthlyPreview, form.currency) }}
+                components={{ b: <span className="font-semibold text-content" /> }}
+              />
             </span>
           </div>
         )}

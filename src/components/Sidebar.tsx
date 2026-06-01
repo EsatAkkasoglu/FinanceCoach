@@ -254,8 +254,11 @@ export function Sidebar({
   }
 
   const displayName = name || authUser?.username || "You";
-  const visibleConvs = conversations.slice(0, 6);
-  const hiddenCount = Math.max(0, conversations.length - visibleConvs.length);
+  // Only list conversations that have a real title — never show empty/"Untitled"
+  // placeholder conversations created when Coach is opened without a message.
+  const titledConvs = conversations.filter((c) => c.title);
+  const visibleConvs = titledConvs.slice(0, 6);
+  const hiddenCount = Math.max(0, titledConvs.length - visibleConvs.length);
 
   return (
     <>
@@ -561,8 +564,8 @@ export function Sidebar({
                   )}
                 </div>
               )}
-              {recentOpen && conversations.length === 0 && (
-                <p className="px-3 py-1 text-[10px] text-content-muted">{t("noChatsYet")}</p>
+              {recentOpen && titledConvs.length === 0 && (
+                <p className="px-3 py-1 text-caption text-content-muted">{t("noChatsYet")}</p>
               )}
             </motion.div>
           )}
@@ -589,8 +592,8 @@ export function Sidebar({
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="whitespace-nowrap text-[11px] font-medium">
                 {healthy === true
-                  ? <><span className="text-gain">{tChat("coach")}</span> online</>
-                  : healthy === false ? "Offline" : t("loading")}
+                  ? <><span className="text-gain">{tChat("coach")}</span> {t("online")}</>
+                  : healthy === false ? t("offline") : t("reconnecting")}
               </motion.span>
             )}
           </AnimatePresence>

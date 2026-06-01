@@ -74,5 +74,9 @@
   "language": {
     "title": "Dil",
     "subtitle": "Uygulamanın görüntüleme dilini seçin."
+  },
+  "currency": {
+    "title": "Görüntüleme para birimi",
+    "subtitle": "Uygulamadaki tüm değerler bu para birimine çevrilir."
   }
 }

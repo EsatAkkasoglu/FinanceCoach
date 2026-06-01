@@ -15,28 +15,29 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.prebuilt import create_react_agent
 
 import app.services.coingecko as cg
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
+from app.tools.calc_tools import compare_instruments
+from app.tools.fund_tools import (
+    get_fund_history,
+    get_fund_quote,
+    list_top_funds,
+    search_fund,
+)
 from app.tools.market_tools import (
-    get_quote,
     analyze_ticker_8dim,
-    get_dividend_metrics,
     get_bist_dividend_leaders,
     get_bist_movers,
+    get_company_overview,
+    get_dividend_metrics,
+    get_quote,
+    get_technical_indicators,
     get_us_movers,
     scan_hot_trends,
     scan_rumors,
-    get_company_overview,
-    get_technical_indicators,
 )
-from app.tools.symbol_resolver import resolve_symbol, list_supported_categories
-from app.tools.fund_tools import (
-    get_fund_quote,
-    get_fund_history,
-    search_fund,
-    list_top_funds,
-)
+from app.tools.symbol_resolver import list_supported_categories, resolve_symbol
 
 SYSTEM_PROMPT_BASE = """You are the Equity & Fund Research Analyst on the FinCoach Investment Committee.
 
@@ -129,6 +130,10 @@ WORKFLOW (decision tree):
     the news/sentiment agent for current headlines.
 11. ``list_top_funds`` — Turkish fund leaderboard by category rank.
 12. ``list_supported_categories`` — meta-question 'what can you look up?'
+13. ``compare_instruments(tickers)`` — when the user asks to COMPARE 2+ symbols
+    ("AAPL vs MSFT", "şu üç fonu karşılaştır"), call this for a clean
+    side-by-side table (price, change, P/E, yield, beta, fund returns/risk).
+    It builds the numbers deterministically — quote them verbatim.
 
 DISAMBIGUATION:
 - A 3-letter all-caps code in a Turkish-language query → likely a TEFAS fund
@@ -236,6 +241,8 @@ _TOOLS = [
     get_fund_quote,
     get_fund_history,
     list_top_funds,
+    # Deterministic cross-instrument comparison
+    compare_instruments,
 ]
 
 def _latest_user_text(state: AgentState) -> str:

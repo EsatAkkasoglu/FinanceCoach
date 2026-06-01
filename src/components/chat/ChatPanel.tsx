@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Square, Trash2, Copy, Check, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Paperclip, X, FileText, FileSpreadsheet, FileCode, Image as ImageIcon, File as FileIcon, AlertCircle, UploadCloud, Mic } from "lucide-react";
+import { Send, Square, Trash2, Copy, Check, Loader2, ThumbsUp, ThumbsDown, RotateCcw, Paperclip, X, FileText, FileSpreadsheet, FileCode, Image as ImageIcon, File as FileIcon, AlertCircle, UploadCloud, Mic, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -8,6 +8,7 @@ import { streamChat, sendFeedback, autotitleConversation, parseDocument, transcr
 import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity, type MessageAttachment } from "@/store";
 import { cn } from "@/lib/cn";
 import { AgentBadge } from "./AgentBadge";
+import { AgentTrace } from "./AgentTrace";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 
 function pickRandom<T>(arr: T[], n: number): T[] {
@@ -151,7 +152,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   const { t, i18n } = useTranslation("chat");
   const {
     messagesByConv, streaming,
-    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSuggestions, addReasoning, setStreaming, resetConv,
+    appendMessage, appendToken, setMessageAgent, addCitations, setMessageSteps, setMessageSuggestions, addReasoning, setStreaming, resetConv,
   } = useChatStore();
   const messages = messagesByConv[convId] ?? [];
   const clearAgentEvents = useAgentVizStore((s) => s.clear);
@@ -566,6 +567,11 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
       inFlightPromptRef.current = null;
       setStreaming(false);
       setActiveAgent(null);
+      // Attach the turn's tool trace to the final (synthesizer) bubble so the
+      // user can expand "what I did" and see each tool's result + calc cards.
+      if (lastAsstId.current && toolActivitiesRef.current.length > 0) {
+        setMessageSteps(convId, lastAsstId.current, toolActivitiesRef.current);
+      }
       setTimeout(() => {
         clearAgentEvents();
       }, 800);
@@ -673,14 +679,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
-        {messages.length === 0 ? (
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-tight">{t("coach")}</h1>
-            <p className="mt-1 text-sm text-content-muted">
-              {t("greeting")}
-            </p>
-          </div>
-        ) : (
+        {messages.length > 0 && (
           <div className="mb-3 flex items-center justify-end">
             <button
               type="button"
@@ -700,18 +699,26 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
           aria-atomic="false"
           aria-relevant="additions"
           aria-label="Conversation messages"
-          className="flex-1 space-y-4 overflow-y-auto pr-2"
+          className={cn(
+            "flex-1 overflow-y-auto pr-2",
+            messages.length === 0 ? "flex flex-col items-center justify-center" : "space-y-4",
+          )}
         >
           {messages.length === 0 && (
-            <div className="card-muted">
-              <p className="mb-3 text-sm text-content-muted">{t("tryOneOfThese")}</p>
-              <div className="flex flex-wrap gap-2">
+            <div className="w-full max-w-lg text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/15 text-accent shadow-glow">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <h1 className="text-h2 font-semibold tracking-tight">{t("coach")}</h1>
+              <p className="mx-auto mt-2 max-w-sm text-body-sm text-content-muted">{t("greeting")}</p>
+              <p className="mb-3 mt-7 text-overline uppercase text-content-muted">{t("tryOneOfThese")}</p>
+              <div className="flex flex-wrap justify-center gap-2">
                 {suggestions.map((s, i) => (
                   <button
                     type="button"
                     key={i}
                     onClick={() => send(s)}
-                    className="rounded-full border border-line px-3 py-1.5 text-xs hover:border-accent hover:text-accent"
+                    className="rounded-full border border-line bg-surface-raised/50 px-3.5 py-2 text-xs text-content transition-colors hover:border-accent hover:text-accent"
                   >
                     {s}
                   </button>
@@ -803,6 +810,13 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                         ))}
                       </div>
                     </div>
+                  )}
+
+                  {isAssistant && m.steps && m.steps.length > 0 && (
+                    <AgentTrace
+                      steps={m.steps}
+                      label={(i18n.language || "en").startsWith("tr") ? "Adımlar" : "Steps"}
+                    />
                   )}
 
                   {/* Bottom bar: actions (assistant only) + timestamp */}

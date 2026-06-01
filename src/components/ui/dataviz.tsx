@@ -9,6 +9,7 @@
  * overkill — and slower — at this size.
  */
 import { type ReactNode } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { GAIN, LOSS, ACCENT, pnlColor } from "@/lib/chartColors";
 
@@ -60,6 +61,117 @@ export function Sparkline({
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+// ── AreaSparkline — fill + smooth curve + endpoint marker ────────────────────
+//
+// A richer, more readable cousin of <Sparkline>: gradient area fill under a
+// smooth (Catmull-Rom → bézier) line, a soft baseline, and a glowing endpoint
+// dot. Scales to its container via a viewBox so it stays crisp at any width.
+
+export function AreaSparkline({
+  values,
+  height = 64,
+  color,
+  className,
+  strokeWidth = 2,
+}: {
+  values: number[];
+  height?: number;
+  color?: string;
+  className?: string;
+  strokeWidth?: number;
+}) {
+  const reduceMotion = useReducedMotion();
+  if (values.length < 2) return null;
+  // Fixed internal coordinate space; viewBox + preserveAspectRatio stretch it.
+  const W = 300;
+  const H = height;
+  const pad = strokeWidth + 3; // keep stroke + endpoint dot from clipping
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const stepX = W / (values.length - 1);
+
+  const pts = values.map((v, i) => ({
+    x: i * stepX,
+    y: pad + (1 - (v - min) / span) * (H - pad * 2),
+  }));
+
+  // Smooth the polyline with a Catmull-Rom → cubic-bézier conversion.
+  const line = pts.reduce((acc, p, i, arr) => {
+    if (i === 0) return `M ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    const p0 = arr[i - 1];
+    const pPrev = arr[i - 2] ?? p0;
+    const pNext = arr[i + 1] ?? p;
+    const c1x = p0.x + (p.x - pPrev.x) / 6;
+    const c1y = p0.y + (p.y - pPrev.y) / 6;
+    const c2x = p.x - (pNext.x - p0.x) / 6;
+    const c2y = p.y - (pNext.y - p0.y) / 6;
+    return `${acc} C ${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  }, "");
+
+  const stroke = color ?? pnlColor(values[values.length - 1] - values[0]);
+  const area = `${line} L ${W},${H} L 0,${H} Z`;
+  const last = pts[pts.length - 1];
+  const gid = `area-grad-${stroke.replace(/[^a-z0-9]/gi, "")}`;
+
+  return (
+    <div className={cn("relative w-full", className)} style={{ height: H }}>
+      <svg
+        width="100%"
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        className="block"
+      >
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={stroke} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <motion.path
+          d={area}
+          fill={`url(#${gid})`}
+          stroke="none"
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.45, ease: "easeOut" }}
+        />
+        <motion.path
+          d={line}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+          initial={reduceMotion ? false : { pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+        />
+      </svg>
+      {/* Endpoint marker — HTML overlay so x-stretch can't turn it into an ellipse */}
+      <motion.span
+        className="absolute rounded-full"
+        style={{
+          left: "100%",
+          top: last.y,
+          width: 8,
+          height: 8,
+          marginLeft: -4,
+          marginTop: -4,
+          background: stroke,
+          boxShadow: `0 0 0 4px ${stroke}26, 0 0 10px ${stroke}80`,
+        }}
+        initial={reduceMotion ? false : { scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.3, delay: 0.7, ease: "backOut" }}
+      />
+    </div>
   );
 }
 

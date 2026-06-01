@@ -10,6 +10,7 @@
   "next": "İleri",
   "settingUp": "Ayarlanıyor…",
   "complete": "Tamamla",
+  "skipForNow": "Şimdilik atla",
   "stepOptional": "Bu adım isteğe bağlıdır — finanslarınızı girmeden atlayabilirsiniz.",
   "welcomeBack": "Hoş geldiniz, {{name}} — hazırsınız!",
   "welcome": {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Code2, Database, ChevronDown, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { parseToolResult } from "@/lib/parseToolResult";
+import { CalcResultCard, isCalcEnvelope } from "./CalcResultCard";
 import type { Citation } from "@/store";
 
 const TOOL_META: Record<string, { label: string; previewKey?: string }> = {
@@ -65,6 +66,12 @@ function formatValue(v: unknown, depth = 0): string {
 
 function ResultView({ result, tool }: { result: string; tool: string }) {
   const parsed = parseToolResult(result);
+
+  // Deterministic calc tools return a standard envelope — render it as a card
+  // (formatted_value + formula + the dataviz its ui_type asks for).
+  if (isCalcEnvelope(parsed)) {
+    return <CalcResultCard env={parsed} />;
+  }
 
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     const obj = parsed as Record<string, unknown>;

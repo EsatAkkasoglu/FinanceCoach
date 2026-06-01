@@ -84,12 +84,21 @@ def _require_key() -> str:
     return settings.gemini_api_key
 
 
-@lru_cache(maxsize=1)
-def get_llm() -> ChatGoogleGenerativeAI:
-    """Application chat model with token-usage logging."""
+@lru_cache(maxsize=8)
+def get_llm(temperature: float | None = None) -> ChatGoogleGenerativeAI:
+    """Application chat model with token-usage logging.
+
+    ``temperature=None`` uses the configured default
+    (``settings.gemini_temperature``, ~0.3) — right for prose (the
+    synthesizer). Pass an explicit low value for roles where determinism is
+    correctness: structured routing (the strategist's ``ExecutionPlan``) and
+    structured briefs (advisor / risk_profiler) should run near 0.0 so the
+    same question yields the same plan. Instances are cached per temperature.
+    """
+    temp = settings.gemini_temperature if temperature is None else temperature
     return ChatGoogleGenerativeAI(
         model=settings.gemini_model,
-        temperature=settings.gemini_temperature,
+        temperature=temp,
         google_api_key=_require_key(),
         callbacks=[TokenLogger()],
     )

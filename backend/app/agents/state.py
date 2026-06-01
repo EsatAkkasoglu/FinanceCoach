@@ -63,6 +63,9 @@ class AgentState(TypedDict, total=False):
         messages         — running list of LangChain messages (auto-merged by add_messages)
         user_id          — current user (set per-request from the bearer token)
         risk_profile     — user's risk profile (conservative/balanced/aggressive)
+        user_snapshot    — compact who-is-this-user snapshot (summary holdings +
+                           goal aggregates + risk) built once per turn by the
+                           strategist; no live prices, no transaction history
         plan             — strategist's execution plan for this turn
         memory_hints     — top-k semantic snippets from past turns, fetched
                            BEFORE planning to enrich the strategist's context
@@ -78,6 +81,7 @@ class AgentState(TypedDict, total=False):
     messages: Annotated[list, add_messages]
     user_id: int
     risk_profile: Annotated[str, last_write_wins]
+    user_snapshot: Annotated[dict[str, Any], last_write_wins]
     plan: Annotated[dict[str, Any], last_write_wins]
     memory_hints: Annotated[list[dict[str, Any]], last_write_wins]
     findings: Annotated[dict[str, Any], merge_findings]

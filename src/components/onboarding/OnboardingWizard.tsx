@@ -67,14 +67,18 @@ export function OnboardingWizard() {
   async function finish() {
     setSubmitting(true);
     try {
-      const profile = scoreToLabel(riskScore);
+      // If the user skipped the risk quiz, default to a balanced profile
+      // (a sensible neutral 60/40) instead of the score-0 "conservative".
+      const answeredRisk = Object.keys(form.quizAnswers).length > 0;
+      const effectiveScore = answeredRisk ? riskScore : 70;
+      const profile = scoreToLabel(effectiveScore);
       const incomeCurrency = form.finances.incomeSources[0]?.currency ?? form.currency;
 
       await submitOnboarding({
         name: form.name.trim(),
         avatar: form.avatar,
         monthly_income: form.finances.monthlyIncome,
-        risk_score: riskScore,
+        risk_score: effectiveScore,
         risk_profile: profile,
         spending_pace: 3,
         goal: {
@@ -127,7 +131,7 @@ export function OnboardingWizard() {
         name: form.name.trim(),
         avatar: form.avatar,
         monthlyIncome: form.finances.monthlyIncome,
-        riskScore,
+        riskScore: effectiveScore,
         riskProfile: profile,
       });
       completeOnboarding();
@@ -251,11 +255,22 @@ export function OnboardingWizard() {
             {t("back")}
           </button>
 
-          {step === 2 && (
-            <span className="text-xs text-content-muted">
-              {t("stepOptional")}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {step === 2 && (
+              <span className="hidden text-xs text-content-muted sm:inline">
+                {t("stepOptional")}
+              </span>
+            )}
+            {/* Risk quiz is the one hard blocker — let users skip to a balanced default */}
+            {step === 3 && !canAdvance && (
+              <button
+                type="button"
+                onClick={() => setStep((s) => s + 1)}
+                className="text-sm text-content-muted underline-offset-4 transition hover:text-content hover:underline"
+              >
+                {t("skipForNow")}
+              </button>
+            )}
 
           {!isLast ? (
             <button
@@ -278,6 +293,7 @@ export function OnboardingWizard() {
               {submitting ? t("settingUp") : t("complete")}
             </button>
           )}
+          </div>
         </div>
       </div>
     </div>

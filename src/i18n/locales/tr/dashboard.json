@@ -2,6 +2,8 @@
   "title": "Özet",
   "todayAtAGlance": "Bugünün finansal özeti ve sıradaki en iyi adım",
   "netWorth": "Net değer",
+  "performance": "Performans",
+  "totalReturn": "toplam getiri",
   "allTime": "tüm zamanlar",
   "lastNDays": "Son {{count}} gün",
   "noHoldings": "Henüz varlık yok — Portföy sekmesinden ekleyin",

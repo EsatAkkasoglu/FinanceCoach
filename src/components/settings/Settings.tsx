@@ -15,6 +15,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { StepRiskQuiz } from "@/components/onboarding/StepRiskQuiz";
 import { RISK_QUIZ, scoreToLabel } from "@/components/onboarding/data";
+import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
 
 // ─── UX copy / data ───────────────────────────────────────────────────────────
 
@@ -405,7 +406,24 @@ function AppearancePanel() {
       <Card>
         <LanguageSwitcher />
       </Card>
+
+      <Card>
+        <CurrencyPreference />
+      </Card>
     </>
+  );
+}
+
+function CurrencyPreference() {
+  const { t } = useTranslation("settings");
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium">{t("currency.title")}</p>
+        <p className="mt-0.5 text-xs text-content-muted">{t("currency.subtitle")}</p>
+      </div>
+      <CurrencySwitcher />
+    </div>
   );
 }
 

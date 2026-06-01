@@ -2,6 +2,8 @@
   "title": "Dashboard",
   "todayAtAGlance": "Today's snapshot and your next best move",
   "netWorth": "Net worth",
+  "performance": "Performance",
+  "totalReturn": "total return",
   "allTime": "all-time",
   "lastNDays": "Last {{count}} days",
   "noHoldings": "No holdings yet — add some from the Portfolio tab",

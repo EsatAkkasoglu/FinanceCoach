@@ -23,6 +23,7 @@ dependencies = [
     # Data sources
     "pandas>=2.2.0",
     "numpy>=1.26.0",
+    "numpy-financial>=1.0.0",
     "requests>=2.32.0",
     "feedparser>=6.0.0",
     # Config

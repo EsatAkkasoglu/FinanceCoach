@@ -50,6 +50,9 @@
   },
   "recent": "Your chats",
   "noChatsYet": "No chats yet",
+  "online": "online",
+  "offline": "Offline",
+  "reconnecting": "Reconnecting…",
   "language": "Language",
   "languageEn": "English",
   "languageTr": "Türkçe"

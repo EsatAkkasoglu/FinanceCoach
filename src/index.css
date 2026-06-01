@@ -54,11 +54,13 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-line bg-surface p-5;
+    @apply rounded-2xl border border-line bg-surface p-6;
   }
   .card-muted {
-    @apply rounded-xl border border-line bg-surface-raised p-4;
+    @apply rounded-2xl border border-line bg-surface-raised p-4;
   }
+  /* Canonical interactive-card hover lift. Compose with .card. */
+  .card-hover { @apply transition-shadow hover:shadow-card-hover; }
   .num { @apply font-mono tabular-nums; }
 }
 

@@ -9,9 +9,19 @@ from __future__ import annotations
 
 from langgraph.prebuilt import create_react_agent
 
+from app.agents._helpers import build_findings, extract_tool_calls, recent_conversation_turns
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import build_findings, extract_tool_calls, recent_conversation_turns
+from app.tools.calc_tools import (
+    analyze_portfolio_risk,
+    compute_allocation_drift,
+    compute_concentration,
+    compute_portfolio_summary,
+    compute_return_metrics,
+    correlation_matrix,
+)
+from app.tools.fund_tools import get_fund_quote, search_fund
+from app.tools.market_tools import get_quote
 from app.tools.portfolio_tools import (
     add_holding,
     add_holding_by_value,
@@ -20,22 +30,40 @@ from app.tools.portfolio_tools import (
     remove_holding,
     set_cash_balance,
 )
-from app.tools.market_tools import get_quote
-from app.tools.fund_tools import get_fund_quote, search_fund
 
 SYSTEM_PROMPT_BASE = """You are the Portfolio Manager on the FinCoach Investment Committee.
 You are the AUTHORITY on the user's holdings AND the BOOKKEEPER who persists
 every buy/sell/cash action via the write tools before replying.
 
 READ FLOW (user asks about their portfolio):
-  1. list_holdings.
-  2. If non-empty: refresh prices, compute total value, P&L, per-position weight.
-  3. Report: total value & P&L; per-position breakdown (ticker, value, weight%, P&L%);
-     asset-class concentration; any position over the risk-profile threshold.
+  1. list_holdings (to confirm there are positions).
+  2. If non-empty: call compute_portfolio_summary — it prices every holding,
+     converts to the user's display currency, and returns total value, total
+     cost, P&L, per-position weights AND asset-class allocation. Do NOT add up
+     values or compute weights/P&L by hand.
+  3. Report from that result: total value & P&L; per-position breakdown
+     (ticker, value, weight%, P&L%); asset-class allocation; any position over
+     the risk-profile threshold.
   4. If a position breaches the threshold, flag it inline as
      [RISK ALERT: <ticker> at <weight%> exceeds <profile> limit] so the
      Synthesizer can connect it to the user's broader goals.
   5. If empty: "No holdings on file yet." and stop.
+
+ANALYTICS TOOLS (deterministic — these are the SOURCE OF TRUTH for the numbers;
+quote their values / formatted_value verbatim, never recompute by hand):
+  • compute_portfolio_summary()         — value, P&L, weights, allocation
+  • compute_concentration(top_n)         — HHI + largest positions ("am I too concentrated?")
+  • compute_allocation_drift(target)     — current vs a target asset-class mix
+  • analyze_portfolio_risk()             — REAL portfolio volatility / Sharpe /
+                                           max drawdown + holding correlation,
+                                           computed from live price history.
+                                           USE THIS for "how risky is my
+                                           portfolio", "what's my Sharpe", "am I
+                                           diversified / too correlated".
+  • compute_return_metrics(prices=…)     — vol / Sharpe / drawdown for ONE supplied
+                                           price series (e.g. a single fund's history)
+  • correlation_matrix(series)           — correlation across supplied price series
+  If one returns ok:false, read its `error` and retry with corrected args.
 
 WRITE FLOW (user reports buy / sell / cash):
   add_holding_by_value          — total-value buys ("700 EUR of SCHD")
@@ -147,6 +175,13 @@ _TOOLS = [
     add_holding_by_value,
     set_cash_balance,
     remove_holding,
+    # Deterministic analytics (compute numbers in code, not in the LLM)
+    compute_portfolio_summary,
+    compute_concentration,
+    compute_allocation_drift,
+    analyze_portfolio_risk,
+    compute_return_metrics,
+    correlation_matrix,
 ]
 
 

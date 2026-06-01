@@ -48,9 +48,16 @@ function ChatRoute() {
     if (convId) setActive(convId);
   }, [convId, setActive]);
 
-  // No convId in URL → auto-create a conversation and redirect.
+  // No convId in URL → reuse an existing empty (untitled) conversation if one
+  // exists, otherwise create one. Prevents a new "Untitled" conversation from
+  // being spawned every time the user opens Coach without sending a message.
   useEffect(() => {
     if (convId || creating) return;
+    const existingEmpty = conversations.find((c) => !c.title);
+    if (existingEmpty) {
+      navigate(buildLocalizedPath(currentLanguage, `/chat/${existingEmpty.id}`), { replace: true });
+      return;
+    }
     setCreating(true);
     createConversation()
       .then((c) => {
@@ -59,7 +66,7 @@ function ChatRoute() {
       })
       .catch(() => {})
       .finally(() => setCreating(false));
-  }, [convId, creating, addConversation, navigate, currentLanguage]);
+  }, [convId, creating, conversations, addConversation, navigate, currentLanguage]);
 
   if (!convId) {
     return (
@@ -138,17 +145,30 @@ export default function App() {
     document.title = `${pageLabel} — ${t("appName")}`;
   }, [appPath, i18n.language, t]);
 
+  // Health check with quiet retry: a transient blip stays in the "reconnecting"
+  // (amber) state and silently retries, only flipping to red "offline" + toast
+  // after several sustained failures — so the demo never flashes a scary red.
   useEffect(() => {
-    ping()
-      .then((r) => {
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function check() {
+      try {
+        const r = await ping();
+        if (cancelled) return;
         setHealthy(true);
         if (r.demo_mode) toast.info(t("errors.demoMode"));
-      })
-      .catch(() => {
-        setHealthy(false);
-        toast.error(t("errors.backendUnreachable"));
-      });
-  }, []);
+      } catch {
+        if (cancelled) return;
+        attempts += 1;
+        setHealthy(attempts >= 3 ? false : null); // amber while reconnecting
+        if (attempts === 3) toast.error(t("errors.backendUnreachable"));
+        timer = setTimeout(check, attempts < 3 ? 2000 : 10000);
+      }
+    }
+    void check();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Restore session via Firebase auth state — fires immediately on mount.
   useEffect(() => {
@@ -403,15 +423,15 @@ export default function App() {
           <div className="ml-auto flex items-center gap-3">
             {/* Backend health indicator */}
             <span
-              className="hidden md:block h-2 w-2 rounded-full shrink-0"
+              className={`hidden md:block h-2 w-2 rounded-full shrink-0 ${healthy === null ? "animate-pulse" : ""}`}
               style={{
                 backgroundColor: healthy === true ? "#22c55e" : healthy === false ? "#ef4444" : "#f59e0b",
                 boxShadow: healthy === true ? "0 0 6px rgba(34,197,94,0.6)" : undefined,
               }}
-              title={healthy === true ? "Backend online" : healthy === false ? "Backend offline" : "Connecting…"}
+              title={healthy === true ? "Backend online" : healthy === false ? "Backend offline" : "Reconnecting…"}
             />
-            {/* Only show currency switcher on financial pages */}
-            {showCurrency && <CurrencySwitcher />}
+            {/* Only show currency switcher on financial pages — compact dropdown */}
+            {showCurrency && <CurrencySwitcher variant="compact" />}
             {/* Language + tour controls — inline so they don't overlap the chat send button */}
             {renderLanguageControls("header")}
           </div>

@@ -14,10 +14,11 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from app.agents._helpers import normalize_content
+from app.agents.advisor import ReasoningDriver
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import build_findings, normalize_content
-from app.agents.advisor import ReasoningDriver
+from app.settings import settings
 
 log = logging.getLogger("fincoach.risk_profiler")
 
@@ -98,7 +99,10 @@ _brief_llm = None
 def _get_llm():
     global _brief_llm
     if _brief_llm is None:
-        _brief_llm = get_llm().with_structured_output(RiskProfileBrief)
+        # Structured brief — near-deterministic for a stable risk read.
+        _brief_llm = get_llm(
+            settings.gemini_structured_temperature
+        ).with_structured_output(RiskProfileBrief)
     return _brief_llm
 
 
@@ -155,12 +159,8 @@ async def run(state: AgentState) -> AgentState:
 
     # 3) Derive deterministic fields the LLM should NOT be free to invent.
     score = 70
-    profile_label = state.get("risk_profile", "balanced")
-    if isinstance(profile_payload, dict):
-        if isinstance(profile_payload.get("risk_score"), int):
-            score = profile_payload["risk_score"]
-        if isinstance(profile_payload.get("risk_profile"), str):
-            profile_label = profile_payload["risk_profile"]
+    if isinstance(profile_payload, dict) and isinstance(profile_payload.get("risk_score"), int):
+        score = profile_payload["risk_score"]
     derived_profile = score_to_profile(score)
     equity_low, equity_high = _equity_band_for(derived_profile)
 

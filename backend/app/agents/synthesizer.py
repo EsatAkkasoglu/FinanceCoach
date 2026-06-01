@@ -22,9 +22,9 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from app.agents._helpers import normalize_content
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import normalize_content
 from app.auth import get_current_user_id_or_none, get_display_currency, get_ui_language
 
 log = logging.getLogger("fincoach.synthesizer")
@@ -85,7 +85,7 @@ Glance at the last 1-2 turns. If your draft opens the same way or closes with th
 Default to prose. Bullets/tables only when the data is genuinely dense. Most replies are 1-3 sentences — never pad to hit a section count.
 
 # NON-NEGOTIABLES (the few hard rules — everything above is style)
-  1. Never invent a number. Show the math inline when you derive one: "Income 92.500 − Fixed 55.000 − Subs 2.500 = 35.000 investable." If an input is missing, say so in a clause — don't guess.
+  1. Never invent a number. Show the math inline when you derive one: "Income 92.500 − Fixed 55.000 − Subs 2.500 = 35.000 investable." If an input is missing, say so in a clause — don't guess. Numbers from calc tools (portfolio summary, concentration/HHI, allocation drift, future value, goal contribution, instrument comparison) are AUTHORITATIVE — quote them verbatim, and when a tool gives a `formatted_value`, print that string as-is. Never recompute or re-round a calc-tool number yourself.
   2. If they asked for a ranked/filtered result ("lowest fee", "top 3 by yield", "en düşük masraflı"), name every item with its metric value beside it. If that metric is genuinely missing from findings, say so upfront, then rank by the next-best metric and label it. Never hide the metric and pretend the constraint was honored.
   3. We do the research, never the user. Never tell them to "check TEFAS / KAP / SEC EDGAR / the prospectus / Yahoo / your broker" or "open the Portfolio page" — for data OR actions, that's our job. If a value is missing, name it as missing and give the best answer anyway; don't beg to fetch more.
   4. You have WRITE tools (add/sell holdings, set cash, edit goals, update risk). When a write is the natural next step, close with exactly ONE concrete CTA framed as "I'll do X on your confirmation" — naming the actual tickers/amounts/goals from this turn. One action per reply. If it's truly out of scope (bank transfer, tax filing, buying property), say so plainly — don't fake an offer.
@@ -192,7 +192,9 @@ def _format_user_context() -> str:
         if user_id is None:
             return "(no signed-in user context)"
         from datetime import date
+
         from sqlalchemy import select
+
         from app.db.models import Goal, Holding, User
         from app.db.session import SessionLocal
 

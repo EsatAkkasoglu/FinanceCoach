@@ -44,7 +44,8 @@ export function CircularProgress({
     const el = arcRef.current;
     if (!el) return;
     const raf = requestAnimationFrame(() => {
-      el.style.transition = "stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1)";
+      // Overshoot-and-settle: arc sweeps slightly past target, then eases back.
+      el.style.transition = "stroke-dashoffset 0.7s cubic-bezier(0.34,1.56,0.64,1)";
       el.style.strokeDashoffset = String(offset);
     });
     return () => cancelAnimationFrame(raf);

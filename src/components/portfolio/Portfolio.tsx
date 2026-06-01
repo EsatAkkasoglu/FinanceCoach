@@ -6,7 +6,7 @@ import {
 import { toast } from "sonner";
 
 import { listPortfolio, deleteHolding, type Holding, type PortfolioTotals } from "@/lib/api";
-import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatCurrency, formatPercent, formatQuantity } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { useDashboardStore, usePortfolioStore } from "@/store";
 import { useFxRates, type UseFxRates } from "@/lib/fx";
@@ -105,7 +105,7 @@ export function Portfolio() {
       </header>
 
       {error && (
-        <div className="mb-6 rounded-xl border border-loss/40 bg-loss/10 px-4 py-3 text-sm text-loss">
+        <div className="mb-6 rounded-lg border border-loss/40 bg-loss/10 px-4 py-3 text-sm text-loss">
           {error}
         </div>
       )}
@@ -188,7 +188,7 @@ function SummaryRow({
 
   const positive = pnl >= 0;
   return (
-    <div className="mb-6 overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-surface-raised via-surface to-surface p-6 md:p-8">
+    <div className="mb-6 overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-surface-raised via-surface to-surface p-6 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-6">
         {/* Dominant figure */}
         <div className="min-w-0">
@@ -285,7 +285,7 @@ function HoldingsTable({
                   {h.asset_class}
                 </span>
               </td>
-              <td className="px-3 py-3 text-right">{h.quantity}</td>
+              <td className="px-3 py-3 text-right">{formatQuantity(h.quantity)}</td>
               <td className="px-3 py-3 text-right text-content-muted">
                 {fmt(h.cost_basis, h)}
               </td>
@@ -388,7 +388,7 @@ function CTACard({
     <button
       onClick={onClick}
       className={cn(
-        "flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition",
+        "flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition",
         accent
           ? "border-accent bg-accent-muted/30 hover:bg-accent-muted/50"
           : "border-line bg-surface-raised hover:border-content-muted",

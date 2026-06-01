@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Sparkles, AlertCircle, Flame, Newspaper, Coins,
   type LucideIcon,
@@ -32,11 +32,11 @@ import {
   type Holding, type PortfolioTotals, type BriefingItem, type BudgetSummary, type NetWorthPoint,
   type Goal,
 } from "@/lib/api";
-import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatCurrency, formatPercent, formatQuantity } from "@/lib/format";
 import { useFxRates, type UseFxRates } from "@/lib/fx";
 import { cn } from "@/lib/cn";
 import { assetColor, pnlColor, chartTooltipContentStyle, chartTooltipItemStyle } from "@/lib/chartColors";
-import { Sparkline, MiniBars, InsightLine, DonutRing } from "@/components/ui/dataviz";
+import { Sparkline, AreaSparkline, MiniBars, InsightLine, DonutRing } from "@/components/ui/dataviz";
 import { useDashboardStore, useUserStore, useAuthStore } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
 import { Disclaimer } from "@/components/ui/Disclaimer";
@@ -89,8 +89,9 @@ function useGreeting(name: string) {
 function useCountUp(target: number, duration = 960) {
   const [val, setVal] = useState(0);
   const ran = useRef(false);
+  const reduceMotion = useReducedMotion();
   useEffect(() => {
-    if (target === 0 || ran.current) { setVal(target); return; }
+    if (target === 0 || ran.current || reduceMotion) { setVal(target); return; }
     ran.current = true;
     const t0 = performance.now();
     let raf: number;
@@ -103,7 +104,7 @@ function useCountUp(target: number, duration = 960) {
     }
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [target, duration]);
+  }, [target, duration, reduceMotion]);
   return target === 0 ? 0 : val;
 }
 
@@ -135,7 +136,7 @@ function Skeleton({ className }: { className?: string }) {
 
 function SkeletonCard({ lines = 3, hasBar = false }: { lines?: number; hasBar?: boolean }) {
   return (
-    <div className="mt-3 space-y-2.5">
+    <div className="mt-3 space-y-3">
       <Skeleton className="h-8 w-2/3" />
       {Array.from({ length: lines - 1 }).map((_, i) => (
         <Skeleton key={i} className={`h-3 ${i === 0 ? "w-full" : "w-1/2"}`} />
@@ -175,8 +176,8 @@ function CardHeader({ icon: Icon, label, iconColor = "text-content-muted" }: {
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      {Icon && <Icon className={cn("h-3.5 w-3.5 shrink-0", iconColor)} />}
-      <span className="text-xs uppercase tracking-wide text-content-muted">{label}</span>
+      {Icon && <Icon className={cn("h-4 w-4 shrink-0", iconColor)} />}
+      <span className="text-overline uppercase text-content-muted">{label}</span>
     </div>
   );
 }
@@ -195,7 +196,7 @@ function MarketBadge() {
   } satisfies Record<string, { dot: string; label: string; cls: string }>;
   const config = MARKET_LABELS[status];
   return (
-    <div className={cn("flex items-center gap-1.5 text-[10px] font-medium", config.cls)}>
+    <div className={cn("flex items-center gap-1.5 text-caption font-medium", config.cls)}>
       <span className={cn("h-1.5 w-1.5 rounded-full", config.dot)} />
       {config.label}
     </div>
@@ -279,17 +280,12 @@ export function Dashboard() {
 
   return (
     <div>
-      {/* Top bar */}
-      <div className="mb-5 flex items-center justify-end border-b border-line pb-3">
-        <RiskBadge cls={badgeCls} label={badgeLabel} explanation={riskExplain} title={t("riskExplanation.title")} />
-      </div>
-
       {/* Error */}
       <AnimatePresence>
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="mb-4 rounded-xl border border-loss/40 bg-loss/10 px-4 py-3 text-sm text-loss"
+            className="mb-4 rounded-lg border border-loss/40 bg-loss/10 px-4 py-3 text-sm text-loss"
           >
             {error}
           </motion.div>
@@ -298,36 +294,36 @@ export function Dashboard() {
 
       {/* Focus column — hero, balanced 2-up rows, full-width detail */}
       <motion.div
-        className="grid grid-cols-1 gap-4 md:grid-cols-2"
-        variants={{ visible: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } }}
+        className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12"
+        variants={{ visible: { transition: { staggerChildren: 0.06, delayChildren: 0.04 } } }}
         initial="hidden"
         animate="visible"
       >
-        {/* Hero — single dominant number */}
+        {/* Hero — single dominant number, full bleed */}
         <HeroStrip
           avatarEmoji={avatarMeta.emoji}
           greeting={greeting}
           totals={totals}
           holdings={holdings}
-          badge={{ cls: badgeCls, label: badgeLabel }}
+          badge={{ cls: badgeCls, label: badgeLabel, explanation: riskExplain, title: t("riskExplanation.title") }}
           fallbackSubtitle={t("todayAtAGlance")}
           loading={isLoading}
         />
 
-        {/* Portfolio health */}
+        {/* Spotlight row — performance chart gets the width, allocation rides shotgun */}
         <NetWorthCard totals={totals} holdings={holdings} history={history} loading={isLoading} />
         <AllocationCard holdings={holdings} riskProfile={riskProfile} loading={isLoading} />
 
-        {/* Monthly money */}
+        {/* Monthly money — even thirds */}
         <CashFlowCard budget={budget} loading={isLoading} />
         <SavingsRateCard budget={budget} loading={isLoading} />
-
-        {/* Highlights */}
-        <TopMoverCard holdings={holdings} loading={isLoading} />
         <GoalCard goals={goals} loading={isLoading} />
 
-        {/* Detail */}
+        {/* Detail row — holdings table wide, top mover beside it */}
         <HoldingsTable holdings={holdings} loading={isLoading} />
+        <TopMoverCard holdings={holdings} loading={isLoading} />
+
+        {/* Briefing — full bleed */}
         <BriefingCard items={briefing} loading={isLoading} fetchedAt={briefingFetchedAt} />
       </motion.div>
 
@@ -354,7 +350,8 @@ function HeroStrip({
 }: {
   avatarEmoji: string; greeting: string; totals: PortfolioTotals | null;
   holdings: Holding[];
-  badge: { cls: string; label: string }; fallbackSubtitle: string; loading: boolean;
+  badge: { cls: string; label: string; explanation: string; title: string };
+  fallbackSubtitle: string; loading: boolean;
 }) {
   const { t } = useTranslation("dashboard");
   const fx = useFxRates();
@@ -380,8 +377,8 @@ function HeroStrip({
   const countedValue = useCountUp(totalValue);
 
   return (
-    <motion.div variants={CARD_VAR} className="md:col-span-2">
-      <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-surface-raised via-surface to-surface p-6 md:p-8">
+    <motion.div variants={CARD_VAR} className="md:col-span-2 lg:col-span-12">
+      <div className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-surface-raised via-surface to-surface p-6 md:p-8">
         {/* Subtle grid pattern */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.03]"
@@ -399,12 +396,10 @@ function HeroStrip({
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-semibold leading-tight tracking-tight text-content-muted">
+                <h1 className="text-lg font-semibold leading-tight tracking-tight text-content">
                   {greeting}
                 </h1>
-                <span className={cn("rounded-full border px-2.5 py-0.5 text-overline uppercase", badge.cls)}>
-                  {badge.label}
-                </span>
+                <RiskBadge cls={badge.cls} label={badge.label} explanation={badge.explanation} title={badge.title} />
               </div>
               <MarketBadge />
             </div>
@@ -428,7 +423,7 @@ function HeroStrip({
                     {positive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
                     <span className="num">{positive ? "+" : ""}{formatCurrency(todayDelta, displayCcy)}</span>
                     <span className="num opacity-70">({formatPercent(pct)})</span>
-                    <span className="text-[10px] opacity-60">{t("today")}</span>
+                    <span className="text-caption opacity-60">{t("today")}</span>
                   </div>
                 )}
                 {!hasDelta && <p className="text-sm text-content-muted">{fallbackSubtitle}</p>}
@@ -463,32 +458,40 @@ function NetWorthCard({ totals, holdings, history, loading }: {
     }
     value = v; pnl = v - c; pnlPct = c > 0 ? (pnl / c) * 100 : 0;
   }
-  const countedValue = useCountUp(value);
+  void value;
   const spark = history.map((h) => h.value);
 
   return (
-    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
-      <CardHeader icon={Activity} label={t("netWorth")} iconColor="text-accent" />
+    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-7">
+      <CardHeader icon={Activity} label={t("performance")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : totals?.count && totals.count > 0 ? (
         <>
-          <div className="num mt-2 text-3xl font-semibold">{formatCurrency(countedValue, displayCcy)}</div>
-          <div className={cn("mt-1 text-sm", pnl >= 0 ? "text-gain" : "text-loss")}>
-            {formatPercent(pnlPct)} ({pnl >= 0 ? "+" : ""}{formatCurrency(pnl, displayCcy)}) {t("allTime")}
+          <div className={cn("num mt-3 text-3xl font-semibold", pnl >= 0 ? "text-gain" : "text-loss")}>
+            {formatPercent(pnlPct)}
+          </div>
+          <div className="mt-1 text-body-sm text-content-muted">
+            <span className={cn("num", pnl >= 0 ? "text-gain" : "text-loss")}>
+              {pnl >= 0 ? "+" : ""}{formatCurrency(pnl, displayCcy)}
+            </span>{" "}
+            {t("allTime")}
           </div>
           {spark.length >= 2 ? (
-            <div className="mt-3">
-              <Sparkline values={spark} width={240} height={40} color={pnlColor(pnl)} className="w-full" />
-              <p className="mt-1 text-[10px] text-content-muted">{t("lastNDays", { count: spark.length })}</p>
+            <div className="mt-5">
+              <AreaSparkline values={spark} height={104} color={pnlColor(pnl)} />
+              <div className="mt-2 flex items-center justify-between text-overline text-content-muted">
+                <span>{t("lastNDays", { count: spark.length })}</span>
+                <span className="num">{formatCurrency(spark[spark.length - 1], displayCcy)}</span>
+              </div>
             </div>
           ) : <BestWorstChips holdings={holdings} fx={fx} />}
         </>
       ) : (
         <div className="mt-4 flex flex-col items-center py-4 text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-raised">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-raised">
             <Briefcase className="h-5 w-5 text-content-muted" />
           </div>
-          <p className="mt-2 text-sm text-content-muted">{t("noHoldings")}</p>
-          <p className="mt-0.5 text-[11px] text-content-muted">{t("addHoldingsHint")}</p>
+          <p className="mt-3 text-body-sm text-content-muted">{t("noHoldings")}</p>
+          <p className="mt-1 text-caption text-content-muted">{t("addHoldingsHint")}</p>
         </div>
       )}
     </motion.div>
@@ -502,7 +505,7 @@ function BestWorstChips({ holdings, fx }: { holdings: Holding[]; fx: UseFxRates 
   if (ranked.length === 0) return null;
   const best = ranked[0], worst = ranked[ranked.length - 1];
   return (
-    <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+    <div className="mt-3 flex flex-wrap gap-2 text-caption">
       <span className="inline-flex items-center gap-1 rounded-full bg-gain/10 px-2 py-0.5 text-gain">
         <TrendingUp className="h-3 w-3" /> {best.ticker} {formatPercent(best.change_today ?? 0)}
       </span>
@@ -527,7 +530,7 @@ function CashFlowCard({ budget, loading }: { budget: BudgetSummary | null; loadi
   const hasFlow = (income ?? 0) > 0 || (expense ?? 0) > 0;
 
   return (
-    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-4">
       <CardHeader icon={Wallet} label={t("cashFlow")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : !hasFlow ? (
         <p className="mt-3 text-sm text-content-muted">{t("cashFlowEmpty")}</p>
@@ -537,11 +540,11 @@ function CashFlowCard({ budget, loading }: { budget: BudgetSummary | null; loadi
             {net != null ? `${net >= 0 ? "+" : ""}${formatCurrency(net, displayCcy)}` : "—"}
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-            <div className="flex items-center gap-1.5 rounded-lg bg-gain/8 px-2.5 py-1.5 text-gain">
+            <div className="flex items-center gap-1.5 rounded-lg bg-gain/10 px-2.5 py-1.5 text-gain">
               <ArrowUpRight className="h-3 w-3 shrink-0" />
               <span className="num">{income != null ? formatCurrency(income, displayCcy) : "—"}</span>
             </div>
-            <div className="flex items-center gap-1.5 rounded-lg bg-loss/8 px-2.5 py-1.5 text-loss">
+            <div className="flex items-center gap-1.5 rounded-lg bg-loss/10 px-2.5 py-1.5 text-loss">
               <ArrowDownRight className="h-3 w-3 shrink-0" />
               <span className="num">{expense != null ? formatCurrency(expense, displayCcy) : "—"}</span>
             </div>
@@ -564,7 +567,7 @@ function SavingsRateCard({ budget, loading }: { budget: BudgetSummary | null; lo
   const counted = useCountUp(rate ?? 0);
 
   return (
-    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-4">
       <CardHeader icon={PiggyBank} label={t("savingsRate")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : rate == null ? (
         <p className="mt-3 text-sm text-content-muted">{t("noBudgetData")}</p>
@@ -575,7 +578,7 @@ function SavingsRateCard({ budget, loading }: { budget: BudgetSummary | null; lo
           </div>
           {/* Visual rate bar */}
           <div className="mt-3">
-            <div className="flex items-center justify-between text-[10px] text-content-muted mb-1">
+            <div className="flex items-center justify-between text-caption text-content-muted mb-1">
               <span>0%</span>
               <span className={rate >= 20 ? "text-gain font-medium" : ""}>20% {t("savingsTarget")}</span>
               <span>100%</span>
@@ -631,12 +634,12 @@ function AllocationCard({ holdings, riskProfile, loading }: {
   });
 
   return (
-    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-5">
       <CardHeader icon={Target} label={t("allocationVsTarget")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={4} /> : !hasData ? (
         <p className="mt-3 text-sm text-content-muted">{t("addHoldingsForBreakdown")}</p>
       ) : (
-        <div className="mt-3 flex items-center gap-4">
+        <div className="mt-3 flex items-center gap-5">
           <div className="h-36 w-36 shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -661,7 +664,7 @@ function AllocationCard({ holdings, riskProfile, loading }: {
                 <li key={r.key}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="capitalize text-content font-medium">{r.key}</span>
-                    <span className={cn("text-[10px] font-medium", tone)}>{driftLabel}</span>
+                    <span className={cn("text-caption font-medium", tone)}>{driftLabel}</span>
                   </div>
                   <div className="relative h-1 overflow-hidden rounded-full bg-surface-raised">
                     <div className="absolute h-full rounded-full bg-content-muted/20" style={{ width: `${r.target}%` }} />
@@ -672,7 +675,7 @@ function AllocationCard({ holdings, riskProfile, loading }: {
                       transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
                     />
                   </div>
-                  <div className="mt-0.5 flex justify-between text-[10px] tabular-nums text-content-muted">
+                  <div className="mt-0.5 flex justify-between text-caption tabular-nums text-content-muted">
                     <span>{Math.round(r.actual)}% actual</span>
                     <span>{r.target}% target</span>
                   </div>
@@ -701,7 +704,7 @@ function TopMoverCard({ holdings, loading }: { holdings: Holding[]; loading: boo
   const positive = (top?.change_today ?? 0) >= 0;
 
   return (
-    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-4">
       <CardHeader icon={Flame} label={t("topMover")} iconColor="text-warning" />
       {loading ? <SkeletonCard lines={3} /> : !top ? (
         <p className="mt-3 text-sm text-content-muted">{t("noMoverData")}</p>
@@ -747,7 +750,7 @@ function GoalCard({ goals, loading }: { goals: Goal[]; loading: boolean }) {
     : null;
 
   return (
-    <motion.div variants={CARD_VAR} className="card hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-4">
       <CardHeader icon={Target} label={t("goalProgress")} iconColor="text-purple-400" />
       {loading ? <SkeletonCard lines={2} /> : !top ? (
         <p className="mt-3 text-sm text-content-muted">{t("goalNoGoals")}</p>
@@ -759,15 +762,15 @@ function GoalCard({ goals, loading }: { goals: Goal[]; loading: boolean }) {
             </DonutRing>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{top.g.title}</p>
-              <p className="text-[11px] text-content-muted">
+              <p className="text-caption text-content-muted">
                 {t("goalOnPace")}{monthsLeft != null ? ` · ${t("monthsLeft", { count: monthsLeft })}` : ""}
               </p>
             </div>
           </div>
           {/* Show second goal if available */}
           {ranked.length > 1 && (
-            <div className="mt-3 border-t border-line pt-2.5">
-              <div className="flex items-center justify-between text-[11px]">
+            <div className="mt-3 border-t border-line pt-3">
+              <div className="flex items-center justify-between text-caption">
                 <span className="truncate text-content-muted">{ranked[1].g.title}</span>
                 <span className="num ml-2 shrink-0 text-content-muted">{Math.round(ranked[1].pct)}%</span>
               </div>
@@ -800,14 +803,14 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
   }
 
   return (
-    <motion.div variants={CARD_VAR} className="card md:col-span-2 hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card md:col-span-2 lg:col-span-8 card-hover">
       <CardHeader icon={Briefcase} label={t("holdings")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={5} /> : holdings.length === 0 ? (
         <div className="mt-4 flex flex-col items-center py-6 text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-raised">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-raised">
             <Briefcase className="h-5 w-5 text-content-muted" />
           </div>
-          <p className="mt-2 text-sm text-content-muted">{t("noHoldingsDesc")}</p>
+          <p className="mt-3 text-sm text-content-muted">{t("noHoldingsDesc")}</p>
         </div>
       ) : (
         <div className="mt-3 overflow-x-auto">
@@ -840,7 +843,7 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
                         <span className="font-semibold">{h.ticker}</span>
                       </div>
                     </td>
-                    <td className="py-2.5 pr-4 text-right text-content-muted">{h.quantity}</td>
+                    <td className="py-2.5 pr-4 text-right text-content-muted">{formatQuantity(h.quantity)}</td>
                     <td className="py-2.5 pr-4 text-right">{fmt(h.current_price ?? h.cost_basis, h)}</td>
                     <td className="py-2.5 pr-4 text-right font-medium">{fmt(h.current_value ?? 0, h)}</td>
                     <td className="py-2.5 pr-3">
@@ -852,11 +855,11 @@ function HoldingsTable({ holdings, loading }: { holdings: Holding[]; loading: bo
                               width={36} height={12}
                               color={dayUp ? "#22C55E" : "#EF4444"}
                             />
-                            <span className={cn("text-[11px]", dayUp ? "text-gain" : "text-loss")}>
+                            <span className={cn("text-caption", dayUp ? "text-gain" : "text-loss")}>
                               {formatPercent(h.change_today)}
                             </span>
                           </>
-                        ) : <span className="text-[11px] text-content-muted">—</span>}
+                        ) : <span className="text-caption text-content-muted">—</span>}
                       </div>
                     </td>
                     <td className={cn("py-2.5 text-right font-medium", (h.pnl ?? 0) >= 0 ? "text-gain" : "text-loss")}>
@@ -903,7 +906,7 @@ function BriefingCard({ items, loading, fetchedAt }: {
   };
 
   return (
-    <motion.div variants={CARD_VAR} className="card md:col-span-2 flex flex-col hover:shadow-[0_0_0_1px_rgba(31,181,122,0.15),0_8px_24px_rgba(0,0,0,0.2)] transition-shadow">
+    <motion.div variants={CARD_VAR} className="card md:col-span-2 lg:col-span-12 flex flex-col card-hover">
       <CardHeader icon={Newspaper} label={t("todaysBrief")} iconColor="text-content-muted" />
       {loading ? <SkeletonCard lines={5} /> : items && items.length > 0 ? (
         <ul className="mt-3 space-y-2">
@@ -934,7 +937,7 @@ function BriefingCard({ items, loading, fetchedAt }: {
         <p className="mt-3 text-sm text-content-muted">{t("briefUnavailable")}</p>
       )}
       {fetchedAt && (
-        <div className="mt-auto flex items-center justify-between pt-3 text-[10px] text-content-muted">
+        <div className="mt-auto flex items-center justify-between pt-3 text-caption text-content-muted">
           <span className="truncate">{t("briefSource")}</span>
           <span className="shrink-0 pl-2">{t("briefUpdated", { time: relativeTime() })}</span>
         </div>
@@ -968,7 +971,7 @@ function RiskBadge({ cls, label, explanation, title }: {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-surface p-3 text-left shadow-2xl"
+            className="absolute right-0 top-full z-30 mt-2 w-72 rounded-lg border border-line bg-surface p-3 text-left shadow-2xl"
           >
             <p className="mb-1 text-overline uppercase text-content-muted">{title}</p>
             <p className="text-xs leading-relaxed text-content">{explanation}</p>
@@ -1034,8 +1037,8 @@ function NextStepCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-overline uppercase text-accent">{t("nextStep.title")}</span>
-            <span className="text-[10px] text-content-muted">·</span>
-            <span className="text-[10px] text-content-muted">{t("nextStep.subtitle")}</span>
+            <span className="text-caption text-content-muted">·</span>
+            <span className="text-caption text-content-muted">{t("nextStep.subtitle")}</span>
           </div>
           <h3 className="mt-1 text-lg font-semibold tracking-tight">{allDone ? t("nextStep.allDone") : meta?.title}</h3>
           <p className="mt-1 text-sm text-content-muted">{allDone ? t("nextStep.allDoneDesc") : meta?.desc}</p>
@@ -1054,7 +1057,7 @@ function NextStepCard({
                 />
               ))}
             </div>
-            <span className="shrink-0 text-[10px] font-medium text-content-muted">
+            <span className="shrink-0 text-caption font-medium text-content-muted">
               {completedCount}/{steps.length} · {pct}%
             </span>
           </div>
@@ -1065,7 +1068,7 @@ function NextStepCard({
             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
             type="button"
             onClick={() => navigate(buildLocalizedPath(lang, meta.path))}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-glow transition hover:bg-accent/90"
+            className="flex shrink-0 items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-glow transition hover:bg-accent/90"
           >
             {meta.cta}
             <ArrowRight className="h-4 w-4" />

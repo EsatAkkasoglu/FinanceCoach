@@ -8,6 +8,45 @@
   "pctReached": "{{pct}}% reached",
   "remainingToGo": "{{remaining}} to go",
   "validationError": "Title and a positive target amount are required.",
+  "savingsQuest": "Savings Quest",
+  "confirmDelete": "Delete \"{{title}}\"?",
+  "deleted": "Goal deleted",
+  "updated": "Goal updated",
+  "created": "Goal created 🎯",
+  "currencyLabel": "Currency",
+  "monthlyPreview": "You'll need to save about <b>{{amount}}</b> per month to reach this goal.",
+  "levels": {
+    "beginner": "Beginner",
+    "saver": "Saver",
+    "hero": "Hero",
+    "legend": "Legend"
+  },
+  "achievements": {
+    "firstLabel": "First Step",
+    "firstDesc": "Create your first goal",
+    "halfwayLabel": "Halfway",
+    "halfwayDesc": "Reach 50% on a goal",
+    "completeLabel": "Completionist",
+    "completeDesc": "Complete a goal",
+    "multiLabel": "Multi-Goal",
+    "multiDesc": "Create 3 or more goals"
+  },
+  "summary": {
+    "totalTarget": "Total target",
+    "saved": "Saved",
+    "pctComplete": "{{pct}}% complete",
+    "completed": "Completed",
+    "goalsUnit": "goals"
+  },
+  "card": {
+    "completedBadge": "Completed",
+    "monthlyNeeded": "Save <b>{{amount}}</b> per month to reach this goal",
+    "amountPlaceholder": "Amount ({{ccy}})",
+    "add": "Add",
+    "custom": "Custom",
+    "milestoneReached": "Milestone reached — {{pct}}%! 🔥",
+    "congrats": "Congratulations — you reached this goal! 🎉"
+  },
   "form": {
     "editTitle": "Edit goal",
     "newTitle": "New goal",

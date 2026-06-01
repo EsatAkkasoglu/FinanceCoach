@@ -10,6 +10,7 @@
   "next": "Next",
   "settingUp": "Setting up…",
   "complete": "Complete",
+  "skipForNow": "Skip for now",
   "stepOptional": "This step is optional — you can skip it and continue without entering finances.",
   "welcomeBack": "Welcome aboard, {{name}} — you're all set!",
   "welcome": {

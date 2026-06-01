@@ -20,10 +20,11 @@ import logging
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
+from app.settings import settings
 
 log = logging.getLogger("fincoach.advisor")
 
@@ -79,6 +80,15 @@ class AllocationBand(BaseModel):
         ),
     )
 
+    @model_validator(mode="after")
+    def _band_order(self) -> AllocationBand:
+        if self.weight_pct_low > self.weight_pct_high:
+            raise ValueError(
+                f"{self.asset_class}: weight_pct_low ({self.weight_pct_low}) "
+                f"cannot exceed weight_pct_high ({self.weight_pct_high})"
+            )
+        return self
+
 
 class AdvisorBrief(BaseModel):
     """Structured plan produced by the Investment Committee."""
@@ -111,6 +121,19 @@ class AdvisorBrief(BaseModel):
             "specific). These power the XAI 'Why this recommendation?' panel."
         ),
     )
+
+    @model_validator(mode="after")
+    def _allocation_sums(self) -> AdvisorBrief:
+        # Mid-band weights should represent ~100% of a portfolio. A wild sum
+        # means the model emitted incoherent bands — raise so the advisor
+        # retries with a corrective hint before falling back.
+        if self.allocation:
+            mid = sum((b.weight_pct_low + b.weight_pct_high) / 2 for b in self.allocation)
+            if not (70.0 <= mid <= 130.0):
+                raise ValueError(
+                    f"allocation mid-band weights sum to {mid:.0f}% — expected ~100%"
+                )
+        return self
 
 
 ADVISOR_PROMPT = """You are the Investment Committee at FinCoach — a small, senior team
@@ -191,7 +214,10 @@ _advisor_llm = None
 def _get_llm():
     global _advisor_llm
     if _advisor_llm is None:
-        _advisor_llm = get_llm().with_structured_output(AdvisorBrief)
+        # Structured brief — run near-deterministic for consistent allocations.
+        _advisor_llm = get_llm(
+            settings.gemini_structured_temperature
+        ).with_structured_output(AdvisorBrief)
     return _advisor_llm
 
 
@@ -229,6 +255,33 @@ def _format_findings(findings: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _format_snapshot(snap: dict[str, Any]) -> str:
+    """Compact holdings + goal context so the committee reasons about the
+    user's actual concentration and savings runway. Returns '' if empty."""
+    if not snap:
+        return ""
+    lines: list[str] = []
+    holdings = snap.get("holdings") or []
+    if holdings:
+        parts = []
+        for h in holdings:
+            qty = h.get("quantity")
+            tkr = h.get("ticker") or "?"
+            parts.append(f"{tkr}×{qty:g}" if isinstance(qty, (int, float)) else str(tkr))
+        cnt = snap.get("holdings_count", len(holdings))
+        more = f" (+{cnt - len(holdings)} more)" if cnt > len(holdings) else ""
+        lines.append(f"USER HOLDINGS ON FILE: {', '.join(parts)}{more}")
+    g = snap.get("goals_summary") or {}
+    if g.get("count"):
+        ccy = g.get("currency") or ""
+        lines.append(
+            f"USER GOALS: {g.get('count')} active, "
+            f"~{g.get('combined_monthly_needed')} {ccy}/mo needed, "
+            f"{g.get('total_remaining')} {ccy} remaining"
+        )
+    return ("\n".join(lines) + "\n\n") if lines else ""
+
+
 def _last_user_text(messages: list) -> str:
     for m in reversed(messages or []):
         if isinstance(m, HumanMessage):
@@ -247,26 +300,42 @@ async def run(state: AgentState) -> AgentState:
     user_query = _last_user_text(state.get("messages") or [])
     risk_profile = state.get("risk_profile", "balanced")
     findings = state.get("findings") or {}
+    snapshot = state.get("user_snapshot") or {}
 
     payload = (
         f"USER QUESTION:\n{user_query}\n\n"
         f"USER RISK PROFILE: {risk_profile}\n\n"
+        f"{_format_snapshot(snapshot)}"
         f"SPECIALIST FINDINGS:\n{_format_findings(findings)}\n"
         "Produce the AdvisorBrief now."
     )
 
-    try:
-        brief: AdvisorBrief = await _get_llm().ainvoke(
-            [SystemMessage(content=ADVISOR_PROMPT), HumanMessage(content=payload)]
-        )
-        return {"advisor_brief": brief.model_dump()}
-    except Exception as exc:  # noqa: BLE001
-        log.exception("advisor failed — synthesizer will fall back to raw findings")
-        return {
-            "advisor_brief": None,
-            "error": {
-                "agent": "advisor",
-                "type": type(exc).__name__,
-                "message": str(exc),
-            },
-        }
+    base_msgs = [SystemMessage(content=ADVISOR_PROMPT), HumanMessage(content=payload)]
+    last_exc: Exception | None = None
+    # One corrective retry: at temp ~0 a re-ask is only useful if we feed the
+    # validation error back so the model can fix the bands it got wrong.
+    for attempt in range(2):
+        msgs = base_msgs
+        if attempt == 1 and last_exc is not None:
+            msgs = base_msgs + [HumanMessage(content=(
+                f"Your previous AdvisorBrief was rejected: {last_exc}. "
+                "Fix it — every band needs weight_pct_low <= weight_pct_high, and "
+                "the mid-band weights across all asset classes must sum to roughly "
+                "100%. Return the corrected AdvisorBrief."
+            ))]
+        try:
+            brief: AdvisorBrief = await _get_llm().ainvoke(msgs)
+            return {"advisor_brief": brief.model_dump()}
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            log.warning("advisor attempt %d failed: %s", attempt + 1, exc)
+
+    log.error("advisor failed after retry — synthesizer will fall back to raw findings")
+    return {
+        "advisor_brief": None,
+        "error": {
+            "agent": "advisor",
+            "type": type(last_exc).__name__ if last_exc else "Error",
+            "message": str(last_exc) if last_exc else "unknown advisor error",
+        },
+    }

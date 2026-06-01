@@ -9,14 +9,15 @@ from __future__ import annotations
 from langgraph.prebuilt import create_react_agent
 from sqlalchemy import select
 
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
 from app.db.models import User
 from app.db.session import SessionLocal
+from app.tools.calc_tools import future_value, goal_required_contribution
+from app.tools.goal_tools import create_user_goal, list_user_goals, update_goal_progress
 from app.tools.portfolio_tools import list_transactions
 from app.tools.user_tools import get_user_profile
-from app.tools.goal_tools import create_user_goal, list_user_goals, update_goal_progress
 
 SYSTEM_PROMPT_DEFAULT_BASE = """You are the Cash-Flow Analyst on the FinCoach Investment Committee.
 
@@ -67,6 +68,14 @@ GOAL-FIRST RULE — when the user mentions a goal by name / topic, or asks
     say on-track / behind / ahead — be specific with the gap.
   • If the user reports a contribution (e.g. "I added 5000 to my goal"),
     call update_goal_progress to persist it.
+  • For "how much per month do I need?", call goal_required_contribution with
+    the goal's target_amount, months_left, and current_amount from
+    list_user_goals (pass an expected annual_rate_pct if the user assumes
+    growth; 0 for plain saving). This is more accurate than the goal's plain
+    monthly_savings_needed because it compounds. Quote its formatted_value.
+  • For "if I invest X/month at Y% for Z years, what will I have?", call
+    future_value. These two tools are deterministic — quote their numbers
+    verbatim, never recompute. If one returns ok:false, read its error and retry.
   • If the user asks to CREATE a new goal, or confirms a goal you proposed
     ("onayla", "evet oluştur", "create it"), you MUST call create_user_goal
     with title, target_amount, and (if a deadline is mentioned) target_date.
@@ -86,6 +95,10 @@ Tools:
 - create_user_goal(title, target_amount, target_date?, current_amount?, icon?, currency?)
                                  ← persist a new goal the user asked for/confirmed
 - update_goal_progress(goal_id, delta_amount)  ← persist contributions
+- goal_required_contribution(target_amount, months, annual_rate_pct?, current_amount?)
+                                 ← monthly amount needed to hit a goal (compounded)
+- future_value(monthly_contribution, annual_rate_pct, years, initial_amount?)
+                                 ← project savings/investing growth
 
 Tone: warm, specific, non-judgmental."""
 
@@ -118,9 +131,13 @@ Tools:
 - list_user_goals()
 - create_user_goal(title, target_amount, target_date?, current_amount?, icon?, currency?)
 - update_goal_progress(goal_id, delta_amount)
+- goal_required_contribution(target_amount, months, annual_rate_pct?, current_amount?)
+- future_value(monthly_contribution, annual_rate_pct, years, initial_amount?)
 
 When the user asks to CREATE / confirms a goal, you MUST actually call
-create_user_goal — never claim it's done without the tool call."""
+create_user_goal — never claim it's done without the tool call. For "how much
+per month" / "what will it grow to" math, use goal_required_contribution /
+future_value and quote their numbers — don't do the arithmetic yourself."""
 
 RISK_GUIDANCE_ROAST = {
     "conservative": "Lean into 'boring is good' jokes; protect them from speculative spend.",
@@ -141,6 +158,9 @@ _TOOLS = [
     list_user_goals,
     create_user_goal,
     update_goal_progress,
+    # Deterministic projections (compute in code, not in the LLM)
+    goal_required_contribution,
+    future_value,
 ]
 
 

@@ -7,7 +7,6 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -54,6 +53,11 @@ class Settings(BaseSettings):
         description="Model for text-only schema extraction.",
     )
     gemini_temperature: float = Field(default=0.3, alias="GEMINI_TEMPERATURE")
+    # Lower temperature for structured-output roles (router / advisor / risk
+    # briefs) where determinism = correctness; prose roles use the default.
+    gemini_structured_temperature: float = Field(
+        default=0.0, alias="GEMINI_STRUCTURED_TEMPERATURE"
+    )
 
     @property
     def vision_model(self) -> str:

@@ -74,5 +74,9 @@
   "language": {
     "title": "Language",
     "subtitle": "Choose the display language for the app."
+  },
+  "currency": {
+    "title": "Display currency",
+    "subtitle": "Values across the app are converted to this currency."
   }
 }

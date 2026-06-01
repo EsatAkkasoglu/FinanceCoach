@@ -52,16 +52,30 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 from pydantic import BaseModel, Field
 
-from app.agents.state import AgentState, RESET_SENTINEL
-from app.agents.llm import get_llm
-from app.agents._helpers import normalize_content
 from app.agents import (
-    market_data, portfolio, budget_coach, news_sentiment,
-    risk_profiler, memory, document_parser, synthesizer, advisor,
+    advisor,
+    budget_coach,
+    document_parser,
+    market_data,
+    memory,
+    news_sentiment,
+    portfolio,
+    risk_profiler,
+    synthesizer,
 )
+from app.agents._helpers import normalize_content
+from app.agents.llm import get_llm
+from app.agents.state import RESET_SENTINEL, AgentState
+from app.settings import settings
+from app.tools.goal_tools import list_user_goals
+from app.tools.portfolio_tools import list_holdings
 from app.tools.user_tools import get_user_profile
 
 log = logging.getLogger("fincoach.strategist")
+
+# Keep the per-turn user snapshot compact — summary holdings only, never
+# transaction history, so carrying it through state stays cheap.
+_MAX_SNAPSHOT_HOLDINGS = 12
 
 
 AGENT_NODES = {
@@ -151,6 +165,8 @@ Committee (advisor) should integrate their findings.
 THE FIRM:
   research desk:
     market_data        Live prices, technicals, fund performance — any asset.
+                       Also does deterministic side-by-side comparison of
+                       multiple tickers/funds ("X vs Y", "compare these").
     news_sentiment     Headlines, sentiment, trending tickers, rumors.
     document_parser    The ONLY desk that can read uploaded files (PDFs,
                        images, statements, trading notes). Use it for ANY
@@ -168,10 +184,16 @@ THE FIRM:
                        desk MUST be in the specialist list (in any language).
   client desk:
     portfolio          The user's OWN holdings, weights, P&L, concentration.
+                       Computes these deterministically (exact weights,
+                       HHI concentration, allocation drift, risk metrics) —
+                       so "how concentrated am I", "what's my real return"
+                       resolve here with hard numbers.
     budget_coach       The user's spending, savings rate, investable surplus,
                        AND savings goals (target amount / date / progress /
-                       monthly contribution needed). Any "am I on track for
-                       my goal", "how much should I save per month to hit X",
+                       monthly contribution needed). Computes exact goal
+                       contributions and investment projections (compounded).
+                       Any "am I on track for my goal", "how much should I
+                       save per month to hit X", "what will X/month grow to",
                        "is my emergency fund enough" style question (in any
                        language) MUST include budget_coach in the specialist
                        list.
@@ -355,7 +377,11 @@ _strategist_llm = None
 def _get_strategist_llm():
     global _strategist_llm
     if _strategist_llm is None:
-        _strategist_llm = get_llm().with_structured_output(ExecutionPlan)
+        # Routing is a structured decision — run it near-deterministic so the
+        # same question routes to the same desks every time.
+        _strategist_llm = get_llm(
+            settings.gemini_structured_temperature
+        ).with_structured_output(ExecutionPlan)
     return _strategist_llm
 
 
@@ -543,6 +569,7 @@ def _format_strategist_context(
     current_query: str,
     memory_hints: list[dict[str, Any]] | None = None,
     uploaded_documents: list[dict[str, Any]] | None = None,
+    user_snapshot: dict[str, Any] | None = None,
 ) -> str:
     """Build the human-message payload for the strategist LLM."""
     lines: list[str] = []
@@ -581,6 +608,8 @@ def _format_strategist_context(
     else:
         lines.append("PREVIOUS INVESTMENT COMMITTEE BRIEF: (none — no plan on the table yet)")
         lines.append("")
+
+    lines.extend(_format_snapshot_block(user_snapshot))
 
     if uploaded_documents:
         lines.append(
@@ -633,6 +662,77 @@ def _resolve_risk_profile(state: AgentState) -> str:
         return "balanced"
 
 
+def _fetch_portfolio_snapshot(risk_profile: str) -> dict[str, Any]:
+    """Compact, turn-local picture of who the user is, fetched ONCE before
+    planning so the strategist routes on real holdings/goals (and the advisor
+    can read it from state).
+
+    Deliberately CHEAP and summary-only — list_holdings + goal aggregates are
+    single SQLite reads with NO live pricing and NO transaction history, so it
+    runs every turn without latency/token cost. Live valuation + concentration
+    are computed by the portfolio desk (compute_portfolio_summary) only when it
+    is actually dispatched. Best-effort: never raises.
+    """
+    snap: dict[str, Any] = {"risk_profile": risk_profile}
+    try:
+        holdings = list_holdings.invoke({}) or []
+        snap["holdings_count"] = len(holdings)
+        snap["holdings"] = [
+            {
+                "ticker": h.get("ticker"),
+                "asset_class": h.get("asset_class"),
+                "quantity": h.get("quantity"),
+                "avg_cost": h.get("cost_basis"),
+                "currency": h.get("currency"),
+            }
+            for h in holdings[:_MAX_SNAPSHOT_HOLDINGS]
+        ]
+    except Exception as exc:  # noqa: BLE001
+        log.info("snapshot: holdings fetch failed: %s", exc)
+    try:
+        goals = list_user_goals.invoke({})
+        summary = goals.get("summary") if isinstance(goals, dict) else None
+        if isinstance(summary, dict):
+            snap["goals_summary"] = {
+                "count": summary.get("count"),
+                "total_remaining": summary.get("total_remaining"),
+                "combined_monthly_needed": summary.get("combined_monthly_savings_needed"),
+                "currency": summary.get("currency"),
+            }
+    except Exception as exc:  # noqa: BLE001
+        log.info("snapshot: goals fetch failed: %s", exc)
+    return snap
+
+
+def _format_snapshot_block(snap: dict[str, Any] | None) -> list[str]:
+    """Render the user snapshot into strategist-context lines (compact)."""
+    if not snap:
+        return []
+    lines = ["USER SNAPSHOT (who you're planning for — summary only, no live prices):"]
+    lines.append(f"  risk profile: {snap.get('risk_profile', 'balanced')}")
+    holdings = snap.get("holdings") or []
+    count = snap.get("holdings_count", len(holdings))
+    if holdings:
+        parts = []
+        for h in holdings:
+            tkr = h.get("ticker") or "?"
+            qty = h.get("quantity")
+            parts.append(f"{tkr}×{qty:g}" if isinstance(qty, (int, float)) else tkr)
+        more = f" …(+{count - len(holdings)} more)" if count > len(holdings) else ""
+        lines.append(f"  holdings ({count}): " + ", ".join(parts) + more)
+    else:
+        lines.append("  holdings: (none on file)")
+    g = snap.get("goals_summary") or {}
+    if g.get("count"):
+        ccy = g.get("currency") or ""
+        lines.append(
+            f"  goals: {g.get('count')} active, ~{g.get('combined_monthly_needed')} {ccy}/mo needed, "
+            f"{g.get('total_remaining')} {ccy} remaining"
+        )
+    lines.append("")
+    return lines
+
+
 def _strategist_node(state: AgentState) -> dict[str, Any]:
     """Produce the execution plan and cache the risk profile."""
     messages = state.get("messages") or []
@@ -644,6 +744,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
     # planning so the strategist can route on them.
     memory_hints = _fetch_memory_hints(user_text, k=3) if user_text else []
     uploaded_documents = _fetch_uploaded_documents()
+    user_snapshot = _fetch_portfolio_snapshot(risk_profile)
 
     log.info("")
     log.info("┌── STRATEGIST ────────────────────────────────────────")
@@ -653,6 +754,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
     log.info("│  prev brief   : %s", "yes" if prev_brief else "no")
     log.info("│  memory hints : %d", len(memory_hints))
     log.info("│  uploaded docs: %d", len(uploaded_documents))
+    log.info("│  snapshot     : %d holdings", user_snapshot.get("holdings_count", 0))
 
     if not user_text:
         log.info("│  decision     : empty query → memory fallback")
@@ -665,6 +767,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
                 rationale="empty query fallback",
             ).model_dump(),
             "risk_profile": risk_profile,
+            "user_snapshot": user_snapshot,
             "memory_hints": memory_hints,
             "next_action": "memory",
             # Clear findings so the previous turn's findings don't leak into
@@ -679,6 +782,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
 
     payload = _format_strategist_context(
         recent_turns, prev_brief, user_text, memory_hints, uploaded_documents,
+        user_snapshot=user_snapshot,
     )
 
     plan: ExecutionPlan
@@ -721,6 +825,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
     return {
         "plan": plan.model_dump(),
         "risk_profile": risk_profile,
+        "user_snapshot": user_snapshot,
         "memory_hints": memory_hints,
         "next_action": "FAN_OUT" if cleaned else FINISH,
         # Reset turn-local accumulators so stale entries from prior turns

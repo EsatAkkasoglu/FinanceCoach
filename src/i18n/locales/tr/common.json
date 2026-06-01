@@ -50,6 +50,9 @@
   },
   "recent": "Son sohbetler",
   "noChatsYet": "Henüz sohbet yok",
+  "online": "çevrimiçi",
+  "offline": "Çevrimdışı",
+  "reconnecting": "Yeniden bağlanıyor…",
   "language": "Dil",
   "languageEn": "English",
   "languageTr": "Türkçe"
