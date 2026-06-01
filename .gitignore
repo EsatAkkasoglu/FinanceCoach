@@ -56,3 +56,6 @@ logs/
 gcp-sa-key.json
 firebase-sa-key.json
 *.credentials.json
+
+#Skill
+.agents/
