@@ -21,9 +21,9 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 
-import app.services.coingecko as cg
+import app.services.coindesk as cg
 import app.services.yfinance_service as yf_svc
-from app.services.coingecko import CoinGeckoError
+from app.services.coindesk import CoinDeskError
 from app.services.yfinance_service import YFinanceError
 from app.tools.fund_tools import get_fund_history
 from app.tools.market_tools import (
@@ -105,7 +105,7 @@ def price_history(
             symbol = cls.get("symbol", upper)
             bars = yf_svc.history(symbol, period=_days_to_period(days))  # newest-first
             currency = "TRY" if symbol.upper().endswith(".IS") else "USD"
-    except (YFinanceError, CoinGeckoError) as exc:
+    except (YFinanceError, CoinDeskError) as exc:
         log.warning("price history failed for %s: %s", upper, exc)
         return {"ticker": upper, "error": str(exc), "points": []}
 

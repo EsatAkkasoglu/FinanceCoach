@@ -9,7 +9,7 @@ Sources (in order of priority):
      — covers indices, FX, commodity-ETF proxies.
   2. yfinance Search
      — covers US equities, ETFs, ADRs by company name or ticker.
-  3. CoinGecko search
+  3. CoinDesk search
      — covers crypto coins by name or symbol.
 
 Results are deduped by ticker and capped at 10.
@@ -17,15 +17,14 @@ Results are deduped by ticker and capped at 10.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.auth import get_current_user_id  # noqa: F401  (kept for future scoping)
-from app.services import coingecko as cg
-from app.services.coingecko import CoinGeckoError
+from app.services import coindesk as cg
 from app.services import yfinance_service as yf_svc
+from app.services.coindesk import CoinDeskError
 from app.services.yfinance_service import YFinanceError
 from app.tools.symbol_resolver import _TABLE
 
@@ -94,21 +93,23 @@ def _yf_hits(q: str, limit: int) -> list[SymbolSuggestion]:
 def _crypto_hits(q: str, limit: int) -> list[SymbolSuggestion]:
     try:
         hits = cg.search_coins(q)
-    except CoinGeckoError as exc:
-        log.info("CoinGecko search failed for %r: %s", q, exc)
+    except CoinDeskError as exc:
+        log.info("CoinDesk search failed for %r: %s", q, exc)
         return []
     out: list[SymbolSuggestion] = []
     for h in hits:
         sym = (h.get("symbol") or "").upper()
         name = h.get("name") or sym
         rank = h.get("rank")
-        if rank is None or rank > 300:
+        # CoinDesk returns rank=None for known-symbol map hits — keep those;
+        # only drop API hits that are ranked beyond the top 300.
+        if rank is not None and rank > 300:
             continue
         out.append(SymbolSuggestion(
             ticker=f"{sym}-USD",
             description=f"{name} (#{rank})" if rank else name,
             asset_class="crypto",
-            source="coingecko",
+            source="coindesk",
         ))
         if len(out) >= limit:
             break
@@ -120,7 +121,7 @@ def resolve(q: str = Query(..., min_length=1, max_length=64), limit: int = Query
     """Autocomplete-friendly symbol search.
 
     Returns up to `limit` candidate tickers across curated aliases,
-    yfinance, and CoinGecko.
+    yfinance, and CoinDesk.
     """
     q = q.strip()
     if not q:

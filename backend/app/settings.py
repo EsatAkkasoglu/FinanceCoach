@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     news_api_key: str = Field(default="", alias="NEWS_API_KEY")
     langsmith_api_key: str = Field(default="", alias="LANGSMITH_API_KEY")
+    # CoinDesk Data API (formerly CryptoCompare) — primary crypto data source:
+    # spot/index prices, OHLCV history, top-by-market-cap, and derivatives
+    # (funding rate, open interest). https://developers.coindesk.com
+    coindesk_api_key: str = Field(default="", alias="COINDESK_API_KEY")
+    # Default derivatives venue for funding-rate / open-interest lookups.
+    coindesk_futures_market: str = Field(default="binance", alias="COINDESK_FUTURES_MARKET")
     # Server
     port: int = Field(default=8765, alias="FINCOACH_PORT")
 

@@ -3,7 +3,7 @@
 Routing by asset class so a ticker like ``BTC-USD`` or a 3-letter TEFAS fund
 code resolves to a *name* before searching — NewsAPI/Google News return junk
 for raw tickers. Resolution sources mirror the rest of the system:
-  • crypto  → CoinGecko symbol→name map (services.coingecko)
+  • crypto  → CoinDesk symbol→name map (services.coindesk)
   • fund    → TEFAS universe title (tools.fund_tools)
 
 RSS is the backbone for crypto and Turkish assets (no API key, broad coverage);
@@ -53,7 +53,7 @@ def _is_turkish_ticker(query: str) -> bool:
 
 def _is_crypto_ticker(query: str) -> bool:
     """Crypto holdings arrive as 'BTC-USD', 'SOL-USD', … or a bare known symbol."""
-    from app.services.coingecko import _SYMBOL_TO_ID  # noqa: PLC0415
+    from app.services.coindesk import _SYMBOL_TO_ID  # noqa: PLC0415
 
     q = query.strip().upper()
     if q.endswith("-USD") or q.endswith("-USDT"):
@@ -63,22 +63,23 @@ def _is_crypto_ticker(query: str) -> bool:
 
 def _resolve_crypto_name(query: str) -> str:
     """'BTC-USD' / 'BTC' → 'Bitcoin'. Falls back to the bare symbol."""
-    from app.services import coingecko as cg  # noqa: PLC0415
+    from app.services import coindesk as cg  # noqa: PLC0415
 
     base = query.strip().upper().split("-")[0]
     try:
         for hit in cg.search_coins(base):
             if (hit.get("symbol") or "").upper() == base and hit.get("name"):
                 return str(hit["name"])
-    except cg.CoinGeckoError as exc:
+    except cg.CoinDeskError as exc:
         log.warning("crypto name resolve failed for %s: %s", base, exc)
     return base
 
 
 def _resolve_fund_title(code: str) -> str | None:
     """3-letter TEFAS code → fund title (for a meaningful news query)."""
-    from app.tools.fund_tools import _fold_tr, _universe_cached  # noqa: PLC0415
     from datetime import date as date_cls  # noqa: PLC0415
+
+    from app.tools.fund_tools import _fold_tr, _universe_cached  # noqa: PLC0415
 
     target = _fold_tr(code)
     try:

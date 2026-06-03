@@ -3,11 +3,13 @@
 Data sources
 ────────────
   Prices (stocks, ETFs, indices, forex, Treasury): yfinance
-  Crypto quotes   : CoinGecko (primary) → yfinance (fallback)
-  Trending (crypto): CoinGecko /trending (always available)
-  Fundamentals    : yfinance
-  Technicals      : yfinance (SMA/RSI computed from daily bars)
-  US stock movers : unavailable (was AV-only; removed)
+  Crypto quotes    : CoinDesk Data API (CADLI index → spot fallback)
+  Crypto history   : CoinDesk Data API (index/spot daily OHLCV)
+  Crypto top list  : CoinDesk Data API (asset top by market cap)
+  Crypto derivs    : CoinDesk Data API (funding rate, open interest)
+  Fundamentals     : yfinance
+  Technicals       : yfinance (SMA/RSI computed from daily bars)
+  US stock movers  : unavailable (was AV-only; removed)
 """
 from __future__ import annotations
 
@@ -18,9 +20,9 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-import app.services.coingecko as cg
+import app.services.coindesk as cg
 import app.services.yfinance_service as yf_svc
-from app.services.coingecko import CoinGeckoError
+from app.services.coindesk import CoinDeskError
 from app.services.yfinance_service import YFinanceError
 from app.tools._cache import cache_get, cache_set
 
@@ -167,19 +169,19 @@ def _quote_forex(from_ccy: str, to_ccy: str) -> dict[str, Any]:
 
 
 def _quote_crypto(base: str, quote: str = "USD") -> dict[str, Any]:
-    """Crypto quote: CoinGecko primary, yfinance fallback."""
+    """Crypto quote: CoinDesk reference price primary, yfinance fallback."""
     try:
         row = cg.coin_price(base, currency=quote.lower())
         return {
             "price": row["price"],
             "previous_close": row["previous_close"],
             "currency": quote,
-            "via": "coingecko_markets",
+            "via": "coindesk_index",
             "as_of": row.get("last_updated"),
-            "source": "coingecko",
+            "source": "coindesk",
         }
-    except CoinGeckoError as exc:
-        log.info("CoinGecko failed for %s/%s, trying yfinance: %s", base, quote, exc)
+    except CoinDeskError as exc:
+        log.info("CoinDesk failed for %s/%s, trying yfinance: %s", base, quote, exc)
 
     yf_symbol = f"{base}-{quote}"
     q = yf_svc.quote(yf_symbol)
@@ -204,7 +206,7 @@ def get_quote(ticker: str) -> dict[str, Any]:
 
     Supported:
         AAPL, NVDA           — US stocks (yfinance)
-        BTC-USD, ETH-USD     — crypto (CoinGecko → yfinance fallback)
+        BTC-USD, ETH-USD     — crypto (CoinDesk → yfinance fallback)
         SPY, QQQ, VTI, GLD   — ETFs (yfinance)
         ^GSPC, ^IXIC, ^VIX   — indices (yfinance)
         EURUSD=X, USDTRY=X   — forex (yfinance)
@@ -297,7 +299,7 @@ def get_company_overview(ticker: str) -> dict[str, Any]:
 def _crypto_technicals_from_cg(
     base: str, *, sma_period: int, rsi_period: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Compute SMA/RSI series from CoinGecko daily closes (fallback for crypto)."""
+    """Compute SMA/RSI series from CoinDesk daily closes (fallback for crypto)."""
     days_needed = max(sma_period, rsi_period + 1) + 50
     days = min(max(days_needed, 90), 365)
     bars = cg.coin_history(base, days=days)  # newest-first {date, close}
@@ -368,8 +370,8 @@ def get_technical_indicators(
                 sma_rows, rsi_rows = _crypto_technicals_from_cg(
                     cls["base"], sma_period=sma_period, rsi_period=rsi_period
                 )
-            except CoinGeckoError as cg_exc:
-                return {"ticker": upper, "error": f"{exc}; coingecko fallback failed: {cg_exc}"}
+            except CoinDeskError as cg_exc:
+                return {"ticker": upper, "error": f"{exc}; coindesk fallback failed: {cg_exc}"}
         else:
             return {"ticker": upper, "error": str(exc)}
 
@@ -655,7 +657,7 @@ _CRYPTO_WEIGHTS = {
     "market_context": 0.15,
     "liquidity": 0.12,
     "relative_strength": 0.13,
-    "sentiment": 0.10,
+    "funding": 0.10,
     "volume_momentum": 0.08,
     "trend_strength": 0.07,
 }
@@ -678,7 +680,7 @@ def _score_crypto_momentum(symbol: str) -> tuple[float, dict[str, Any]]:
 
 
 def _score_crypto_historical(symbol: str) -> tuple[float, dict[str, Any]]:
-    """52-week range position + YTD return via CoinGecko history."""
+    """52-week range position + YTD return via CoinDesk history."""
     base = symbol.split("-")[0]
     try:
         rows = cg.coin_history(base, days=365)
@@ -696,9 +698,9 @@ def _score_crypto_historical(symbol: str) -> tuple[float, dict[str, Any]]:
             "year_low": round(lo, 6),
             "year_return_pct": round(ytd_return, 2),
             "range_position_pct": round(range_pos * 100, 1),
-            "source": "coingecko",
+            "source": "coindesk",
         }
-    except CoinGeckoError as exc:
+    except CoinDeskError as exc:
         return 0.5, {"error": str(exc), "unavailable": True}
 
 
@@ -709,7 +711,7 @@ def _score_crypto_market_context() -> tuple[float, dict[str, Any]]:
         btc_dom = gbl.get("btc_dominance_pct")
         mkt_chg = gbl.get("market_cap_change_pct_24h")
         scores: list[float] = []
-        detail: dict[str, Any] = {"source": "coingecko"}
+        detail: dict[str, Any] = {"source": "coindesk"}
         if mkt_chg is not None:
             detail["market_cap_change_24h_pct"] = round(mkt_chg, 2)
             scores.append(max(0.0, min(1.0, 0.5 + mkt_chg / 10.0)))
@@ -721,7 +723,7 @@ def _score_crypto_market_context() -> tuple[float, dict[str, Any]]:
         if not scores:
             return 0.5, {"unavailable": True}
         return statistics.mean(scores), detail
-    except CoinGeckoError as exc:
+    except CoinDeskError as exc:
         return 0.5, {"error": str(exc), "unavailable": True}
 
 
@@ -738,7 +740,7 @@ def _score_crypto_liquidity(market_row: dict[str, Any]) -> tuple[float, dict[str
         "volume_24h_usd": vol,
         "market_cap_usd": cap,
         "vol_to_cap_ratio": round(ratio, 4),
-        "source": "coingecko",
+        "source": "coindesk",
     }
 
 
@@ -759,31 +761,44 @@ def _score_crypto_relative_strength(symbol: str, base: str) -> tuple[float, dict
             "coin_30d_return_pct": round(coin_ret, 2),
             "btc_30d_return_pct": round(btc_ret, 2),
             "alpha_vs_btc_pct": round(alpha, 2),
-            "source": "coingecko",
+            "source": "coindesk",
         }
-    except CoinGeckoError as exc:
+    except CoinDeskError as exc:
         return 0.5, {"error": str(exc), "unavailable": True}
 
 
-def _score_crypto_sentiment() -> tuple[float, dict[str, Any]]:
-    """Fear & Greed proxy via CoinGecko global market cap 24h change direction."""
+def _score_crypto_funding(symbol: str) -> tuple[float, dict[str, Any]]:
+    """Funding-rate health: moderate positive funding is healthy; extreme
+    funding (either sign) signals over-leverage and lowers the score.
+
+    Maps the 8h funding rate (bps) onto 0–1: a small positive premium (~+1 to
+    +5 bps) is ideal; deeply negative or aggressively high funding is penalised.
+    """
     try:
-        import requests as _req  # noqa: PLC0415
-        resp = _req.get(
-            "https://api.alternative.me/fng/?limit=1",
-            timeout=5,
-        )
-        if resp.status_code == 200:
-            data = resp.json().get("data") or []
-            if data:
-                fng = int(data[0].get("value", 50))
-                label = data[0].get("value_classification", "Neutral")
-                score = max(0.0, min(1.0, fng / 100.0))
-                return score, {"fear_greed_index": fng, "label": label, "source": "alternative.me"}
-    except Exception:  # noqa: BLE001
-        pass
-    # Fallback: neutral
-    return 0.5, {"unavailable": True, "note": "Fear & Greed index unavailable"}
+        fr = cg.funding_rate(symbol)
+    except CoinDeskError as exc:
+        return 0.5, {"error": str(exc), "unavailable": True}
+    bps = fr["rate_8h_bps"]
+    # Ideal band ~ +1..+5 bps/8h. Score peaks there, decays for extremes.
+    if 1.0 <= bps <= 5.0:
+        score = 0.85
+    elif 0.0 <= bps < 1.0:
+        score = 0.65
+    elif 5.0 < bps <= 15.0:
+        score = max(0.3, 0.85 - (bps - 5.0) * 0.04)  # crowded longs
+    elif bps > 15.0:
+        score = 0.2  # extreme long leverage → crash risk
+    elif -5.0 <= bps < 0.0:
+        score = 0.5  # mild bearish
+    else:
+        score = 0.4  # deeply negative (capitulation / crowded shorts)
+    return max(0.0, min(1.0, score)), {
+        "rate_8h_bps": bps,
+        "apy_pct": fr["apy_pct"],
+        "direction": fr["direction"],
+        "open_interest": fr["open_interest"],
+        "source": "coindesk",
+    }
 
 
 def _score_crypto_volume_momentum(base: str) -> tuple[float, dict[str, Any]]:
@@ -792,7 +807,7 @@ def _score_crypto_volume_momentum(base: str) -> tuple[float, dict[str, Any]]:
         rows = cg.coin_history(base, days=30)
         if len(rows) < 14:
             return 0.5, {"unavailable": True}
-        # coin_history returns close prices; use CoinGecko markets for volume
+        # coin_history returns close prices; use CoinDesk markets for volume
         mkt = cg.coin_market_data([base])
         if not mkt:
             return 0.5, {"unavailable": True}
@@ -803,9 +818,9 @@ def _score_crypto_volume_momentum(base: str) -> tuple[float, dict[str, Any]]:
         return score, {
             "volume_24h_usd": vol_now,
             "price_change_24h_pct": round(chg_24h, 2),
-            "source": "coingecko",
+            "source": "coindesk",
         }
-    except CoinGeckoError as exc:
+    except CoinDeskError as exc:
         return 0.5, {"error": str(exc), "unavailable": True}
 
 
@@ -835,7 +850,7 @@ def _analyze_crypto_8dim(ticker: str, base: str) -> dict[str, Any]:
     try:
         market_rows = cg.coin_market_data([base])
         market_row = market_rows[0] if market_rows else {}
-    except CoinGeckoError:
+    except CoinDeskError:
         market_row = {}
 
     dims: dict[str, dict[str, Any]] = {}
@@ -855,8 +870,8 @@ def _analyze_crypto_8dim(ticker: str, base: str) -> dict[str, Any]:
     s, d = _score_crypto_relative_strength(ticker, base)
     dims["relative_strength"] = {"score": s, **d}
 
-    s, d = _score_crypto_sentiment()
-    dims["sentiment"] = {"score": s, **d}
+    s, d = _score_crypto_funding(ticker)
+    dims["funding"] = {"score": s, **d}
 
     s, d = _score_crypto_volume_momentum(base)
     dims["volume_momentum"] = {"score": s, **d}
@@ -883,7 +898,7 @@ def _analyze_crypto_8dim(ticker: str, base: str) -> dict[str, Any]:
         "dimensions": {k: {**v, "score": round(v["score"], 3)} for k, v in dims.items()},
         "weights": _CRYPTO_WEIGHTS,
         "unavailable_dimensions": unavailable,
-        "source": "coingecko+yfinance",
+        "source": "coindesk+yfinance",
         "as_of": _now_iso(),
     }
     if degraded:
@@ -910,8 +925,9 @@ def analyze_ticker_8dim(ticker: str, fast: bool = False) -> dict[str, Any]:
     analyst_sentiment, historical, market_context, sector, momentum, sentiment.
 
     For crypto (e.g. BTC-USD, ETH-USD), dimensions cover: momentum, historical,
-    market_context, liquidity, relative_strength, sentiment, volume_momentum,
-    trend_strength. Each scored 0–1, weighted score (0–1) yields BUY/HOLD/SELL.
+    market_context, liquidity, relative_strength, funding (perpetual funding-rate
+    health), volume_momentum, trend_strength. Each scored 0–1, weighted score
+    (0–1) yields BUY/HOLD/SELL.
 
     Args:
         ticker: e.g. "NVDA", "AAPL", "BTC-USD", "ETH-USD".
@@ -1379,16 +1395,16 @@ def get_us_movers(top_n: int = 10) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Hot trends — CoinGecko (CRYPTO ONLY)
+# Hot trends — CoinDesk (CRYPTO ONLY)
 # ---------------------------------------------------------------------------
 
 
 @tool
 def scan_hot_trends(no_social: bool = False) -> dict[str, Any]:
-    """CRYPTO ONLY — trending coins and global crypto stats from CoinGecko.
+    """CRYPTO ONLY — top movers and global crypto stats from CoinDesk.
 
     Returns:
-      • crypto_trending  — top trending coins from CoinGecko
+      • crypto_trending  — biggest 24h movers among the top-50 by market cap
       • crypto_global    — total market cap, BTC dominance, 24h change
 
     DO NOT call this for US or Turkish stock movers — it returns ONLY
@@ -1402,19 +1418,19 @@ def scan_hot_trends(no_social: bool = False) -> dict[str, Any]:
     if isinstance(cached, dict):
         return cached
 
-    out: dict[str, Any] = {"as_of": _now_iso(), "source": "coingecko"}
+    out: dict[str, Any] = {"as_of": _now_iso(), "source": "coindesk"}
 
     try:
         out["crypto_trending"] = cg.trending_coins()
-    except CoinGeckoError as exc:
-        log.warning("scan_hot_trends: CoinGecko trending failed: %s", exc)
+    except CoinDeskError as exc:
+        log.warning("scan_hot_trends: CoinDesk trending failed: %s", exc)
         out["crypto_trending"] = []
         out["cg_trending_error"] = str(exc)
 
     try:
         out["crypto_global"] = cg.global_market()
-    except CoinGeckoError as exc:
-        log.info("scan_hot_trends: CoinGecko global market failed: %s", exc)
+    except CoinDeskError as exc:
+        log.info("scan_hot_trends: CoinDesk global market failed: %s", exc)
 
     cache_set(cache_key, out)
     return out

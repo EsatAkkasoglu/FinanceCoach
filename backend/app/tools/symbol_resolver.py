@@ -9,7 +9,7 @@ Resolution order
 2. yfinance Search  — handles US equities, ETFs, and ADRs by company name
    or partial ticker. Best match is returned, US region preferred.
 
-3. CoinGecko search  — fallback for crypto queries (SOL, AVAX, PEPE, …).
+3. CoinDesk search  — fallback for crypto queries (SOL, AVAX, PEPE, …).
    Appends "-USD" to form the get_quote ticker.
 
 4. Failure  — clear message so the agent can tell the user to use the
@@ -22,9 +22,9 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-import app.services.coingecko as cg
+import app.services.coindesk as cg
 import app.services.yfinance_service as yf_svc
-from app.services.coingecko import CoinGeckoError
+from app.services.coindesk import CoinDeskError
 from app.services.yfinance_service import YFinanceError
 
 log = logging.getLogger("fincoach.tools.resolver")
@@ -143,12 +143,12 @@ def resolve_symbol(name: str) -> dict[str, Any]:
     is_crypto = _looks_like_crypto(key)
 
     if is_crypto:
-        result = _try_coingecko(name, key)
+        result = _try_coindesk(name, key)
         if result:
             return result
     else:
-        # Pre-check CoinGecko for top-30 coins by exact name match.
-        result = _try_coingecko(name, key, max_rank=30, require_exact_name=True)
+        # Pre-check CoinDesk for top-30 coins by exact name match.
+        result = _try_coindesk(name, key, max_rank=30, require_exact_name=True)
         if result:
             return result
 
@@ -157,8 +157,8 @@ def resolve_symbol(name: str) -> dict[str, Any]:
         if yf_result:
             return yf_result
 
-        # Broader CoinGecko fallback (rank < 200) when yfinance found nothing.
-        result = _try_coingecko(name, key, max_rank=200)
+        # Broader CoinDesk fallback (rank < 200) when yfinance found nothing.
+        result = _try_coindesk(name, key, max_rank=200)
         if result:
             return result
 
@@ -199,7 +199,7 @@ def _try_yf_search(name: str) -> dict[str, Any] | None:
     }
 
 
-def _try_coingecko(
+def _try_coindesk(
     original: str,
     key: str,
     max_rank: int | None = None,
@@ -207,8 +207,8 @@ def _try_coingecko(
 ) -> dict[str, Any] | None:
     try:
         hits = cg.search_coins(key)
-    except CoinGeckoError as exc:
-        log.info("CoinGecko search failed for %r: %s", original, exc)
+    except CoinDeskError as exc:
+        log.info("CoinDesk search failed for %r: %s", original, exc)
         return None
 
     if not hits:
@@ -225,7 +225,7 @@ def _try_coingecko(
 
     rank = best.get("rank")
     if max_rank is not None and rank is not None and rank > max_rank:
-        log.debug("CoinGecko best for %r is rank %s > max %s — skipping", original, rank, max_rank)
+        log.debug("CoinDesk best for %r is rank %s > max %s — skipping", original, rank, max_rank)
         return None
 
     symbol = (best.get("symbol") or "").upper()
@@ -238,7 +238,7 @@ def _try_coingecko(
         "ticker": ticker,
         "description": best.get("name") or ticker,
         "asset_class": "crypto",
-        "source": "coingecko_search",
+        "source": "coindesk_search",
         "rank": rank,
     }
 

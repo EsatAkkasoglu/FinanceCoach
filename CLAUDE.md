@@ -1,5 +1,20 @@
 # FinCoach — Claude Project Guide
 
+## 🔑 NotebookLM Knowledge Source — ZORUNLU
+
+Kripto türev araçlarıyla ilgili **her türlü sohbet, soru veya kodlama görevinden önce** aşağıdaki adımlar uygulanır:
+
+1. **Önce NotebookLM'e sor:** `mcp__notebooklm__ask_question` aracını kullan, notebook ID: `a-comprehensive-guide-to-crypt`
+2. **Gelen cevabı referans al:** NotebookLM'den dönen bilgiyi temel alarak açıklama yap veya kod yaz
+3. **Sonra kodla:** NotebookLM cevabına dayanarak implementasyona geç
+
+**Notebook:** A Comprehensive Guide to Crypto Derivatives  
+**URL:** https://notebooklm.google.com/notebook/f329eda7-a38a-47bc-866a-a11ee04c2297  
+**Notebook ID:** `a-comprehensive-guide-to-crypt`
+
+Kapsam: futures, options, perpetual swaps, funding rate, liquidation, margin, DeFi türevleri, risk yönetimi.  
+Bu adım; kullanıcı kripto türev konusunda bir şey sorarsa, bu konuda kod yazılacaksa veya bir feature eklenecekse **atlanamaz.**
+
 AI finance coach as a Windows desktop app. Tauri (React/TS) shell + Python FastAPI sidecar running a LangGraph supervisor over 7 specialist agents, all backed by Google Gemini.
 
 ## Architecture

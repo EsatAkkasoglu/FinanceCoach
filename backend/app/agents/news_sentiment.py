@@ -42,7 +42,7 @@ Tools:
       with asset_class='crypto' both resolve correctly.
     • For TEFAS funds pass the 3-letter code with asset_class='fund'; the tool
       resolves it to the fund's name before searching Turkish news.
-- scan_hot_trends()          — what's trending NOW across CoinGecko, Yahoo, Google News
+- scan_hot_trends()          — what's trending NOW across CoinDesk, Yahoo, Google News
 - scan_rumors()              — M&A whispers, insider moves, analyst actions, scored 1-10
 
 Use the minimum number of tools that answers the question. For narrow single

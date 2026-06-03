@@ -2,7 +2,7 @@
 
 Covers: US stocks, crypto, ETFs, indices, commodities (via ETF proxies),
 forex, Treasury yields, futures. Backed by yfinance (no key, no rate limits)
-with CoinGecko for crypto trending.
+with CoinDesk Data API for crypto (prices, history, top-list, derivatives).
 
 For named assets the agent resolves the ticker first via ``resolve_symbol``.
 """
@@ -14,11 +14,17 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.prebuilt import create_react_agent
 
-import app.services.coingecko as cg
+import app.services.coindesk as cg
 from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
 from app.tools.calc_tools import compare_instruments
+from app.tools.crypto_tools import (
+    get_crypto_derivatives_health,
+    get_funding_rate,
+    get_open_interest,
+    get_squeeze_risk,
+)
 from app.tools.fund_tools import (
     get_fund_history,
     get_fund_quote,
@@ -77,9 +83,10 @@ CRITICAL — STAY IN YOUR LANE:
 You can fetch live prices for ANY of these asset classes — never refuse a
 query because of asset class alone:
 
-GLOBAL (via yfinance + CoinGecko):
+GLOBAL (via yfinance + CoinDesk):
 - US stocks & ADRs            (AAPL, NVDA, BABA, …)
-- Crypto                      (-USD suffix: BTC-USD, ETH-USD) — CoinGecko primary
+- Crypto                      (-USD suffix: BTC-USD, ETH-USD) — CoinDesk Data API
+- Crypto DERIVATIVES          (perpetual funding rate, open interest, squeeze risk) — CoinDesk
 - ETFs / index funds          (SPY, QQQ, VTI, BND, VOO, ARKK)
 - Stock indices               (^GSPC, ^IXIC, ^VIX, ^DJI; BIST=XU100.IS)
 - Commodities (via ETFs)      (GLD=gold, SLV=silver, USO=oil, UNG=nat gas, CPER=copper)
@@ -124,8 +131,21 @@ WORKFLOW (decision tree):
    market", "S&P leaders today", etc. Ranks a curated ~100-name US
    large-cap + ETF universe via yfinance. DO NOT route stock-mover
    questions to ``scan_hot_trends`` — that tool is crypto-only.
-9. ``scan_hot_trends`` — CRYPTO ONLY (CoinGecko trending coins + global
-   crypto stats). Never call this for US or Turkish stock movers.
+9. ``scan_hot_trends`` — CRYPTO ONLY (CoinDesk top movers + global crypto
+   stats). Never call this for US or Turkish stock movers.
+9a. CRYPTO DERIVATIVES (CoinDesk perpetual-swap data) — use these whenever the
+   user asks about leverage, funding, "is this crowded?", carry/yield, or
+   crash/squeeze risk on a coin:
+   • ``get_funding_rate(symbol)`` — 8h-normalised funding rate + annualised APY.
+     Positive = longs pay shorts (bullish/crowded long); negative = the reverse.
+     This is THE headline derivatives metric (perpetuals are >90% of volume).
+   • ``get_open_interest(symbol)`` — current OI + 24h/7d trend. Rising OI
+     confirms a trend; falling OI = positions unwinding.
+   • ``get_crypto_derivatives_health(symbol)`` — 0–100 score blending basis,
+     OI trend and funding into one health read (>60 constructive, <40 fragile).
+   • ``get_squeeze_risk(symbol)`` — flags crowded longs / crowded shorts /
+     long-squeeze / short-squeeze / trend-exhaustion from funding × OI.
+   Pass the bare base symbol or the BTC-USD form — both work.
 10. ``scan_rumors`` — not available (data source removed). Direct users to
     the news/sentiment agent for current headlines.
 11. ``list_top_funds`` — Turkish fund leaderboard by category rank.
@@ -142,7 +162,7 @@ DISAMBIGUATION:
 - If ``resolve_symbol`` returns ``ticker: null`` AND ``search_fund`` returns
   empty, tell the user it's not supported.
 
-CITATIONS: every numeric claim is tagged with its source (yfinance, coingecko,
+CITATIONS: every numeric claim is tagged with its source (yfinance, coindesk,
 TEFAS, 8-dim analysis, NewsAPI).
 
 OUTPUT DEPTH:
@@ -236,6 +256,11 @@ _TOOLS = [
     get_us_movers,
     scan_hot_trends,
     scan_rumors,
+    # Crypto derivatives (CoinDesk) — funding rate, OI, health, squeeze risk
+    get_funding_rate,
+    get_open_interest,
+    get_crypto_derivatives_health,
+    get_squeeze_risk,
     # TEFAS Turkish funds
     search_fund,
     get_fund_quote,
@@ -270,7 +295,7 @@ def _requested_limit(text: str, default: int = 5) -> int:
 
 
 def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
-    """Fast-path for 'top N crypto by market cap' queries using CoinGecko."""
+    """Fast-path for 'top N crypto by market cap' queries using CoinDesk."""
     user_text = _latest_user_text(state)
     if not _wants_top_crypto_market_cap(user_text):
         return None
@@ -280,11 +305,11 @@ def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
 
     try:
         coins = cg.top_coins(limit=limit, exclude_stablecoins=True)
-    except cg.CoinGeckoError as exc:
+    except cg.CoinDeskError as exc:
         err_msg = (
-            f"Top kripto listesi CoinGecko'dan alınamadı: {exc}"
+            f"Top kripto listesi CoinDesk'ten alınamadı: {exc}"
             if tr
-            else f"Couldn't fetch top crypto list from CoinGecko: {exc}"
+            else f"Couldn't fetch top crypto list from CoinDesk: {exc}"
         )
         return {"messages": [AIMessage(content=err_msg)], "citations": []}
 
@@ -333,9 +358,9 @@ def _handle_top_crypto_request(state: AgentState) -> AgentState | None:
 
     lines.append("")
     lines.append(
-        "Market cap sıralaması CoinGecko'dan, fiyat ve 8-dim analiz canlı tool çağrılarından geldi."
+        "Market cap sıralaması CoinDesk'ten, fiyat ve 8-dim analiz canlı tool çağrılarından geldi."
         if tr
-        else "Market cap ranking from CoinGecko; price and 8-dim figures from live tool calls."
+        else "Market cap ranking from CoinDesk; price and 8-dim figures from live tool calls."
     )
     return {"messages": [AIMessage(content="\n".join(lines))], "citations": citations}
 
