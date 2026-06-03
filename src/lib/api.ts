@@ -671,7 +671,25 @@ export async function getBudgetTrend(months = 6): Promise<BudgetTrend> {
   return r.json() as Promise<BudgetTrend>;
 }
 
-// ── Document parsing ────────────────────────────────────────────────────────
+// ── Documents ────────────────────────────────────────────────────────────────
+
+export interface DocumentEntry {
+  filename: string;
+  created_at: number;      // unix ts
+  created_at_iso: string;  // ISO-8601
+  chunk_count: number;
+}
+
+export async function listDocuments(): Promise<DocumentEntry[]> {
+  const r = await apiFetch("/documents");
+  if (!r.ok) return [];
+  const data = await r.json() as { documents: DocumentEntry[] };
+  return data.documents ?? [];
+}
+
+export async function deleteDocument(filename: string): Promise<void> {
+  await apiFetch(`/documents/${encodeURIComponent(filename)}`, { method: "DELETE" });
+}
 
 export async function parseDocument(file: File, signal?: AbortSignal) {
   const fd = new FormData();

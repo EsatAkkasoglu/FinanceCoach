@@ -7,15 +7,18 @@
  * any risk_signals — so the user sees why the parse confidence is what it is
  * and can hand questions off to the Coach.
  */
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Upload, FileText, AlertTriangle, Sparkles, Loader2, MessageSquare,
-  Shield, X,
+  Shield, X, Trash2, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { parseDocument, type ProfileExtraction } from "@/lib/api";
+import {
+  parseDocument, listDocuments, deleteDocument,
+  type ProfileExtraction, type DocumentEntry,
+} from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { buildLocalizedPath, getLanguageFromPath } from "@/lib/routing";
@@ -34,11 +37,27 @@ export function Documents() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
-  // Local-only history of parses in this session — nothing persists server-side.
+  // Session-scoped parse results (richer: extraction result + size).
   const [parsed, setParsed] = useState<ParsedDoc[]>([]);
+  // Persistent document list from ChromaDB.
+  const [savedDocs, setSavedDocs] = useState<DocumentEntry[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   const lang = getLanguageFromPath(location.pathname) ?? "en";
+
+  const refreshList = useCallback(async () => {
+    try {
+      const docs = await listDocuments();
+      setSavedDocs(docs);
+    } catch {
+      // silently ignore — list is best-effort
+    } finally {
+      setLoadingList(false);
+    }
+  }, []);
+
+  useEffect(() => { void refreshList(); }, [refreshList]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -51,11 +70,23 @@ export function Documents() {
     try {
       const result = await parseDocument(f);
       setParsed((prev) => [{ filename: f.name, size: f.size, result }, ...prev]);
+      // Refresh persistent list so the new file appears immediately.
+      void refreshList();
     } catch (e) {
       toast.error((e as Error).message || t("parseFailed"));
     } finally {
       setParsing(false);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function handleDelete(filename: string) {
+    try {
+      await deleteDocument(filename);
+      setSavedDocs((prev) => prev.filter((d) => d.filename !== filename));
+      toast.success(`"${filename}" silindi`);
+    } catch {
+      toast.error("Belge silinemedi");
     }
   }
 
@@ -117,7 +148,7 @@ export function Documents() {
         </div>
       </label>
 
-      {/* Results stack */}
+      {/* Session results — richer extraction view */}
       {parsed.length > 0 && (
         <section className="space-y-4">
           <p className="text-xs font-medium uppercase tracking-[0.14em] text-content-muted">
@@ -133,6 +164,61 @@ export function Documents() {
           ))}
         </section>
       )}
+
+      {/* Persistent document library — always shown */}
+      <section className="space-y-3">
+        <p className="text-xs font-medium uppercase tracking-[0.14em] text-content-muted">
+          Yüklenen Belgeler
+        </p>
+
+        {loadingList ? (
+          <div className="flex items-center gap-2 text-sm text-content-muted">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Yükleniyor…
+          </div>
+        ) : savedDocs.length === 0 ? (
+          <p className="text-sm text-content-muted">
+            Henüz belge yüklenmemiş. Yukarıdan bir dosya bırakın.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {savedDocs.map((doc) => (
+              <li
+                key={doc.filename}
+                className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-raised px-4 py-3"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-content-muted">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{doc.filename}</p>
+                    <p className="flex items-center gap-1 mt-0.5 text-xs text-content-muted">
+                      <Clock className="h-3 w-3" />
+                      {doc.created_at_iso
+                        ? new Date(doc.created_at_iso).toLocaleString("tr-TR", {
+                            day: "2-digit", month: "short", year: "numeric",
+                            hour: "2-digit", minute: "2-digit",
+                          })
+                        : "—"}
+                      <span className="ml-1 rounded-full bg-surface px-1.5 py-0.5 text-[10px]">
+                        {doc.chunk_count} parça
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDelete(doc.filename)}
+                  className="rounded-lg p-2 text-content-muted transition hover:bg-surface hover:text-red-400"
+                  title="Sil"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <p className="pt-2 text-[10px] text-content-muted">
         {t("disclaimer")}

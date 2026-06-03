@@ -98,3 +98,63 @@ class ChromaEmbeddingStorage:
         )
         log.info("stored %d chunk(s) for '%s' (user=%s)", len(chunks), filename, self._user_id)
         return len(chunks)
+
+    def list_documents(self) -> list[dict]:
+        """Return one entry per unique filename for this user, sorted newest-first.
+
+        We query only chunk_index=0 documents so each file appears exactly once.
+        Returns dicts with: filename, created_at (unix ts), chunk_count.
+        """
+        try:
+            # Get all chunk_index=0 entries for this user — one per file.
+            result = self._collection.get(
+                where={"$and": [{"user_id": self._user_id}, {"chunk_index": 0}]},
+                include=["metadatas"],
+            )
+        except Exception:
+            log.warning("list_documents query failed for user=%s", self._user_id, exc_info=True)
+            return []
+
+        metadatas = result.get("metadatas") or []
+        docs: list[dict] = []
+        seen: set[str] = set()
+        for meta in metadatas:
+            fname = meta.get("filename", "")
+            if not fname or fname in seen:
+                continue
+            seen.add(fname)
+            docs.append({
+                "filename": fname,
+                "created_at": meta.get("created_at", 0),
+                "chunk_count": self._count_chunks(fname),
+            })
+
+        docs.sort(key=lambda d: d["created_at"], reverse=True)
+        return docs
+
+    def _count_chunks(self, filename: str) -> int:
+        """Count how many chunks are stored for a given filename."""
+        try:
+            result = self._collection.get(
+                where={"$and": [{"user_id": self._user_id}, {"filename": filename}]},
+                include=[],
+            )
+            return len(result.get("ids") or [])
+        except Exception:
+            return 0
+
+    def delete_document(self, filename: str) -> int:
+        """Delete all chunks for a given filename. Returns number of chunks removed."""
+        try:
+            result = self._collection.get(
+                where={"$and": [{"user_id": self._user_id}, {"filename": filename}]},
+                include=[],
+            )
+            ids = result.get("ids") or []
+            if ids:
+                self._collection.delete(ids=ids)
+            log.info("deleted %d chunk(s) for '%s' (user=%s)", len(ids), filename, self._user_id)
+            return len(ids)
+        except Exception:
+            log.warning("delete_document failed for '%s' user=%s", filename, self._user_id, exc_info=True)
+            return 0

@@ -50,7 +50,9 @@ _EP_SPOT_HISTORY_DAYS = "/spot/v1/historical/days"
 _EP_ASSET_TOP_LIST = "/asset/v1/top/list"
 _EP_ASSET_SEARCH = "/asset/v1/search"
 # Derivatives (futures). Latest tick bundles funding rate + open interest.
-_EP_FUT_FUNDING_TICK = "/futures/v1/latest/tick"
+_EP_FUT_TICK = "/futures/v1/latest/tick"           # price tick (no funding here)
+_EP_FUT_FUNDING_TICK = "/futures/v1/latest/funding-rate/tick"   # confirmed path
+_EP_FUT_OI_TICK = "/futures/v1/latest/open-interest/tick"       # confirmed path
 _EP_FUT_FUNDING_HISTORY = "/futures/v1/historical/funding-rate/days"
 _EP_FUT_OI_HISTORY = "/futures/v1/historical/open-interest/days"
 _EP_FUT_HISTORY_DAYS = "/futures/v1/historical/days"
@@ -68,7 +70,9 @@ _TTL: dict[str, int] = {
     _EP_ASSET_SEARCH: 24 * 3600,
     _EP_INDEX_HISTORY_DAYS: 10 * 60,
     _EP_SPOT_HISTORY_DAYS: 10 * 60,
+    _EP_FUT_TICK: 60,
     _EP_FUT_FUNDING_TICK: 60,
+    _EP_FUT_OI_TICK: 60,
     _EP_FUT_FUNDING_HISTORY: 10 * 60,
     _EP_FUT_OI_HISTORY: 10 * 60,
     _EP_FUT_HISTORY_DAYS: 10 * 60,
@@ -334,27 +338,29 @@ def top_coins(
     *,
     exclude_stablecoins: bool = True,
 ) -> list[dict[str, Any]]:
-    """Top N coins by circulating market cap (CoinDesk asset top-list)."""
+    """Top N coins by circulating market cap (CoinDesk asset top-list).
+
+    The API requires ``limit`` ≥ 10; we fetch 50 and filter stablecoins
+    to guarantee the caller gets the requested number of real assets.
+    """
+    fetch_limit = max(50, limit * 3)  # fetch plenty so stablecoin filtering leaves enough
     payload = _request(
         _EP_ASSET_TOP_LIST,
-        {
-            "page": 1,
-            "page_size": 50,
-            "sort_by": "CIRCULATING_MKT_CAP_USD",
-            "sort_direction": "DESC",
-            "groups": "ID,BASIC,PRICE,MKT_CAP,VOLUME",
-            "toplist_quote_asset": currency.upper(),
-        },
+        {"limit": fetch_limit},
     )
     rows_raw = _top_list_rows(payload)
     rows: list[dict[str, Any]] = []
-    for item in rows_raw:
+    for rank_idx, item in enumerate(rows_raw, start=1):
         sym = (item.get("SYMBOL") or item.get("symbol") or "").upper()
         if not sym:
             continue
         if exclude_stablecoins and sym in _STABLECOINS:
             continue
-        rows.append(_top_row_to_market(item, currency))
+        row = _top_row_to_market(item, currency)
+        # Assign rank from list position if not embedded in the row.
+        if row["rank"] is None:
+            row["rank"] = rank_idx
+        rows.append(row)
         if len(rows) >= limit:
             break
     return rows
@@ -375,17 +381,13 @@ def _top_list_rows(payload: Any) -> list[dict[str, Any]]:
 
 def _top_row_to_market(item: dict[str, Any], currency: str) -> dict[str, Any]:
     sym = (item.get("SYMBOL") or "").upper()
-    price = _to_float(
-        item.get("PRICE_USD")
-        or item.get("CURRENT_PRICE_USD")
-        or (item.get("PRICE") or {}).get("USD") if isinstance(item.get("PRICE"), dict) else None
-    )
+    # PRICE_USD is the confirmed field name from the live /asset/v1/top/list response.
+    price = _to_float(item.get("PRICE_USD") or item.get("PRICE_CONVERSION_VALUE"))
     change = _to_float(
         item.get("SPOT_MOVING_24_HOUR_CHANGE_PERCENTAGE_USD")
-        or item.get("PRICE_USD_CHANGE_PERCENTAGE_24_HOUR")
-        or item.get("CHANGE_PERCENTAGE_24_HOUR")
+        or item.get("SPOT_MOVING_24_HOUR_CHANGE_PERCENTAGE_CONVERSION")
     )
-    prev = price / (1.0 + change / 100.0) if (price is not None and change is not None) else price
+    prev = price / (1.0 + change / 100.0) if (price is not None and change is not None and change != -100.0) else price
     return {
         "id": sym,
         "symbol": sym,
@@ -395,8 +397,7 @@ def _top_row_to_market(item: dict[str, Any], currency: str) -> dict[str, Any]:
         "change_pct_24h": round(change, 4) if change is not None else None,
         "market_cap": _to_float(item.get("CIRCULATING_MKT_CAP_USD") or item.get("TOTAL_MKT_CAP_USD")),
         "volume_24h": _to_float(item.get("SPOT_MOVING_24_HOUR_QUOTE_VOLUME_USD")),
-        "rank": item.get("TOPLIST_BASE_RANK", {}).get("CIRCULATING_MKT_CAP_USD")
-        if isinstance(item.get("TOPLIST_BASE_RANK"), dict) else item.get("RANK"),
+        "rank": None,  # assigned by top_coins() from list position
         "currency": currency.upper(),
         "last_updated": None,
         "source": "coindesk",
@@ -466,12 +467,25 @@ def global_market() -> dict[str, Any]:
 
 
 def _history_rows(payload: Any) -> list[dict[str, Any]]:
+    """Extract a list of OHLC rows from a CoinDesk historical response.
+
+    Handles three response shapes observed across endpoints:
+      • ``{"Data": [...]}``          — direct list (funding-rate, OI history)
+      • ``{"Data": {"Data": [...]}}``— nested dict (index/spot history)
+      • ``{"Data": {"entries": [...]}}`` — older shape
+    """
     if not isinstance(payload, dict):
         return []
     data = payload.get("Data")
+    # Direct list shape (confirmed for futures history endpoints).
+    if isinstance(data, list):
+        return [r for r in data if isinstance(r, dict)]
+    # Nested dict shape (index/spot history).
     if isinstance(data, dict):
-        data = data.get("Data") or data.get("entries") or []
-    return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+        inner = data.get("Data") or data.get("entries") or data.get("list") or []
+        if isinstance(inner, list):
+            return [r for r in inner if isinstance(r, dict)]
+    return []
 
 
 def coin_history(symbol: str, days: int = 365, vs_currency: str = "usd") -> list[dict[str, Any]]:
@@ -588,29 +602,48 @@ def funding_rate(symbol: str) -> dict[str, Any]:
         r_8h      = r_h * (8 / h)
         r_8h_bps  = r_8h * 10_000
         APY (%)   = r_8h_bps * 3 * 365 / 100
+
+    Confirmed CoinDesk fields (live-tested):
+        VALUE         — latest funding rate (fractional, e.g. 7.4e-5 = 0.0074%)
+        INTERVAL_MS   — funding interval in milliseconds (28800000 = 8 h)
+    Open interest comes from the separate /open-interest/tick endpoint:
+        VALUE_QUOTE   — OI in quote currency (USDT)
     """
     market = _futures_market()
     instrument = _perp_instrument(symbol)
+
+    # Funding rate tick
     payload = _request(
         _EP_FUT_FUNDING_TICK,
         {"market": market, "instruments": instrument},
     )
     row = _first_data_row(payload, instrument)
 
-    raw = _to_float(
-        row.get("CURRENT_FUNDING_RATE")
-        or row.get("FUNDING_RATE")
-        or row.get("VALUE")
-    )
-    interval_h = _to_float(
-        row.get("CURRENT_FUNDING_RATE_INTERVAL_HOURS")
-        or row.get("FUNDING_RATE_INTERVAL_HOURS")
-    ) or 8.0
-    open_interest = _to_float(
-        row.get("OPEN_INTEREST")
-        or row.get("OPEN_INTEREST_QUOTE")
-        or row.get("CURRENT_OPEN_INTEREST")
-    )
+    # VALUE is the current (latest 8-hour period) funding rate fraction.
+    raw = _to_float(row.get("VALUE"))
+    if raw is None:
+        # Fallback to CURRENT_HOUR_OPEN which holds the latest sampled rate.
+        raw = _to_float(row.get("CURRENT_HOUR_OPEN"))
+
+    # INTERVAL_MS: convert ms → hours (28800000 ms = 8 h).
+    interval_ms = _to_float(row.get("INTERVAL_MS"))
+    interval_h = (interval_ms / 3_600_000.0) if interval_ms else 8.0
+
+    # Open interest from dedicated endpoint (best-effort, don't fail if missing).
+    open_interest: float | None = None
+    try:
+        oi_payload = _request(
+            _EP_FUT_OI_TICK,
+            {"market": market, "instruments": instrument},
+        )
+        oi_row = _first_data_row(oi_payload, instrument)
+        open_interest = _to_float(
+            oi_row.get("VALUE_QUOTE")          # OI in USDT (confirmed field)
+            or oi_row.get("VALUE_SETTLEMENT")
+            or oi_row.get("VALUE")
+        )
+    except CoinDeskError:
+        pass
 
     if raw is None:
         raise CoinDeskError(f"No funding rate for {instrument} on {market}")
@@ -683,7 +716,10 @@ def futures_history(symbol: str, days: int = 30) -> list[dict[str, Any]]:
 
 
 def open_interest_history(symbol: str, days: int = 30) -> list[dict[str, Any]]:
-    """Historical daily open-interest OHLC. Newest-first ``{date, close}`` (close = OI)."""
+    """Historical daily open-interest. Newest-first ``{date, close}`` (OI in USD).
+
+    Confirmed CoinDesk fields: CLOSE_QUOTE (OI in USDT, daily close).
+    """
     market = _futures_market()
     instrument = _perp_instrument(symbol)
     limit = max(1, min(int(days), 2000))
@@ -694,7 +730,12 @@ def open_interest_history(symbol: str, days: int = 30) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in _history_rows(payload):
         ts = item.get("TIMESTAMP")
-        close = _to_float(item.get("CLOSE") or item.get("OPEN_INTEREST_CLOSE"))
+        # CLOSE_QUOTE is OI denominated in the quote currency (USDT ≈ USD).
+        close = _to_float(
+            item.get("CLOSE_QUOTE")
+            or item.get("CLOSE_SETTLEMENT")
+            or item.get("CLOSE")
+        )
         if ts is None or close is None:
             continue
         try:

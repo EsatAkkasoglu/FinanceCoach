@@ -1,9 +1,11 @@
-"""FastAPI router exposing /documents/parse — processes inline, embeds into ChromaDB."""
+"""FastAPI router exposing /documents/* — parse, list, delete."""
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from app.auth import get_current_user_id
 from app.services.document_processor.base import (
@@ -15,6 +17,17 @@ from app.services.document_processor.base import (
 from app.services.document_processor.chroma_storage import ChromaEmbeddingStorage
 from app.services.document_processor.gemini_processor import GeminiDocumentProcessor
 from app.services.document_processor.schemas import ProfileExtraction
+
+
+class DocumentEntry(BaseModel):
+    filename: str
+    created_at: int       # unix timestamp
+    created_at_iso: str   # ISO-8601 for the frontend
+    chunk_count: int
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentEntry]
 
 log = logging.getLogger("fincoach.documents")
 
@@ -87,3 +100,34 @@ async def parse_document(
             log.warning("embedding storage failed; continuing", exc_info=True)
 
     return result
+
+
+@router.get("", response_model=DocumentListResponse)
+def list_documents(user_id: int = Depends(get_current_user_id)) -> DocumentListResponse:
+    """List all documents previously uploaded by this user (from ChromaDB metadata)."""
+    storage = ChromaEmbeddingStorage(user_id=user_id)
+    raw = storage.list_documents()
+    entries: list[DocumentEntry] = []
+    for d in raw:
+        ts = d.get("created_at") or 0
+        try:
+            iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        except (OSError, OverflowError, ValueError):
+            iso = ""
+        entries.append(DocumentEntry(
+            filename=d["filename"],
+            created_at=ts,
+            created_at_iso=iso,
+            chunk_count=d.get("chunk_count", 0),
+        ))
+    return DocumentListResponse(documents=entries)
+
+
+@router.delete("/{filename:path}", status_code=204)
+def delete_document(
+    filename: str,
+    user_id: int = Depends(get_current_user_id),
+) -> None:
+    """Delete all ChromaDB chunks for a given filename."""
+    storage = ChromaEmbeddingStorage(user_id=user_id)
+    storage.delete_document(filename)
