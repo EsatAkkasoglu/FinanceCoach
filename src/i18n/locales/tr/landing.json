@@ -1,0 +1,202 @@
+{
+  "nav": {
+    "features": "Özellikler",
+    "howItWorks": "Nasıl çalışır",
+    "pricing": "Fiyatlandırma",
+    "contact": "İletişim",
+    "signIn": "Giriş yap",
+    "getStarted": "Hemen başla"
+  },
+  "hero": {
+    "badge": "Google Gemini ile güçlendirildi",
+    "titleLead": "Para kararları,",
+    "titleAccent": "artık net.",
+    "subtitle": "FinCoach yapay zekâ finans koçun — portföy, bütçe, fonlar ve hedefler, yedi uzman ajan tarafından sade bir dille açıklanır.",
+    "ctaPrimary": "Ücretsiz başla",
+    "ctaDemo": "Canlı demoyu keşfet",
+    "ctaDemoLoading": "Demo yükleniyor…",
+    "ctaSecondary": "Nasıl çalıştığını gör",
+    "microcopy": "Kart gerekmez · Örnek veri dahil · Saniyeler içinde hazır",
+    "card": {
+      "coachQuestion": "Portföyüm bu ay nasıl gidiyor?",
+      "coachAnswer": "%12,4 yükseldin — çoğunlukla teknoloji sayesinde. Risk hedefine göre dengelememi ister misin?",
+      "citation": "Kaynak · yfinance",
+      "balanceLabel": "Net varlık",
+      "balanceDelta": "+%12,4",
+      "goalLabel": "Acil durum fonu",
+      "goalProgress": "₺50.000 hedefinin %62'si"
+    }
+  },
+  "trust": {
+    "label": "Kontrol edebileceğin gerçek kaynaklardan veriler",
+    "sources": ["Google Gemini", "yfinance", "TEFAS", "SEC EDGAR", "NewsAPI", "Fear & Greed"]
+  },
+  "stats": {
+    "items": [
+      { "value": "7", "label": "Uzman yapay zekâ ajanı" },
+      { "value": "3", "label": "Para birimi: ₺ $ €" },
+      { "value": "%100", "label": "Kaynaklı yanıtlar" },
+      { "value": "7/24", "label": "Canlı piyasa verisi" }
+    ]
+  },
+  "features": {
+    "eyebrow": "Hepsi tek yerde",
+    "title": "Tüm finansal hayatın için tek uygulama",
+    "subtitle": "Günlük bütçeden uzun vadeli plana — FinCoach parçaları birleştirir ve nedenini açıklar.",
+    "items": [
+      {
+        "icon": "coach",
+        "title": "Yapay Zekâ Koç",
+        "desc": "Paranla ilgili her şeyi sor. Uzman ajanlar piyasaları, fonları ve portföyünü araştırır, doğrulayabileceğin kaynaklarla yanıtlar."
+      },
+      {
+        "icon": "portfolio",
+        "title": "Portföy takibi",
+        "desc": "Hisse ve kriptoyu canlı fiyatlar, performans grafikleri ve anında sade içgörülerle izle."
+      },
+      {
+        "icon": "budget",
+        "title": "Akıllı bütçeleme",
+        "desc": "Paranın tam olarak nereye gittiğini gör — kategorili işlemler, abonelikler ve hesaplar ₺, $ veya € olarak."
+      },
+      {
+        "icon": "funds",
+        "title": "Fon analizi",
+        "desc": "Türk fonlarını (TEFAS) uygulamadan çıkmadan yan yana araştır ve karşılaştır."
+      },
+      {
+        "icon": "goals",
+        "title": "Hedef planlama",
+        "desc": "Finansal hedefler belirle, net kilometre taşları ve dürüst projeksiyonlarla ilerlemeni izle."
+      },
+      {
+        "icon": "documents",
+        "title": "Belge içe aktarma",
+        "desc": "Bir PDF ekstresi bırak, FinCoach onu otomatik olarak temiz, kategorili işlemlere dönüştürsün."
+      }
+    ]
+  },
+  "how": {
+    "eyebrow": "Nasıl çalışır",
+    "title": "Veriden karara üç adımda",
+    "subtitle": "Tablo yok, terim karmaşası yok. Sadece harekete geçebileceğin yanıtlar.",
+    "steps": [
+      {
+        "title": "Verini ekle",
+        "desc": "Bir ekstre içe aktar, varlıklarını ekle ya da örnek veriyle anında başla. Kurulum saniyeler sürer."
+      },
+      {
+        "title": "Koçuna sor",
+        "desc": "Sade bir dille konuş. Her yanıt gerçek piyasa verisi ve bağlantılı kaynaklarla desteklenir."
+      },
+      {
+        "title": "Hedeflerine ulaş",
+        "desc": "Bütçeni takip et, portföyünü büyüt ve her adımda rehberlikle kilometre taşlarına ulaş."
+      }
+    ]
+  },
+  "showcase": {
+    "rows": [
+      {
+        "eyebrow": "Tasarımı gereği güvenilir",
+        "title": "Gerçekten güvenebileceğin yanıtlar",
+        "desc": "FinCoach asla baştan savmaz. Her piyasa iddiası bir kaynakla gelir; kaynağı kontrol edip kendin karar verebilirsin.",
+        "bullets": ["Her yanıtta bağlantılı kaynaklar", "Canlı fiyat, haber ve duyarlılık", "Takip edebileceğin sade gerekçeler"]
+      },
+      {
+        "eyebrow": "Zahmetsiz kurulum",
+        "title": "PDF'den içgörüye saniyeler içinde",
+        "desc": "Bir banka veya aracı kurum ekstresi yükle, temiz ve kategorili işlemlere dönüşmesini izle — elle giriş yok, kopyala-yapıştır yok.",
+        "bullets": ["Çok kipli PDF anlama", "Otomatik kategorilendirme", "Çoklu para birimi, çoklu hesap"]
+      }
+    ]
+  },
+  "testimonials": {
+    "eyebrow": "İlk kullanıcılar bayıldı",
+    "title": "Parasının kontrolünü eline alanlar",
+    "items": [
+      {
+        "quote": "Tavsiyesini gerçekten açıklayan ilk finans uygulaması. Sonunda paramın nereye gittiğini anlıyorum.",
+        "name": "Elif Y.",
+        "role": "Beta kullanıcısı"
+      },
+      {
+        "quote": "Üç PDF ekstresi bıraktım, dakikalar içinde temiz bir bütçem oldu. Koç gerçek bir danışmanla konuşmak gibi.",
+        "name": "Marcus T.",
+        "role": "Erken kullanıcı"
+      },
+      {
+        "quote": "Portföyümü ve TEFAS fonlarımı tek yerde, kaynaklarıyla takip etmek yatırım şeklimi değiştirdi.",
+        "name": "Deniz K.",
+        "role": "Beta kullanıcısı"
+      }
+    ]
+  },
+  "pricing": {
+    "eyebrow": "Fiyatlandırma",
+    "title": "Ücretsiz başla. Hazır olunca yükselt.",
+    "subtitle": "FinCoach beta süresince tamamen ücretsiz. Kart yok, gizli madde yok.",
+    "tiers": [
+      {
+        "name": "Ücretsiz",
+        "price": "₺0",
+        "period": "/ beta boyunca sonsuza dek",
+        "desc": "Bugün paranın kontrolünü almak için ihtiyacın olan her şey.",
+        "features": ["Kaynaklı Yapay Zekâ Koç", "Portföy ve bütçe takibi", "Hedefler ve fon analizi", "PDF belge içe aktarma"],
+        "cta": "Ücretsiz başla",
+        "featured": true,
+        "badge": "Güncel"
+      },
+      {
+        "name": "Pro",
+        "price": "Yakında",
+        "period": "",
+        "desc": "Daha derin analiz ve otomasyon isteyen ileri kullanıcılar için.",
+        "features": ["Gelişmiş uzman ajanlar", "Sınırsız belge içe aktarma", "Öncelikli canlı veri", "Akıllı uyarılar"],
+        "cta": "Yakında",
+        "featured": false,
+        "badge": ""
+      },
+      {
+        "name": "Ekip",
+        "price": "Konuşalım",
+        "period": "",
+        "desc": "Aileler ve danışmanlar için paylaşımlı çalışma alanları ve raporlama.",
+        "features": ["Paylaşımlı hesaplar", "Ortak hedefler", "Dışa aktarılabilir raporlar", "Özel destek"],
+        "cta": "Bize ulaş",
+        "featured": false,
+        "badge": ""
+      }
+    ]
+  },
+  "cta": {
+    "title": "Paranın kontrolünü almaya hazır mısın?",
+    "subtitle": "FinCoach'a katıl, finansal tahmini net ve rehberli bir plana dönüştür.",
+    "primary": "Ücretsiz başla",
+    "demo": "Canlı demoyu dene",
+    "demoLoading": "Demo yükleniyor…"
+  },
+  "footer": {
+    "tagline": "Yapay zekâ finans koçun — portföy, bütçe ve hedefler sade bir dille.",
+    "contactTitle": "İletişime geç",
+    "contactDesc": "Soruların, geri bildirimlerin veya iş birliği fikirlerin mi var? Seni duymak isteriz.",
+    "columns": {
+      "product": "Ürün",
+      "company": "Şirket",
+      "legal": "Yasal"
+    },
+    "links": {
+      "features": "Özellikler",
+      "pricing": "Fiyatlandırma",
+      "demo": "Canlı demo",
+      "coach": "Yapay Zekâ Koç",
+      "about": "Hakkımızda",
+      "contact": "İletişim",
+      "privacy": "Gizlilik",
+      "terms": "Koşullar",
+      "disclaimer": "Yasal uyarı"
+    },
+    "rights": "Tüm hakları saklıdır.",
+    "madeWith": "Bir hackathon prototipi — finansal tavsiye değildir."
+  }
+}

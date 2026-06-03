@@ -91,3 +91,55 @@
 .chat-cursor-blink {
   animation: chat-cursor-blink 1.1s steps(1, end) infinite;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Landing page ambient motion
+   GPU-friendly (transform/opacity only). All decorative; every
+   loop is paused under prefers-reduced-motion further down.
+   ───────────────────────────────────────────────────────────── */
+
+/* Slow drifting aurora glow blobs behind the hero */
+@keyframes aurora-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(4%, -3%, 0) scale(1.08); }
+  66%      { transform: translate3d(-3%, 4%, 0) scale(0.96); }
+}
+.animate-aurora { animation: aurora-drift 18s ease-in-out infinite; }
+.animate-aurora-slow { animation: aurora-drift 26s ease-in-out infinite reverse; }
+
+/* Gentle 3D float for the layered hero cards / orbs */
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-12px); }
+}
+.animate-float { animation: float-y 6s ease-in-out infinite; }
+
+/* Continuous marquee for the trust-source strip (two copies side by side) */
+@keyframes marquee-x {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee-x 28s linear infinite; }
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+/* Faint blueprint grid, fading out toward the edges */
+.landing-grid {
+  background-image:
+    linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 35%, transparent 75%);
+          mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 35%, transparent 75%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora,
+  .animate-aurora-slow,
+  .animate-float,
+  .animate-marquee {
+    animation: none !important;
+  }
+}

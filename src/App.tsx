@@ -19,6 +19,7 @@ import { Settings } from "@/components/settings/Settings";
 import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { AuthPage } from "@/components/auth/AuthPage";
+import { LandingPage } from "@/components/landing/LandingPage";
 import { DemoTour, TourReplayButton } from "@/components/tour/DemoTour";
 import { useAuthStore, useConversationStore, useUserStore, useTourStore } from "@/store";
 import { buildLocalizedPath, getLanguageFromPath, isSupportedLanguage, stripLanguagePrefix } from "@/lib/routing";
@@ -340,15 +341,20 @@ export default function App() {
     const appPathForAuth = stripLanguagePrefix(location.pathname);
     const isRegisterPath = appPathForAuth === "/register";
     const isAuthPath = appPathForAuth === "/login" || appPathForAuth === "/register";
-    if (!isAuthPath) {
-      return <Navigate to={`/${activeLanguage}/login`} replace />;
+    if (isAuthPath) {
+      return (
+        <>
+          <AuthPage initialMode={isRegisterPath ? "register" : "login"} />
+          {languageSwitcher}
+        </>
+      );
     }
-    return (
-      <>
-        <AuthPage initialMode={isRegisterPath ? "register" : "login"} />
-        {languageSwitcher}
-      </>
-    );
+    // Logged-out visitors get the marketing landing page. Normalize to the
+    // clean language-root URL (/en, /tr) so it isn't served at /dashboard etc.
+    if (appPathForAuth !== "/") {
+      return <Navigate to={`/${activeLanguage}`} replace />;
+    }
+    return <LandingPage />;
   }
   if (!user.has_onboarded) {
     return (

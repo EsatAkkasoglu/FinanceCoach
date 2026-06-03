@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
@@ -19,5 +20,10 @@ export default defineConfig({
     build: {
         target: "es2022",
         sourcemap: true,
+    },
+    test: {
+        include: ["src/**/*.{test,spec}.{ts,tsx}"],
+        exclude: ["**/node_modules/**", "**/src-tauri/**", "**/backend/**"],
+        environment: "happy-dom",
     },
 });

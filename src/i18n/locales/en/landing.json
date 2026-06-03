@@ -1,0 +1,202 @@
+{
+  "nav": {
+    "features": "Features",
+    "howItWorks": "How it works",
+    "pricing": "Pricing",
+    "contact": "Contact",
+    "signIn": "Sign in",
+    "getStarted": "Get started"
+  },
+  "hero": {
+    "badge": "Powered by Google Gemini",
+    "titleLead": "Money decisions,",
+    "titleAccent": "made clear.",
+    "subtitle": "FinCoach is your AI finance coach — portfolio, budget, funds, and goals, all explained in plain language by seven specialist agents.",
+    "ctaPrimary": "Get started free",
+    "ctaDemo": "Explore live demo",
+    "ctaDemoLoading": "Loading demo…",
+    "ctaSecondary": "See how it works",
+    "microcopy": "No card needed · Sample data included · Yours in seconds",
+    "card": {
+      "coachQuestion": "How is my portfolio doing this month?",
+      "coachAnswer": "You're up 12.4% — driven mostly by tech. Want me to rebalance toward your risk target?",
+      "citation": "Source · yfinance",
+      "balanceLabel": "Net worth",
+      "balanceDelta": "+12.4%",
+      "goalLabel": "Emergency fund",
+      "goalProgress": "62% of ₺50,000"
+    }
+  },
+  "trust": {
+    "label": "Real data, from sources you can check",
+    "sources": ["Google Gemini", "yfinance", "TEFAS", "SEC EDGAR", "NewsAPI", "Fear & Greed"]
+  },
+  "stats": {
+    "items": [
+      { "value": "7", "label": "Specialist AI agents" },
+      { "value": "3", "label": "Currencies: ₺ $ €" },
+      { "value": "100%", "label": "Answers with citations" },
+      { "value": "24/7", "label": "Live market data" }
+    ]
+  },
+  "features": {
+    "eyebrow": "Everything in one place",
+    "title": "One app for your whole financial life",
+    "subtitle": "From the daily budget to the long-term plan — FinCoach connects the pieces and explains the why.",
+    "items": [
+      {
+        "icon": "coach",
+        "title": "AI Coach",
+        "desc": "Ask anything about your money. Specialist agents research markets, funds, and your portfolio, then answer with sources you can verify."
+      },
+      {
+        "icon": "portfolio",
+        "title": "Portfolio tracking",
+        "desc": "Follow stocks and crypto with live prices, performance charts, and instant, plain-language insights."
+      },
+      {
+        "icon": "budget",
+        "title": "Smart budgeting",
+        "desc": "See exactly where your money goes — categorized transactions, subscriptions, and accounts in ₺, $, or €."
+      },
+      {
+        "icon": "funds",
+        "title": "Fund analysis",
+        "desc": "Research and compare Turkish funds (TEFAS) side by side, without ever leaving the app."
+      },
+      {
+        "icon": "goals",
+        "title": "Goal planning",
+        "desc": "Set financial goals and watch progress with clear milestones and honest projections."
+      },
+      {
+        "icon": "documents",
+        "title": "Document import",
+        "desc": "Drop in a PDF statement and FinCoach turns it into clean, categorized transactions automatically."
+      }
+    ]
+  },
+  "how": {
+    "eyebrow": "How it works",
+    "title": "From data to decisions in three steps",
+    "subtitle": "No spreadsheets, no jargon. Just answers you can act on.",
+    "steps": [
+      {
+        "title": "Add your data",
+        "desc": "Import a statement, add your holdings, or start instantly with sample data. Setup takes seconds."
+      },
+      {
+        "title": "Ask your coach",
+        "desc": "Chat in plain language. Every answer is backed by real market data and linked citations."
+      },
+      {
+        "title": "Reach your goals",
+        "desc": "Track budgets, grow your portfolio, and hit milestones with guidance at every step."
+      }
+    ]
+  },
+  "showcase": {
+    "rows": [
+      {
+        "eyebrow": "Trustworthy by design",
+        "title": "Answers you can actually trust",
+        "desc": "FinCoach never hand-waves. Every market claim comes with a citation, so you can check the source and decide for yourself.",
+        "bullets": ["Linked sources on every answer", "Live prices, news, and sentiment", "Plain-language reasoning you can follow"]
+      },
+      {
+        "eyebrow": "Effortless setup",
+        "title": "From PDF to insight in seconds",
+        "desc": "Upload a bank or brokerage statement and watch it become clean, categorized transactions — no manual entry, no copy-paste.",
+        "bullets": ["Multimodal PDF understanding", "Automatic categorization", "Multi-currency, multi-account"]
+      }
+    ]
+  },
+  "testimonials": {
+    "eyebrow": "Loved by early users",
+    "title": "People who took control of their money",
+    "items": [
+      {
+        "quote": "It's the first finance app that actually explains its advice. I finally understand where my money goes.",
+        "name": "Elif Y.",
+        "role": "Beta tester"
+      },
+      {
+        "quote": "I dropped in three PDF statements and had a clean budget in minutes. The coach feels like talking to a real advisor.",
+        "name": "Marcus T.",
+        "role": "Early user"
+      },
+      {
+        "quote": "Tracking my portfolio and my TEFAS funds in one place — with citations — changed how I invest.",
+        "name": "Deniz K.",
+        "role": "Beta tester"
+      }
+    ]
+  },
+  "pricing": {
+    "eyebrow": "Pricing",
+    "title": "Start free. Upgrade when you're ready.",
+    "subtitle": "FinCoach is completely free while in beta. No card, no catch.",
+    "tiers": [
+      {
+        "name": "Free",
+        "price": "₺0",
+        "period": "/ forever in beta",
+        "desc": "Everything you need to take control of your money today.",
+        "features": ["AI Coach with citations", "Portfolio & budget tracking", "Goals and fund analysis", "PDF document import"],
+        "cta": "Get started free",
+        "featured": true,
+        "badge": "Current"
+      },
+      {
+        "name": "Pro",
+        "price": "Soon",
+        "period": "",
+        "desc": "For power users who want deeper analysis and automation.",
+        "features": ["Advanced specialist agents", "Unlimited document import", "Priority live data", "Smart alerts"],
+        "cta": "Coming soon",
+        "featured": false,
+        "badge": ""
+      },
+      {
+        "name": "Team",
+        "price": "Let's talk",
+        "period": "",
+        "desc": "Shared workspaces and reporting for families and advisors.",
+        "features": ["Shared accounts", "Collaborative goals", "Exportable reports", "Dedicated support"],
+        "cta": "Contact us",
+        "featured": false,
+        "badge": ""
+      }
+    ]
+  },
+  "cta": {
+    "title": "Ready to take control of your money?",
+    "subtitle": "Join FinCoach and turn financial guesswork into a clear, guided plan.",
+    "primary": "Get started free",
+    "demo": "Try the live demo",
+    "demoLoading": "Loading demo…"
+  },
+  "footer": {
+    "tagline": "Your AI finance coach — portfolio, budget, and goals in plain language.",
+    "contactTitle": "Get in touch",
+    "contactDesc": "Questions, feedback, or partnership ideas? We'd love to hear from you.",
+    "columns": {
+      "product": "Product",
+      "company": "Company",
+      "legal": "Legal"
+    },
+    "links": {
+      "features": "Features",
+      "pricing": "Pricing",
+      "demo": "Live demo",
+      "coach": "AI Coach",
+      "about": "About",
+      "contact": "Contact",
+      "privacy": "Privacy",
+      "terms": "Terms",
+      "disclaimer": "Disclaimer"
+    },
+    "rights": "All rights reserved.",
+    "madeWith": "A hackathon prototype — not financial advice."
+  }
+}
