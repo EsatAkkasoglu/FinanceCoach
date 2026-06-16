@@ -4,10 +4,10 @@
 
 @layer base {
   :root {
-    --bg: 224 14% 6%;
-    --surface: 224 14% 9%;
-    --surface-2: 224 14% 12%;
-    --border: 224 14% 18%;
+    --bg: 228 16% 5%;
+    --surface: 227 15% 8%;
+    --surface-2: 226 14% 12%;
+    --border: 225 14% 17%;
     --text: 210 20% 96%;
     --text-primary: 210 20% 96%; /* alias of --text — keep in sync */
     --text-muted: 215 14% 64%;
@@ -53,15 +53,33 @@
 }
 
 @layer components {
+  /* Frosted-glass card — semi-transparent so ambient 3D/glow layers read
+     through it. blur-md (not xl) keeps compositing cheap with many cards. */
   .card {
-    @apply rounded-2xl border border-line bg-surface p-6;
+    @apply rounded-2xl border border-line/80 bg-surface/75 p-6 shadow-glass backdrop-blur-md;
   }
   .card-muted {
-    @apply rounded-2xl border border-line bg-surface-raised p-4;
+    @apply rounded-2xl border border-line/80 bg-surface-raised/80 p-4 backdrop-blur-md;
   }
   /* Canonical interactive-card hover lift. Compose with .card. */
   .card-hover { @apply transition-shadow hover:shadow-card-hover; }
   .num { @apply font-mono tabular-nums; }
+
+  /* Standalone glass surfaces (headers, rails, floating panels). */
+  .glass {
+    @apply border border-white/[0.06] bg-surface/60 shadow-glass backdrop-blur-xl;
+  }
+  .glass-strong {
+    @apply border border-white/[0.08] bg-surface/85 shadow-glass backdrop-blur-xl;
+  }
+
+  /* Brand gradient headline / numeral treatments. */
+  .text-gradient {
+    @apply bg-gradient-to-r from-accent via-emerald-400 to-teal-300 bg-clip-text text-transparent;
+  }
+  .text-gradient-soft {
+    @apply bg-gradient-to-b from-white via-white to-white/60 bg-clip-text text-transparent;
+  }
 }
 
 /* Streaming chat token fade — applies a soft mask gradient to the trailing
@@ -135,11 +153,24 @@
           mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 35%, transparent 75%);
 }
 
+/* ─────────────────────────────────────────────────────────────
+   In-app ambient backdrop (behind dashboard & co.)
+   Static radial glows — the moving layer is the WebGL canvas.
+   ───────────────────────────────────────────────────────────── */
+.app-glow {
+  background:
+    radial-gradient(ellipse 50% 38% at 18% -6%, hsl(157 70% 45% / 0.09), transparent 70%),
+    radial-gradient(ellipse 42% 34% at 88% 8%, hsl(170 65% 45% / 0.06), transparent 70%),
+    radial-gradient(ellipse 60% 44% at 50% 110%, hsl(157 70% 40% / 0.05), transparent 70%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-aurora,
   .animate-aurora-slow,
   .animate-float,
-  .animate-marquee {
+  .animate-marquee,
+  .animate-shimmer,
+  .animate-pulse-glow {
     animation: none !important;
   }
 }

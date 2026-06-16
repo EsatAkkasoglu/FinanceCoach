@@ -105,5 +105,15 @@
   "addHoldingsHint": "Portföy'e giderek ilk varlığını ekle",
   "savingsTarget": "hedef",
   "savingsStrong": "Bu ay güçlü bir birikim hızı tutturuyorsunuz.",
-  "savingsLow": "Birikim oranınızı daha da yükseltme fırsatı var."
+  "savingsLow": "Birikim oranınızı daha da yükseltme fırsatı var.",
+  "news": {
+    "title": "Piyasa başlıkları",
+    "empty": "Henüz başlık yok — toplayıcı çalıştığında görünecek.",
+    "source": "Otomatik toplandı ve duygu etiketlendi",
+    "sentiment": {
+      "positive": "Pozitif",
+      "neutral": "Nötr",
+      "negative": "Negatif"
+    }
+  }
 }

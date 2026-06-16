@@ -26,6 +26,9 @@ def fixtures_dir() -> Path:
 def client(tmp_path, monkeypatch):
     db_file = tmp_path / "test.db"
     monkeypatch.setenv("FINCOACH_DB_PATH", str(db_file))
+    # Keep the suite hermetic: don't let the lifespan start the background news
+    # poller (it would otherwise schedule a live feed fetch during tests).
+    monkeypatch.setenv("FINCOACH_NEWS_COLLECTOR_ENABLED", "false")
 
     # Force settings + db modules to re-read the env var.
     # Also reload every module that captured a `SessionLocal` reference at

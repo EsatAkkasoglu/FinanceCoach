@@ -41,6 +41,35 @@ class Settings(BaseSettings):
     # Admin allowlist (comma-separated usernames). Empty = admin endpoints disabled.
     admin_usernames: str = Field(default="", alias="FINCOACH_ADMIN_USERNAMES")
 
+    # News collector — background poller that fetches + enriches headlines into
+    # the news_articles table so /chat and the dashboard read pre-computed
+    # results (ms-level) instead of hitting feeds on every request.
+    #
+    # Deployment note: the in-process scheduler only fires while the process is
+    # alive. On Cloud Run with min-instances=0 the instance freezes when idle,
+    # so set FINCOACH_NEWS_COLLECTOR_ENABLED=false there and drive the poll via
+    # Cloud Scheduler → POST /news/poll instead. On the desktop sidecar leave it
+    # enabled (the process is always running while the app is open).
+    news_collector_enabled: bool = Field(default=True, alias="FINCOACH_NEWS_COLLECTOR_ENABLED")
+    news_poll_minutes: int = Field(default=10, alias="FINCOACH_NEWS_POLL_MINUTES")
+    # Comma-separated standing RSS feed URLs. Source name is derived from each
+    # feed's channel title, so only URLs are needed here.
+    news_feeds: str = Field(
+        default=(
+            "https://www.coindesk.com/arc/outboundfeeds/rss/,"
+            "https://cointelegraph.com/rss,"
+            "https://tr.investing.com/rss/news.rss,"
+            "https://www.ntv.com.tr/ekonomi.rss"
+        ),
+        alias="FINCOACH_NEWS_FEEDS",
+    )
+    # Gemini batch enrichment (sentiment + category + 1-line summary). Disable to
+    # store raw headlines only (zero LLM cost / quota use).
+    news_enrich_enabled: bool = Field(default=True, alias="FINCOACH_NEWS_ENRICH_ENABLED")
+    news_enrich_batch_size: int = Field(default=40, alias="FINCOACH_NEWS_ENRICH_BATCH_SIZE")
+    # Articles older than this are pruned at the end of each poll.
+    news_retention_days: int = Field(default=14, alias="FINCOACH_NEWS_RETENTION_DAYS")
+
     # Auth
     jwt_secret: str = Field(default="dev-secret-change-me-in-production", alias="FINCOACH_JWT_SECRET")
     jwt_algorithm: str = "HS256"
@@ -72,6 +101,18 @@ class Settings(BaseSettings):
     @property
     def extract_model(self) -> str:
         return self.gemini_extract_model or self.gemini_model
+
+    @property
+    def news_feed_urls(self) -> list[str]:
+        """Parsed, de-duplicated list of standing RSS feed URLs."""
+        seen: set[str] = set()
+        urls: list[str] = []
+        for raw in self.news_feeds.split(","):
+            url = raw.strip()
+            if url and url not in seen:
+                seen.add(url)
+                urls.append(url)
+        return urls
 
     # LangSmith tracing
     langsmith_tracing: bool = Field(default=False, alias="LANGSMITH_TRACING")

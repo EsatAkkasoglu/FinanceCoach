@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import quote
 
@@ -20,10 +21,16 @@ import feedparser
 import requests
 from joblib import Memory
 from langchain_core.tools import tool
+from sqlalchemy import or_, select
 
+from app.db.models import NewsArticle
+from app.db.session import SessionLocal
 from app.settings import settings
 
 log = logging.getLogger("fincoach.tools.news")
+
+# How far back the DB-first path looks before falling through to live feeds.
+_DB_NEWS_WINDOW_HOURS = 48
 _cache = Memory(location=".joblib_cache", verbose=0)
 
 # A ticker that looks like a TEFAS fund code: 2-6 ASCII letters, no digits.
@@ -101,6 +108,10 @@ def _normalize_rss(feed: Any, *, limit: int, default_source: str) -> list[dict[s
             "published_at": e.get("published"),
             "url": e.link,
             "snippet": e.get("summary", "")[:240],
+            # Live feeds aren't enriched — keep the key set uniform with the
+            # DB-first path so callers see a stable shape.
+            "sentiment": None,
+            "category": None,
         }
         for e in feed.entries[:limit]
     ]
@@ -177,9 +188,94 @@ def _fund_news(code: str, limit: int) -> list[dict[str, Any]]:
     return _fetch_google_news_rss(f"{title} fon", turkish=True, limit=limit)
 
 
+# ── DB-first path (background collector's news_article table) ─────────────────
+
+
+def _db_search_terms(raw: str, ac: str) -> list[str]:
+    """Candidate text terms for matching the query against stored headlines.
+
+    Mirrors the live-path resolution (ticker → name) so a 'BTC-USD' query also
+    matches 'Bitcoin' headlines; always falls back to the raw query so free-text
+    topics still match.
+    """
+    if not raw or len(raw) < 2:
+        return []
+    up = raw.upper()
+    if ac == "crypto" or _is_crypto_ticker(raw):
+        terms = [_resolve_crypto_name(raw), up.split("-")[0]]
+    elif ac == "fund":
+        # Only resolve fund titles on an explicit hint — the bare _FUND_CODE_RE
+        # also matches common all-caps words ("FED", "IT"), and resolving them
+        # would fire a TEFAS lookup on every such free-text query. Unhinted fund
+        # codes still resolve correctly on the live fallback path below.
+        title = _resolve_fund_title(raw)
+        terms = [title] if title else [raw]
+    elif _is_turkish_ticker(raw):
+        terms = [up.removesuffix(".IS").removesuffix(".E")]
+    else:
+        terms = [raw]
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in terms:
+        t = (t or "").strip()
+        if len(t) < 2 or t.lower() in seen:
+            continue
+        seen.add(t.lower())
+        out.append(t)
+    return out
+
+
+def _db_article_to_item(a: NewsArticle) -> dict[str, Any]:
+    return {
+        "title": a.title,
+        "source": a.source,
+        "published_at": a.published_at.isoformat() if a.published_at else None,
+        "url": a.url,
+        "snippet": a.snippet or a.summary or "",
+        # Bonus pre-computed enrichment the agent may use (or ignore).
+        "sentiment": a.sentiment,
+        "category": a.category,
+    }
+
+
+def _db_news_lookup(raw: str, ac: str, limit: int) -> list[dict[str, Any]]:
+    """Serve recent stored headlines matching the query. Empty list = fall through."""
+    terms = _db_search_terms(raw, ac)
+    if not terms:
+        return []
+    cutoff = datetime.utcnow() - timedelta(hours=_DB_NEWS_WINDOW_HOURS)
+    try:
+        with SessionLocal() as db:
+            conds = []
+            for t in terms:
+                like = f"%{t}%"
+                conds.append(NewsArticle.title.ilike(like))
+                conds.append(NewsArticle.snippet.ilike(like))
+            stmt = (
+                select(NewsArticle)
+                .where(NewsArticle.fetched_at >= cutoff, or_(*conds))
+                .order_by(
+                    NewsArticle.published_at.desc().nullslast(),
+                    NewsArticle.fetched_at.desc(),
+                )
+                .limit(limit)
+            )
+            rows = db.execute(stmt).scalars().all()
+    except Exception as exc:  # noqa: BLE001 — DB-first is best-effort; live path is the fallback
+        log.warning("DB-first news lookup failed (%s); falling back to live feeds", exc)
+        return []
+    return [_db_article_to_item(a) for a in rows]
+
+
 @tool
 def search_news(query: str, limit: int = 5, asset_class: str = "") -> list[dict[str, Any]]:
-    """Search recent finance news. Returns title, source, published_at, url, snippet.
+    """Search recent finance news.
+
+    Returns a list of items with a uniform shape: title, source, published_at,
+    url, snippet, sentiment, category. DB-served results (from the background
+    collector) carry pre-computed sentiment (positive/neutral/negative) and
+    category; live-feed results return null for both.
 
     Args:
         query: ticker, fund code, or free-text topic. Raw tickers like
@@ -193,6 +289,14 @@ def search_news(query: str, limit: int = 5, asset_class: str = "") -> list[dict[
     """
     raw = (query or "").strip()
     ac = (asset_class or "").strip().lower()
+
+    # DB-first: the background collector pre-fetches + enriches headlines into
+    # the news_article table. Serve fresh matches from there (ms-level); fall
+    # through to the live RSS/NewsAPI paths below when there's no coverage (e.g.
+    # a US ticker outside the polled feeds, or the collector hasn't run yet).
+    cached = _db_news_lookup(raw, ac, limit)
+    if cached:
+        return cached
 
     # Crypto — resolve symbol → name, blend Yahoo + Google News + crypto RSS.
     if ac == "crypto" or _is_crypto_ticker(raw):
@@ -232,6 +336,8 @@ def search_news(query: str, limit: int = 5, asset_class: str = "") -> list[dict[
             "published_at": a["publishedAt"],
             "url": a["url"],
             "snippet": (a.get("description") or "")[:240],
+            "sentiment": None,
+            "category": None,
         }
         for a in articles
     ]

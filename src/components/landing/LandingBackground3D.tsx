@@ -23,6 +23,11 @@ const LINK_DIST = 2.4; // connect nodes closer than this (world units)
 const MAX_PAIRS = NODE_COUNT * 6; // hard cap on drawn links
 const FIELD = { x: 18, y: 11, z: 6 }; // bounds the nodes wrap within
 
+// Scroll color story: brand green at the hero, shifting toward teal/mint as
+// the visitor travels down the page.
+const COLOR_TOP = new THREE.Color(0x1fb57a);
+const COLOR_DEEP = new THREE.Color(0x2dd4bf);
+
 export default function LandingBackground3D() {
   const mountRef = useRef<HTMLDivElement>(null);
 
@@ -184,6 +189,15 @@ export default function LandingBackground3D() {
       group.rotation.y = frame * 0.0006 + cmx * 0.5 + s * 0.6;
       group.rotation.x = cmy * 0.35 + s * 0.15;
       camera.position.z = 14 - s * 1.6;
+
+      // Scroll story: hue drifts green → teal, the link web brightens, and the
+      // camera sways sideways so each section reads from a new angle.
+      const hue = Math.min(1, s * 0.55);
+      nodeMat.color.lerpColors(COLOR_TOP, COLOR_DEEP, hue);
+      linkMat.color.copy(nodeMat.color);
+      linkMat.opacity = 0.14 + hue * 0.1;
+      camera.position.x = Math.sin(s * 1.35) * 1.1;
+      camera.lookAt(0, 0, 0);
 
       renderer.render(scene, camera);
     }

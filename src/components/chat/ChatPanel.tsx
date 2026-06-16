@@ -753,7 +753,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                     "flex flex-col gap-2",
                     m.role === "user"
                       ? "max-w-[75%] items-end"
-                      : "w-full max-w-3xl items-stretch"
+                      : "w-full max-w-4xl items-stretch"
                   )}
                 >
                 <div
@@ -776,7 +776,7 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
                   ) : (
                     <div
                       className={cn(
-                        "prose prose-invert prose-sm max-w-[68ch]",
+                        "prose prose-invert prose-sm max-w-[72ch]",
                         isStreamingThis && "chat-streaming-fade"
                       )}
                     >

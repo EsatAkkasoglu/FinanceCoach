@@ -12,7 +12,7 @@
  * - Card hover: subtle accent glow on hover
  * - Progressive feel: skeletons reveal before data, cards animate in individually
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -37,10 +37,15 @@ import { useFxRates, type UseFxRates } from "@/lib/fx";
 import { cn } from "@/lib/cn";
 import { assetColor, pnlColor, chartTooltipContentStyle, chartTooltipItemStyle } from "@/lib/chartColors";
 import { Sparkline, AreaSparkline, MiniBars, InsightLine, DonutRing } from "@/components/ui/dataviz";
+import { TiltCard } from "@/components/ui/TiltCard";
+import { NewsPanel } from "@/components/dashboard/NewsPanel";
 import { useDashboardStore, useUserStore, useAuthStore } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 import { buildLocalizedPath, getLanguageFromPath } from "@/lib/routing";
+
+// 3D wave terrain behind the hero — code-split so the dashboard paints first.
+const WealthWave3D = lazy(() => import("@/components/three/WealthWave3D"));
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -72,6 +77,17 @@ const CARD_VAR = {
   visible: { opacity: 1, y: 0,  scale: 1,
     transition: { duration: 0.38, ease: [0.4, 0, 0.2, 1] } },
 };
+
+/** Stagger-entrance grid cell + 3D pointer tilt around the glass card. */
+function KpiCard({ span, children }: { span: string; children: ReactNode }) {
+  return (
+    <motion.div variants={CARD_VAR} className={span}>
+      <TiltCard className="h-full">
+        <div className="card card-hover h-full">{children}</div>
+      </TiltCard>
+    </motion.div>
+  );
+}
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
@@ -325,6 +341,9 @@ export function Dashboard() {
 
         {/* Briefing — full bleed */}
         <BriefingCard items={briefing} loading={isLoading} fetchedAt={briefingFetchedAt} />
+
+        {/* Market headlines — pre-collected & sentiment-tagged by the backend */}
+        <NewsPanel span="md:col-span-2 lg:col-span-12" limit={6} />
       </motion.div>
 
       {/* Next step CTA */}
@@ -355,6 +374,7 @@ function HeroStrip({
 }) {
   const { t } = useTranslation("dashboard");
   const fx = useFxRates();
+  const reduce = useReducedMotion();
   const displayCcy = fx.rates ? fx.target : "USD";
 
   const { todayDelta, totalValue, hasDelta } = useMemo(() => {
@@ -378,7 +398,7 @@ function HeroStrip({
 
   return (
     <motion.div variants={CARD_VAR} className="md:col-span-2 lg:col-span-12">
-      <div className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-surface-raised via-surface to-surface p-6 md:p-8">
+      <div className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-surface-raised/90 via-surface/90 to-surface/90 p-6 md:p-8">
         {/* Subtle grid pattern */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.03]"
@@ -387,6 +407,20 @@ function HeroStrip({
             backgroundSize: "32px 32px",
           }}
         />
+        {/* 3D market-terrain wave, faded at top/bottom so the copy stays legible */}
+        {!reduce && (
+          <Suspense fallback={null}>
+            <div
+              className="pointer-events-none absolute inset-0 opacity-60"
+              style={{
+                maskImage: "linear-gradient(to bottom, transparent 0%, #000 35%, #000 82%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 35%, #000 82%, transparent 100%)",
+              }}
+            >
+              <WealthWave3D />
+            </div>
+          </Suspense>
+        )}
 
         <div className="relative flex flex-wrap items-center gap-5">
           {/* Avatar + greeting */}
@@ -412,7 +446,7 @@ function HeroStrip({
             ) : totalValue > 0 ? (
               <>
                 <p className="text-overline uppercase text-content-muted">{t("netWorth")}</p>
-                <p className="num text-4xl font-bold tracking-tight md:text-5xl">
+                <p className="num text-gradient-soft text-4xl font-bold tracking-tight md:text-5xl">
                   {formatCurrency(countedValue, displayCcy)}
                 </p>
                 {hasDelta && todayDelta !== 0 && (
@@ -462,7 +496,7 @@ function NetWorthCard({ totals, holdings, history, loading }: {
   const spark = history.map((h) => h.value);
 
   return (
-    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-7">
+    <KpiCard span="lg:col-span-7">
       <CardHeader icon={Activity} label={t("performance")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : totals?.count && totals.count > 0 ? (
         <>
@@ -494,7 +528,7 @@ function NetWorthCard({ totals, holdings, history, loading }: {
           <p className="mt-1 text-caption text-content-muted">{t("addHoldingsHint")}</p>
         </div>
       )}
-    </motion.div>
+    </KpiCard>
   );
 }
 
@@ -530,7 +564,7 @@ function CashFlowCard({ budget, loading }: { budget: BudgetSummary | null; loadi
   const hasFlow = (income ?? 0) > 0 || (expense ?? 0) > 0;
 
   return (
-    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-4">
+    <KpiCard span="lg:col-span-4">
       <CardHeader icon={Wallet} label={t("cashFlow")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : !hasFlow ? (
         <p className="mt-3 text-sm text-content-muted">{t("cashFlowEmpty")}</p>
@@ -554,7 +588,7 @@ function CashFlowCard({ budget, loading }: { budget: BudgetSummary | null; loadi
           </div>
         </>
       )}
-    </motion.div>
+    </KpiCard>
   );
 }
 
@@ -567,7 +601,7 @@ function SavingsRateCard({ budget, loading }: { budget: BudgetSummary | null; lo
   const counted = useCountUp(rate ?? 0);
 
   return (
-    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-4">
+    <KpiCard span="lg:col-span-4">
       <CardHeader icon={PiggyBank} label={t("savingsRate")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={3} hasBar /> : rate == null ? (
         <p className="mt-3 text-sm text-content-muted">{t("noBudgetData")}</p>
@@ -599,7 +633,7 @@ function SavingsRateCard({ budget, loading }: { budget: BudgetSummary | null; lo
           </InsightLine>
         </>
       )}
-    </motion.div>
+    </KpiCard>
   );
 }
 
@@ -634,7 +668,7 @@ function AllocationCard({ holdings, riskProfile, loading }: {
   });
 
   return (
-    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-5">
+    <KpiCard span="lg:col-span-5">
       <CardHeader icon={Target} label={t("allocationVsTarget")} iconColor="text-accent" />
       {loading ? <SkeletonCard lines={4} /> : !hasData ? (
         <p className="mt-3 text-sm text-content-muted">{t("addHoldingsForBreakdown")}</p>
@@ -685,7 +719,7 @@ function AllocationCard({ holdings, riskProfile, loading }: {
           </ul>
         </div>
       )}
-    </motion.div>
+    </KpiCard>
   );
 }
 
@@ -704,7 +738,7 @@ function TopMoverCard({ holdings, loading }: { holdings: Holding[]; loading: boo
   const positive = (top?.change_today ?? 0) >= 0;
 
   return (
-    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-4">
+    <KpiCard span="lg:col-span-4">
       <CardHeader icon={Flame} label={t("topMover")} iconColor="text-warning" />
       {loading ? <SkeletonCard lines={3} /> : !top ? (
         <p className="mt-3 text-sm text-content-muted">{t("noMoverData")}</p>
@@ -733,7 +767,7 @@ function TopMoverCard({ holdings, loading }: { holdings: Holding[]; loading: boo
           </InsightLine>
         </>
       )}
-    </motion.div>
+    </KpiCard>
   );
 }
 
@@ -750,7 +784,7 @@ function GoalCard({ goals, loading }: { goals: Goal[]; loading: boolean }) {
     : null;
 
   return (
-    <motion.div variants={CARD_VAR} className="card card-hover lg:col-span-4">
+    <KpiCard span="lg:col-span-4">
       <CardHeader icon={Target} label={t("goalProgress")} iconColor="text-purple-400" />
       {loading ? <SkeletonCard lines={2} /> : !top ? (
         <p className="mt-3 text-sm text-content-muted">{t("goalNoGoals")}</p>
@@ -786,7 +820,7 @@ function GoalCard({ goals, loading }: { goals: Goal[]; loading: boolean }) {
           )}
         </>
       )}
-    </motion.div>
+    </KpiCard>
   );
 }
 

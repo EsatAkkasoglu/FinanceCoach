@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "PowerShell(python \"C:\\\\Users\\\\esat4\\\\.claude\\\\skills\\\\ui-ux-pro-max\\\\scripts\\\\search.py\" \"fintech AI finance coach crypto dashboard dark glassmorphism 3d modern\" --design-system -p \"FinCoach\")"
     ]
   }
 }

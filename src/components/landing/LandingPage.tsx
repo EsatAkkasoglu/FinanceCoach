@@ -13,10 +13,12 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   motion,
+  useInView,
   useMotionValue,
   useReducedMotion,
   useSpring,
   useTransform,
+  useVelocity,
   type MotionValue,
 } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -47,6 +49,7 @@ import { useAuthStore } from "@/store";
 import { buildLocalizedPath, getLanguageFromPath, type SupportedLanguage } from "@/lib/routing";
 import { toast } from "sonner";
 import { HeroVisual } from "./HeroVisual";
+import { TiltCard } from "@/components/ui/TiltCard";
 
 // WebGL constellation is code-split so it never blocks the hero's first paint.
 const LandingBackground3D = lazy(() => import("./LandingBackground3D"));
@@ -129,6 +132,107 @@ function useScrollY() {
   return scrollY;
 }
 
+/** Whole-page scroll progress 0…1 (same manual pattern as useScrollY). */
+function useDocProgress() {
+  const progress = useMotionValue(0);
+  useEffect(() => {
+    const update = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      progress.set(max > 0 ? Math.min(1, window.scrollY / max) : 0);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [progress]);
+  return progress;
+}
+
+/**
+ * Scrub progress (0…1) of a tall wrapper as it travels through the viewport —
+ * drives the pinned showcase. 0 = wrapper top hits viewport top, 1 = wrapper
+ * bottom hits viewport bottom.
+ */
+function useElementProgress(ref: React.RefObject<HTMLElement>) {
+  const progress = useMotionValue(0);
+  useEffect(() => {
+    const update = () => {
+      const el = ref.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const total = rect.height - window.innerHeight;
+      progress.set(total > 0 ? Math.min(1, Math.max(0, -rect.top / total)) : 0);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [ref, progress]);
+  return progress;
+}
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+}
+
+/** Thin gradient bar along the top edge tracking page scroll. */
+function ScrollProgressBar() {
+  const reduce = useReducedMotion();
+  const progress = useDocProgress();
+  const smoothed = useSpring(progress, { stiffness: 180, damping: 28, mass: 0.3 });
+  return (
+    <motion.div
+      aria-hidden="true"
+      style={{ scaleX: reduce ? progress : smoothed }}
+      className="fixed inset-x-0 top-0 z-[60] h-0.5 origin-left bg-gradient-to-r from-accent via-emerald-400 to-teal-300"
+    />
+  );
+}
+
+/**
+ * Headline that reveals word by word as it scrolls into view — each word
+ * rises out of an overflow-hidden slot with a small stagger.
+ */
+function WordReveal({ text, className }: { text: string; className?: string }) {
+  const reduce = useReducedMotion();
+  if (reduce) return <h2 className={className}>{text}</h2>;
+  const words = text.split(" ");
+  return (
+    <h2 className={className} aria-label={text}>
+      {words.map((word, i) => (
+        <span key={i} aria-hidden="true" className="inline-block overflow-hidden align-bottom">
+          <motion.span
+            className="inline-block"
+            initial={{ y: "110%" }}
+            whileInView={{ y: 0 }}
+            viewport={{ once: true, margin: "-70px" }}
+            transition={{ duration: 0.55, delay: i * 0.055, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {word}
+            {i < words.length - 1 ? " " : ""}
+          </motion.span>
+        </span>
+      ))}
+    </h2>
+  );
+}
+
 /* ── scroll-reveal wrapper ── */
 function Reveal({
   children,
@@ -172,9 +276,10 @@ function SectionHeading({
           {eyebrow}
         </span>
       </Reveal>
-      <Reveal delay={0.05}>
-        <h2 className="mt-4 text-h1 font-bold tracking-tight md:text-display">{title}</h2>
-      </Reveal>
+      <WordReveal
+        text={title}
+        className="mt-4 font-display text-h1 font-bold tracking-tight md:text-display"
+      />
       {subtitle && (
         <Reveal delay={0.1}>
           <p className="mt-3 text-body text-content-muted">{subtitle}</p>
@@ -414,7 +519,12 @@ function Hero({
   // ~0–560px of window scroll covers leaving it. Disabled under reduced motion.
   const scrollY = useScrollY();
   const copyY = useTransform(scrollY, [0, 560], [0, 36]);
+  const copyOpacity = useTransform(scrollY, [0, 620], [1, 0.25]);
   const visualY = useTransform(scrollY, [0, 560], [0, -80]);
+  // Exit choreography: the 3D stack shrinks, tips back and dims as it leaves.
+  const visualScale = useTransform(scrollY, [0, 640], [1, 0.88]);
+  const visualRotate = useTransform(scrollY, [0, 640], [0, -5]);
+  const visualOpacity = useTransform(scrollY, [0, 640], [1, 0.3]);
 
   // Pointer-parallax for the depth layers. Normalized to -0.5…0.5 over the
   // section and written through a single rAF so a burst of mousemove events
@@ -487,7 +597,7 @@ function Hero({
       <div className="mx-auto grid w-full max-w-7xl items-center gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         {/* copy */}
         <motion.div
-          style={reduce ? undefined : { y: copyY }}
+          style={reduce ? undefined : { y: copyY, opacity: copyOpacity }}
           className="text-center lg:text-left"
         >
           <motion.span
@@ -503,7 +613,7 @@ function Hero({
           <motion.h1
             {...enter(0.08)}
             style={{ fontSize: "clamp(2.5rem, 5vw, 4rem)" }}
-            className="mt-6 font-extrabold leading-[1.04] tracking-tight"
+            className="mt-6 font-display font-bold leading-[1.04] tracking-tight"
           >
             {t("hero.titleLead")}{" "}
             <span className="bg-gradient-to-r from-accent to-emerald-400 bg-clip-text text-transparent">
@@ -554,7 +664,11 @@ function Hero({
                 animate: { opacity: 1, scale: 1 },
                 transition: { duration: 0.8, delay: 0.2, ease: "easeOut" as const },
               })}
-          style={reduce ? undefined : { y: visualY }}
+          style={
+            reduce
+              ? undefined
+              : { y: visualY, scale: visualScale, rotate: visualRotate, opacity: visualOpacity }
+          }
           className="relative"
         >
           <HeroVisual />
@@ -567,13 +681,21 @@ function Hero({
 /* ─────────────────────── Trust strip ─────────────────────── */
 function TrustStrip() {
   const { t } = useTranslation("landing");
+  const reduce = useReducedMotion();
   const sources = t("trust.sources", { returnObjects: true }) as unknown as string[];
   const row = [...sources, ...sources];
+  // Scroll-velocity skew: fast scrolling leans the marquee like it has inertia.
+  const scrollY = useScrollY();
+  const velocity = useVelocity(scrollY);
+  const skewX = useSpring(useTransform(velocity, [-1500, 1500], [5, -5]), {
+    stiffness: 240,
+    damping: 32,
+  });
   return (
     <section className="border-y border-line bg-surface/40 py-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <p className="mb-4 text-center text-overline uppercase text-content-muted">{t("trust.label")}</p>
-        <div className="marquee-mask overflow-hidden">
+        <motion.div style={reduce ? undefined : { skewX }} className="marquee-mask overflow-hidden">
           <div className="animate-marquee flex w-max items-center gap-10">
             {row.map((s, i) => (
               <span
@@ -585,13 +707,45 @@ function TrustStrip() {
               </span>
             ))}
           </div>
-        </div>
+        </motion.div>
       </div>
     </section>
   );
 }
 
 /* ───────────────────────── Stats ─────────────────────────── */
+/** Stat numeral that counts up from zero once it scrolls into view. */
+function StatValue({ value }: { value: string }) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLParagraphElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-60px" });
+  const match = /^(\D*?)(\d+)(.*)$/.exec(value);
+  const target = match ? parseInt(match[2], 10) : 0;
+  const [n, setN] = useState(0);
+
+  useEffect(() => {
+    if (!inView || !match || reduce) return;
+    const t0 = performance.now();
+    const duration = 1100;
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / duration);
+      setN(Math.round(target * (1 - (1 - p) ** 3)));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, reduce, target]);
+
+  const display = match && !reduce ? `${match[1]}${n}${match[3]}` : value;
+  return (
+    <p ref={ref} className="text-gradient font-mono text-3xl font-bold tracking-tight md:text-4xl">
+      {display}
+    </p>
+  );
+}
+
 function StatsBand() {
   const { t } = useTranslation("landing");
   const stats = t("stats.items", { returnObjects: true }) as unknown as Stat[];
@@ -600,12 +754,12 @@ function StatsBand() {
       <div className="mx-auto grid max-w-5xl grid-cols-2 gap-6 lg:grid-cols-4">
         {stats.map((s, i) => (
           <Reveal key={s.label} delay={i * 0.06}>
-            <div className="rounded-2xl border border-line bg-surface p-5 text-center">
-              <p className="font-mono text-3xl font-bold tracking-tight text-accent md:text-4xl">
-                {s.value}
-              </p>
-              <p className="mt-1.5 text-caption text-content-muted">{s.label}</p>
-            </div>
+            <TiltCard maxTilt={5}>
+              <div className="glass rounded-2xl p-5 text-center">
+                <StatValue value={s.value} />
+                <p className="mt-1.5 text-caption text-content-muted">{s.label}</p>
+              </div>
+            </TiltCard>
           </Reveal>
         ))}
       </div>
@@ -628,14 +782,16 @@ function FeaturesSection() {
         {items.map((f, i) => {
           const Icon = FEATURE_ICONS[f.icon] ?? Sparkles;
           return (
-            <Reveal key={f.title} delay={(i % 3) * 0.08}>
-              <div className="group h-full rounded-2xl border border-line bg-surface p-6 transition duration-300 hover:-translate-y-1 hover:border-accent/40 hover:shadow-card-hover">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/12 text-accent transition group-hover:bg-accent group-hover:text-white">
-                  <Icon className="h-5 w-5" />
+            <Reveal key={f.title} delay={(i % 3) * 0.08} className="h-full">
+              <TiltCard maxTilt={6} className="h-full">
+                <div className="glass group h-full rounded-2xl p-6 transition duration-300 hover:border-accent/40 hover:shadow-card-hover">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/12 text-accent transition group-hover:bg-accent group-hover:text-white">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-h4 font-semibold">{f.title}</h3>
+                  <p className="mt-2 text-body-sm text-content-muted">{f.desc}</p>
                 </div>
-                <h3 className="mt-4 text-h4 font-semibold">{f.title}</h3>
-                <p className="mt-2 text-body-sm text-content-muted">{f.desc}</p>
-              </div>
+              </TiltCard>
             </Reveal>
           );
         })}
@@ -656,7 +812,7 @@ function HowSection() {
           const Icon = STEP_ICONS[i] ?? Sparkles;
           return (
             <Reveal key={s.title} delay={i * 0.1}>
-              <div className="relative h-full rounded-2xl border border-line bg-surface p-6">
+              <div className="glass relative h-full rounded-2xl p-6">
                 <span className="absolute right-5 top-5 font-mono text-5xl font-bold text-content/5">
                   {i + 1}
                 </span>
@@ -737,33 +893,54 @@ function ShowcaseMock({ index }: { index: number }) {
   );
 }
 
+/**
+ * ShowcaseSection — pinned scroll-scrub on desktop, classic stacked rows on
+ * mobile / reduced motion. While the tall wrapper scrolls, the inner screen
+ * stays pinned and scrolling scrubs between slides: the outgoing mock swings
+ * away in 3D while the next one swings in.
+ */
 function ShowcaseSection() {
   const { t } = useTranslation("landing");
   const rows = t("showcase.rows", { returnObjects: true }) as unknown as ShowRow[];
+  const reduce = useReducedMotion();
+  const desktop = useMediaQuery("(min-width: 1024px)");
+  if (reduce || !desktop || rows.length < 2) return <StackedShowcase rows={rows} />;
+  return <ScrubShowcase rows={rows} />;
+}
+
+function ShowcaseCopy({ row, index, total }: { row: ShowRow; index: number; total: number }) {
+  return (
+    <div>
+      <span className="num text-caption text-content-muted">
+        {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
+      </span>
+      <p className="mt-2 text-overline uppercase text-accent">{row.eyebrow}</p>
+      <h3 className="mt-3 font-display text-h1 font-bold tracking-tight">{row.title}</h3>
+      <p className="mt-3 text-body text-content-muted">{row.desc}</p>
+      <ul className="mt-5 space-y-2.5">
+        {row.bullets.map((b) => (
+          <li key={b} className="flex items-start gap-2.5 text-body-sm">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+              <Check className="h-3 w-3" />
+            </span>
+            {b}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function StackedShowcase({ rows }: { rows: ShowRow[] }) {
   return (
     <section className="px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-20">
         {rows.map((r, i) => {
           const flip = i % 2 === 1;
           return (
-            <div
-              key={r.title}
-              className="grid items-center gap-10 lg:grid-cols-2"
-            >
+            <div key={r.title} className="grid items-center gap-10 lg:grid-cols-2">
               <Reveal className={flip ? "lg:order-2" : ""}>
-                <span className="text-overline uppercase text-accent">{r.eyebrow}</span>
-                <h3 className="mt-3 text-h1 font-bold tracking-tight">{r.title}</h3>
-                <p className="mt-3 text-body text-content-muted">{r.desc}</p>
-                <ul className="mt-5 space-y-2.5">
-                  {r.bullets.map((b) => (
-                    <li key={b} className="flex items-start gap-2.5 text-body-sm">
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
-                        <Check className="h-3 w-3" />
-                      </span>
-                      {b}
-                    </li>
-                  ))}
-                </ul>
+                <ShowcaseCopy row={r} index={i} total={rows.length} />
               </Reveal>
               <Reveal delay={0.1} className={flip ? "lg:order-1" : ""}>
                 <ShowcaseMock index={i} />
@@ -776,6 +953,92 @@ function ShowcaseSection() {
   );
 }
 
+function ScrubShowcase({ rows }: { rows: ShowRow[] }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const progress = useElementProgress(wrapRef);
+  return (
+    <section className="px-4 sm:px-6 lg:px-8">
+      {/* Tall wrapper provides the scroll runway; the screen inside stays pinned. */}
+      <div ref={wrapRef} className="relative" style={{ height: `${rows.length * 90 + 100}vh` }}>
+        <div className="sticky top-0 flex h-screen items-center overflow-hidden">
+          <div className="relative mx-auto h-[34rem] w-full max-w-6xl">
+            {rows.map((r, i) => (
+              <ScrubSlide key={r.title} row={r} index={i} total={rows.length} progress={progress} />
+            ))}
+            <div className="absolute -right-1 top-1/2 flex -translate-y-1/2 flex-col gap-2.5 xl:-right-8">
+              {rows.map((_, i) => (
+                <ScrubDot key={i} index={i} total={rows.length} progress={progress} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ScrubSlide({
+  row,
+  index,
+  total,
+  progress,
+}: {
+  row: ShowRow;
+  index: number;
+  total: number;
+  progress: MotionValue<number>;
+}) {
+  const seg = 1 / total;
+  const start = index * seg;
+  const end = start + seg;
+  const fade = seg * 0.22;
+  const first = index === 0;
+  const last = index === total - 1;
+
+  const opacity = useTransform(
+    progress,
+    first ? [end - fade, end] : last ? [start, start + fade] : [start, start + fade, end - fade, end],
+    first ? [1, 0] : last ? [0, 1] : [0, 1, 1, 0],
+  );
+  const x = useTransform(progress, [start, end], [first ? 0 : 90, last ? 0 : -90]);
+  const rotateY = useTransform(progress, [start, end], [first ? 0 : 18, last ? 0 : -18]);
+  const pointerEvents = useTransform(opacity, (o) => (o > 0.5 ? "auto" : "none"));
+  const flip = index % 2 === 1;
+
+  return (
+    <motion.div
+      style={{ opacity, x, pointerEvents }}
+      className="absolute inset-0 flex items-center"
+    >
+      <div className="grid w-full items-center gap-10 lg:grid-cols-2" style={{ perspective: "1200px" }}>
+        <div className={flip ? "lg:order-2" : ""}>
+          <ShowcaseCopy row={row} index={index} total={total} />
+        </div>
+        <motion.div style={{ rotateY }} className={flip ? "lg:order-1" : ""}>
+          <ShowcaseMock index={index} />
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
+function ScrubDot({
+  index,
+  total,
+  progress,
+}: {
+  index: number;
+  total: number;
+  progress: MotionValue<number>;
+}) {
+  const seg = 1 / total;
+  const start = index * seg;
+  const end = start + seg;
+  const opacity = useTransform(progress, [start - 0.001, start, end, end + 0.001], [0.25, 1, 1, 0.25]);
+  const scale = useTransform(progress, [start, (start + end) / 2, end], [1, 1.5, 1]);
+  return <motion.span style={{ opacity, scale }} className="h-2 w-2 rounded-full bg-accent" />;
+}
+
 /* ─────────────────────── Testimonials ────────────────────── */
 function TestimonialsSection() {
   const { t } = useTranslation("landing");
@@ -786,7 +1049,7 @@ function TestimonialsSection() {
       <div className="mx-auto mt-14 grid max-w-6xl gap-5 md:grid-cols-3">
         {items.map((it, i) => (
           <Reveal key={it.name} delay={i * 0.08}>
-            <figure className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6">
+            <figure className="glass flex h-full flex-col rounded-2xl p-6">
               <div className="flex gap-0.5 text-warning">
                 {Array.from({ length: 5 }).map((_, s) => (
                   <Star key={s} className="h-4 w-4 fill-current" />
@@ -829,12 +1092,13 @@ function PricingSection({
       />
       <div className="mx-auto mt-14 grid max-w-5xl items-start gap-6 md:grid-cols-3">
         {tiers.map((tier, i) => (
-          <Reveal key={tier.name} delay={i * 0.08}>
+          <Reveal key={tier.name} delay={i * 0.08} className="h-full">
+            <TiltCard maxTilt={3} className="h-full">
             <div
-              className={`relative flex h-full flex-col rounded-2xl border p-6 ${
+              className={`relative flex h-full flex-col rounded-2xl border p-6 backdrop-blur-md ${
                 tier.featured
-                  ? "border-accent/60 bg-surface shadow-card-hover ring-1 ring-accent/30"
-                  : "border-line bg-surface"
+                  ? "border-accent/60 bg-surface/80 shadow-card-hover ring-1 ring-accent/30"
+                  : "border-line bg-surface/70"
               }`}
             >
               {tier.badge && (
@@ -874,6 +1138,7 @@ function PricingSection({
                 {tier.featured && <ArrowRight className="h-4 w-4" />}
               </button>
             </div>
+            </TiltCard>
           </Reveal>
         ))}
       </div>
@@ -895,10 +1160,10 @@ function FinalCTASection({
   return (
     <section className="px-4 py-20 sm:px-6 lg:px-8">
       <Reveal>
-        <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl border border-line bg-surface px-6 py-16 text-center">
+        <div className="glass-strong relative mx-auto max-w-5xl overflow-hidden rounded-3xl px-6 py-16 text-center">
           <div className="animate-aurora pointer-events-none absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-accent/25 blur-[120px]" />
           <div className="relative">
-            <h2 className="mx-auto max-w-2xl text-h1 font-bold tracking-tight md:text-display">
+            <h2 className="mx-auto max-w-2xl font-display text-h1 font-bold tracking-tight md:text-display">
               {t("cta.title")}
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-body text-content-muted">{t("cta.subtitle")}</p>
@@ -1095,6 +1360,7 @@ export function LandingPage() {
         )}
       </div>
 
+      <ScrollProgressBar />
       <LandingNav lang={lang} onLang={handleLang} onLogin={goLogin} onRegister={goRegister} />
 
       <main>

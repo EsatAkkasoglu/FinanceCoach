@@ -42,6 +42,8 @@ export default {
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+        // Display face for hero headings / big numerals — geometric, modern fintech.
+        display: ["Space Grotesk", "Inter", "system-ui", "sans-serif"],
       },
       // Named type scale (modular ~1.25). Use these semantic roles in new code
       // instead of ad-hoc text-[Npx] values. Tailwind's default sizes (xs/sm/…)
@@ -64,17 +66,30 @@ export default {
       },
       boxShadow: {
         glow: "0 0 24px -4px rgba(31, 181, 122, 0.45)",
+        "glow-lg": "0 0 48px -8px rgba(31, 181, 122, 0.5), 0 0 120px -24px rgba(31, 181, 122, 0.35)",
         // Canonical card hover lift — replaces per-card inline shadow literals.
         "card-hover": "0 0 0 1px rgba(31, 181, 122, 0.15), 0 8px 24px rgba(0, 0, 0, 0.2)",
+        // Frosted-glass elevation: deep drop + faint inner top highlight.
+        glass: "0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
       },
       keyframes: {
         "agent-pulse": {
           "0%, 100%": { opacity: "0.7", transform: "scale(1)" },
           "50%": { opacity: "1", transform: "scale(1.05)" },
         },
+        shimmer: {
+          from: { backgroundPosition: "200% 0" },
+          to: { backgroundPosition: "-200% 0" },
+        },
+        "pulse-glow": {
+          "0%, 100%": { boxShadow: "0 0 24px -4px rgba(31, 181, 122, 0.35)" },
+          "50%": { boxShadow: "0 0 40px -4px rgba(31, 181, 122, 0.6)" },
+        },
       },
       animation: {
         "agent-pulse": "agent-pulse 1.6s ease-in-out infinite",
+        shimmer: "shimmer 2.4s linear infinite",
+        "pulse-glow": "pulse-glow 3.2s ease-in-out infinite",
       },
     },
   },

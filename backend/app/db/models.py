@@ -259,3 +259,53 @@ class MessageFeedback(Base):
     excerpt = Column(Text, nullable=True)                   # first 400 chars of the rated reply
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class NewsArticle(Base):
+    """A headline collected by the background news poller.
+
+    Written by ``services.news_collector`` (out of the request path) and read
+    by ``tools.news_tools.search_news`` (DB-first) and ``GET /news/feed``.
+    Enrichment (sentiment / category / summary) is filled in the same poll.
+
+    Dedup keys, cheapest → strongest:
+      • ``canonical_url`` — UTM-stripped URL, UNIQUE; collapses re-syndication.
+      • ``content_hash``  — normalized-title SHA1; collapses same-title reposts
+        with different URLs (and is the hook point for embedding dedup later).
+    """
+
+    __tablename__ = "news_article"
+
+    id = Column(Integer, primary_key=True)
+    canonical_url = Column(String(1024), unique=True, nullable=False, index=True)
+    url = Column(String(1024), nullable=False)
+    title = Column(String(512), nullable=False)
+    source = Column(String(128), nullable=False, default="")
+    published_at = Column(DateTime, nullable=True, index=True)
+    snippet = Column(Text, nullable=True)
+    lang = Column(String(8), nullable=False, default="en")
+    tickers = Column(String(256), nullable=True)            # "ASELS.IS,THYAO.IS"
+    category = Column(String(64), nullable=True, index=True)
+    sentiment = Column(String(16), nullable=True)           # positive | neutral | negative
+    sentiment_score = Column(Float, nullable=True)          # -1..1
+    summary = Column(Text, nullable=True)                   # 1-line enrichment summary
+    content_hash = Column(String(64), nullable=False, default="", index=True)
+    enriched = Column(Integer, nullable=False, default=0)   # 0/1 — has sentiment/category been set
+    fetched_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class FeedState(Base):
+    """Per-feed conditional-GET state so unchanged feeds return 304 (≈0 bytes).
+
+    feedparser supports ``etag`` / ``modified`` natively; we persist them here
+    between poll cycles.
+    """
+
+    __tablename__ = "feed_state"
+
+    url = Column(String(1024), primary_key=True)
+    etag = Column(String(512), nullable=True)
+    last_modified = Column(String(256), nullable=True)
+    last_polled_at = Column(DateTime, nullable=True)
+    last_status = Column(Integer, nullable=True)            # last HTTP status (200/304/…)
+    error_count = Column(Integer, nullable=False, default=0)

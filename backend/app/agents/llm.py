@@ -101,4 +101,5 @@ def get_llm(temperature: float | None = None) -> ChatGoogleGenerativeAI:
         temperature=temp,
         google_api_key=_require_key(),
         callbacks=[TokenLogger()],
+        max_output_tokens=8192,   # Gemini Flash-Lite cap; prevents truncated research replies
     )

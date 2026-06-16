@@ -10,7 +10,7 @@
  * Motion is gated on `prefers-reduced-motion`: the resting pose still has a
  * gentle 3D tilt, but pointer tracking and the floating bob are disabled.
  */
-import { useRef } from "react";
+import { lazy, Suspense, useRef } from "react";
 import {
   motion,
   useMotionValue,
@@ -20,6 +20,9 @@ import {
 } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, ShieldCheck, Sparkles } from "lucide-react";
+
+// WebGL orb is code-split — the CSS card stack paints instantly without it.
+const HeroOrb3D = lazy(() => import("@/components/three/HeroOrb3D"));
 
 function BrandMark({ size = 16 }: { size?: number }) {
   return (
@@ -160,6 +163,16 @@ export function HeroVisual() {
       style={{ perspective: "1400px" }}
       aria-hidden="true"
     >
+      {/* Holographic WebGL orb behind the card stack — shares the pointer so
+          the CSS parallax and the orb tilt read as one composition. */}
+      {!reduce && (
+        <Suspense fallback={null}>
+          <div className="pointer-events-none absolute -inset-16 sm:-inset-20" aria-hidden="true">
+            <HeroOrb3D />
+          </div>
+        </Suspense>
+      )}
+
       <motion.div
         className="relative aspect-[5/5] sm:aspect-[6/5]"
         style={{ transformStyle: "preserve-3d", rotateX, rotateY }}

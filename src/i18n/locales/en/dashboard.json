@@ -105,5 +105,15 @@
   "addHoldingsHint": "Go to Portfolio to add your first holding",
   "savingsTarget": "target",
   "savingsStrong": "Strong savings pace this month.",
-  "savingsLow": "Room to push your savings rate higher."
+  "savingsLow": "Room to push your savings rate higher.",
+  "news": {
+    "title": "Market headlines",
+    "empty": "No headlines yet — they'll appear once the collector runs.",
+    "source": "Auto-collected & sentiment-tagged",
+    "sentiment": {
+      "positive": "Bullish",
+      "neutral": "Neutral",
+      "negative": "Bearish"
+    }
+  }
 }

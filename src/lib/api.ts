@@ -671,6 +671,45 @@ export async function getBudgetTrend(months = 6): Promise<BudgetTrend> {
   return r.json() as Promise<BudgetTrend>;
 }
 
+// ── News feed (pre-collected, enriched headlines) ────────────────────────────
+
+export interface NewsItem {
+  id: number;
+  title: string;
+  url: string;
+  source: string;
+  published_at: string | null;
+  snippet: string | null;
+  summary: string | null;
+  lang: string;
+  category: string | null;
+  sentiment: "positive" | "neutral" | "negative" | null;
+  sentiment_score: number | null;
+  fetched_at: string | null;
+}
+
+export interface NewsFeedParams {
+  q?: string;
+  category?: string;
+  lang?: string;
+  since?: string;       // ISO datetime
+  limit?: number;
+}
+
+export async function getNewsFeed(params: NewsFeedParams = {}): Promise<NewsItem[]> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.category) qs.set("category", params.category);
+  if (params.lang) qs.set("lang", params.lang);
+  if (params.since) qs.set("since", params.since);
+  if (params.limit) qs.set("limit", String(params.limit));
+  const query = qs.toString();
+  const r = await apiFetch(`/news/feed${query ? `?${query}` : ""}`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { items: NewsItem[]; count: number };
+  return data.items ?? [];
+}
+
 // ── Documents ────────────────────────────────────────────────────────────────
 
 export interface DocumentEntry {

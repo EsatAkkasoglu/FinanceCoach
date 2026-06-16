@@ -5,22 +5,34 @@ The active backend is chosen by the DATABASE_URL env var.
 """
 from __future__ import annotations
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 
-from app.settings import settings
 from app.db.models import Base
+from app.settings import settings
 
 
 def _make_engine():
     if settings.using_postgres:
         return create_engine(settings.db_url, echo=False, pool_pre_ping=True)
     # SQLite — single-file, needs check_same_thread disabled
-    return create_engine(
+    eng = create_engine(
         settings.db_url,
         echo=False,
         connect_args={"check_same_thread": False},
     )
+    # WAL lets the background news poller write while request threads read
+    # concurrently without "database is locked". busy_timeout makes the rare
+    # writer-vs-writer contention wait rather than fail immediately.
+    @event.listens_for(eng, "connect")
+    def _set_sqlite_pragmas(dbapi_conn, _record):  # noqa: ANN001
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA busy_timeout=5000")
+        cur.close()
+
+    return eng
 
 
 engine = _make_engine()

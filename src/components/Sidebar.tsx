@@ -274,7 +274,7 @@ export function Sidebar({
         animate={{ width: effectiveCollapsed ? 72 : 240 }}
         transition={{ type: "spring", stiffness: 340, damping: 32 }}
         className={cn(
-          "z-40 flex flex-col border-r border-line bg-surface overflow-hidden shrink-0",
+          "z-40 flex flex-col border-r border-line/70 bg-surface/70 backdrop-blur-xl overflow-hidden shrink-0",
           // Desktop: static (in flex flow so main content syncs)
           // Mobile: fixed overlay, toggled via translate
           "fixed inset-y-0 left-0 md:static md:translate-x-0",

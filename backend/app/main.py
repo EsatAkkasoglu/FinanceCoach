@@ -47,8 +47,10 @@ from app.routers.fx import router as fx_router
 from app.routers.insights import router as insights_router
 from app.routers.memory import router as memory_router
 from app.routers.networth import router as networth_router
+from app.routers.news import router as news_router
 from app.routers.symbols import router as symbols_router
 from app.services.document_processor.router import router as documents_router
+from app.services.news_collector import shutdown_news_scheduler, start_news_scheduler
 
 log = logging.getLogger("fincoach")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -72,6 +74,9 @@ async def lifespan(app: FastAPI):
     log.info("FinCoach starting up (demo_mode=%s)", settings.demo_mode)
     configure_langsmith()
     init_db()
+    # Background news poller (thread-based; no-op if disabled). Runs in both the
+    # SQLite and Postgres branches below — start it once here before they yield.
+    start_news_scheduler()
 
     import threading
     from app.tools.fund_tools import prewarm_universe
@@ -114,6 +119,7 @@ async def lifespan(app: FastAPI):
             threading.Thread(target=prewarm_universe, daemon=True, name="tefas-prewarm").start()
             yield
 
+    shutdown_news_scheduler()
     log.info("FinCoach shutting down")
 
 
@@ -158,6 +164,7 @@ app.include_router(insights_router)
 app.include_router(memory_router)
 app.include_router(networth_router)
 app.include_router(admin_router)
+app.include_router(news_router)
 
 
 @app.get("/health")

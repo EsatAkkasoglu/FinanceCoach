@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu, Globe, LayoutDashboard, Briefcase, Wallet, Coins, Compass, Target, FileText, Settings as SettingsIcon, MessageSquare } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { onIdTokenChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -34,6 +34,9 @@ import {
   type Conversation,
 } from "@/lib/api";
 import { toast } from "sonner";
+
+// Ambient WebGL backdrop is code-split so it never blocks the app's first paint.
+const AmbientField3D = lazy(() => import("@/components/three/AmbientField3D"));
 
 function ChatRoute() {
   const { t } = useTranslation("chat");
@@ -108,6 +111,7 @@ const ROUTE_TITLE_KEYS = {
 
 export default function App() {
   const { t, i18n } = useTranslation();
+  const reduceMotion = useReducedMotion();
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const { user, ready, setUser, setReady } = useAuthStore();
   const navigate = useNavigate();
@@ -394,7 +398,18 @@ export default function App() {
   const transitionKey = appPath.split("/")[1] ?? "home";
 
   return (
-    <div className="flex h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
+    <div className="relative isolate flex h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
+      {/* Ambient backdrop: static radial glows + drifting WebGL motes.
+          -z-10 inside the isolated root so every page (and the glass header/
+          sidebar) floats above it. */}
+      <div className="app-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
+        {!reduceMotion && (
+          <Suspense fallback={null}>
+            <AmbientField3D />
+          </Suspense>
+        )}
+      </div>
+
       <DemoTour />
 
       <Sidebar
@@ -409,7 +424,7 @@ export default function App() {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* ── Top header bar ── */}
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 md:px-5">
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))]/60 px-4 backdrop-blur-xl md:px-5">
           {/* Mobile: hamburger */}
           <button
             type="button"
@@ -466,11 +481,11 @@ export default function App() {
             transition={{ duration: 0.16, ease: "easeOut" }}
             className={
               onChatRoute
-                ? "flex-1 overflow-y-auto"
+                ? "min-h-0 flex-1 overflow-hidden"
                 : "flex-1 overflow-y-auto px-4 pb-24 pt-6 md:px-8 md:pb-12 md:pt-10"
             }
           >
-            <div className={onChatRoute ? "h-full" : "mx-auto w-full max-w-5xl"}>
+            <div className={onChatRoute ? "mx-auto h-full w-full max-w-4xl px-4 pt-4 pb-3 md:px-6" : "mx-auto w-full max-w-5xl"}>
             <Routes location={location}>
               <Route path="/" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="/:lang/dashboard" element={<Dashboard />} />

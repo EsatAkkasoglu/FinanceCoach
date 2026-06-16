@@ -35,7 +35,9 @@ class SynthesisOutput(BaseModel):
     reply: str = Field(
         description=(
             "The user-facing message in the user's language. Markdown allowed. "
-            "Length depends on question_type — see prompt rules."
+            "Length MUST match question_type: lookup/confirmation → 1-3 sentences; "
+            "research/analysis/advisory → thorough and detailed (200-600+ words with "
+            "headings, bullets, tables where helpful). Never truncate a research answer."
         )
     )
     suggestions: list[str] = Field(
@@ -77,12 +79,16 @@ Notice: leads with the answer, one number that matters, a single sharp follow-up
   • Land a small win when it's real ("emergency fund just crossed 80% — nice"). Land a loss-aversion nudge when it's the right lever (recurring overshoot, goal slipping) — always tied to a specific number, never vague guilt.
   • If `roast_mode=on` or they ask to be roasted: sharp, witty critique of real habits. Never cruel.
 
-# VARY YOUR SHAPE — DON'T STAMP A MOLD
-Glance at the last 1-2 turns. If your draft opens the same way or closes with the same "Would you like me to…", rewrite it. Let the question pick the shape:
-  • Write confirmation / yes-no / "how much" → 1-2 sentences, lead with the number or verdict.
-  • Spending breakdown → a few scannable bullets.
-  • Real strategy/allocation request → then structure earns its place (math → plan → one CTA).
-Default to prose. Bullets/tables only when the data is genuinely dense. Most replies are 1-3 sentences — never pad to hit a section count.
+# VARY YOUR SHAPE — LET THE QUESTION DECIDE THE LENGTH
+Glance at the last 1-2 turns. If your draft opens the same way or closes with the same "Would you like me to…", rewrite it. The shape and LENGTH must match the question type:
+
+  • **lookup / confirmation / yes-no / "how much"** → 1-3 sentences max. Lead with the number or verdict.
+  • **spending breakdown, quick status** → a few scannable bullets.
+  • **research / analysis / market question** → go deep. Show the data, explain the mechanism, give a clear verdict. Use headings and structure freely. A thorough research reply can be 200-500+ words — that's not padding, that's doing the job.
+  • **advisory / allocation / strategy** → structure earns its place: thesis → math → plan → one CTA. Can be 300-600+ words.
+  • **follow-up clarification** → 1-3 sentences unless the follow-up itself is a research question.
+
+Never pad a simple question. Never truncate a research question. The question type in PLAN is your guide.
 
 # NON-NEGOTIABLES (the few hard rules — everything above is style)
   1. Never invent a number. Show the math inline when you derive one: "Income 92.500 − Fixed 55.000 − Subs 2.500 = 35.000 investable." If an input is missing, say so in a clause — don't guess. Numbers from calc tools (portfolio summary, concentration/HHI, allocation drift, future value, goal contribution, instrument comparison) are AUTHORITATIVE — quote them verbatim, and when a tool gives a `formatted_value`, print that string as-is. Never recompute or re-round a calc-tool number yourself.
@@ -114,7 +120,8 @@ def _format_findings_section(findings: dict[str, Any]) -> str:
         if not isinstance(payload, dict):
             continue
         summary = (payload.get("summary") or "").strip() or "(no summary)"
-        snippet = summary[:1800] + ("…" if len(summary) > 1800 else "")
+        # 4000 chars — enough for derivatives + market data without blowing context.
+        snippet = summary[:4000] + ("…" if len(summary) > 4000 else "")
         # Surface any structured write-tool confirmations so the synthesizer
         # can echo them verbatim in follow-up mode.
         tool_calls = payload.get("tool_calls") or []
@@ -159,8 +166,8 @@ def _format_recent_history(messages: list, k: int = 2) -> str:
 
     lines: list[str] = []
     for u, a in pairs[-k:]:
-        lines.append(f"USER: {u[:300]}{'…' if len(u) > 300 else ''}")
-        lines.append(f"ASSISTANT: {a[:500]}{'…' if len(a) > 500 else ''}\n")
+        lines.append(f"USER: {u[:400]}{'…' if len(u) > 400 else ''}")
+        lines.append(f"ASSISTANT: {a[:1000]}{'…' if len(a) > 1000 else ''}\n")
     return "\n".join(lines).strip()
 
 
@@ -289,15 +296,13 @@ async def run(state: AgentState) -> AgentState:
         f"{_format_recent_history(messages, k=2)}\n\n"
         f"SPECIALIST FINDINGS (this turn):\n{_format_findings_section(findings)}\n\n"
         f"ADVISOR BRIEF:\n{_format_advisor_brief(brief, is_fresh=requires_advisor)}\n\n"
+        f"QUESTION TYPE: {question_type}\n\n"
         "Produce the SynthesisOutput now. Mirror the user's language. "
-        "Write like a sharp human, not a template: pick the shape that fits "
-        "THIS message, vary opener / length / closer from the prior turn, "
-        "and let a little voice through when the content invites it. Lean "
-        "short — most replies are 1-3 sentences; use headings / bullets / "
-        "tables only when the data is genuinely dense. Bring goals into the "
-        "answer only when the user invoked them or the math needs them. "
-        "advisor_brief is INPUT, not OUTPUT: render only the parts that "
-        "answer THIS question."
+        "Write like a sharp human, not a template. "
+        "LENGTH RULE: for lookup/confirmation → 1-3 sentences; for research/analysis/advisory → go deep and thorough (200-600+ words, structured with headers/bullets/tables as needed — that is NOT padding, it is the answer). "
+        "Vary opener / length / closer from the prior turn. "
+        "Bring goals into the answer only when the user invoked them or the math needs them. "
+        "advisor_brief is INPUT, not OUTPUT: render only the parts that answer THIS question."
     )
 
     try:
