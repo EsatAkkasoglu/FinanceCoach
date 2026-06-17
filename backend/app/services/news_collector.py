@@ -34,7 +34,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import feedparser
 import requests
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import FeedState, NewsArticle
@@ -411,6 +411,36 @@ def poll_all_feeds() -> dict[str, Any]:
         _poll_lock.release()
 
 
+def _minutes_since_last_poll() -> float | None:
+    """Minutes since the most recent feed poll, or None if never polled."""
+    try:
+        with SessionLocal() as db:
+            last = db.execute(select(func.max(FeedState.last_polled_at))).scalar_one_or_none()
+    except Exception:  # noqa: BLE001 — staleness check must never break a read
+        return None
+    if last is None:
+        return None
+    return (datetime.utcnow() - last).total_seconds() / 60.0
+
+
+def poll_if_stale() -> bool:
+    """Kick a background poll if the feed is older than the poll interval.
+
+    Cheap and non-blocking — called from GET /news/feed so a Cloud Run instance
+    that just woke from idle (its interval scheduler having died with the
+    previous instance) refreshes news when a user actually opens the app. The
+    staleness gate + ``_poll_lock`` ensure at most one poll runs per interval.
+    Returns True if a poll was launched.
+    """
+    if not settings.news_collector_enabled or _poll_lock.locked():
+        return False
+    age = _minutes_since_last_poll()
+    if age is not None and age < max(1, settings.news_poll_minutes):
+        return False
+    threading.Thread(target=poll_all_feeds, name="news-poll-stale", daemon=True).start()
+    return True
+
+
 def _poll_all_feeds() -> dict[str, Any]:
     """Fetch every configured feed, dedup, enrich new items, persist. Sync.
 
@@ -550,14 +580,17 @@ def start_news_scheduler() -> None:
     if _scheduler is not None:
         return
     if settings.is_cloud_run:
-        # The instance freezes when idle at min-instances=0, so the interval
-        # timer would silently never fire. Don't start it (it's misleading);
-        # polling must be driven by Cloud Scheduler → POST /news/poll.
+        # The in-process scheduler still runs here and is worth keeping: it polls
+        # ~15s after each cold start and every interval while the instance stays
+        # warm. The only gap is a fully-idle instance (scaled to zero) — but then
+        # nobody is using the app. `poll_if_stale` (called from GET /news/feed)
+        # covers the "user opens the app after a long idle" case, and Cloud
+        # Scheduler → POST /news/poll remains available for guaranteed cadence.
         log.info(
-            "news collector: Cloud Run detected — in-process scheduler NOT started; "
-            "drive polling via Cloud Scheduler → POST /news/poll"
+            "news collector: Cloud Run detected — scheduler runs while warm; "
+            "reads trigger a stale-refresh, and Cloud Scheduler → POST /news/poll "
+            "can drive a guaranteed cadence"
         )
-        return
 
     from apscheduler.schedulers.background import BackgroundScheduler  # noqa: PLC0415
 

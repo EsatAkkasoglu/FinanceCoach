@@ -45,11 +45,13 @@ class Settings(BaseSettings):
     # the news_articles table so /chat and the dashboard read pre-computed
     # results (ms-level) instead of hitting feeds on every request.
     #
-    # Deployment note: the in-process scheduler only fires while the process is
-    # alive. On Cloud Run with min-instances=0 the instance freezes when idle,
-    # so set FINCOACH_NEWS_COLLECTOR_ENABLED=false there and drive the poll via
-    # Cloud Scheduler → POST /news/poll instead. On the desktop sidecar leave it
-    # enabled (the process is always running while the app is open).
+    # Deployment note: keep this enabled everywhere, including Cloud Run. The
+    # in-process scheduler polls ~15s after each cold start and every interval
+    # while the instance is warm; a fully-idle (scaled-to-zero) instance simply
+    # isn't serving anyone. GET /news/feed additionally triggers a background
+    # stale-refresh, so a user opening the app after a long idle gets fresh news.
+    # For a guaranteed cadence regardless of traffic, also point Cloud Scheduler
+    # at POST /news/poll. On the desktop sidecar the process is always running.
     news_collector_enabled: bool = Field(default=True, alias="FINCOACH_NEWS_COLLECTOR_ENABLED")
     news_poll_minutes: int = Field(default=10, alias="FINCOACH_NEWS_POLL_MINUTES")
     # Comma-separated standing RSS feed URLs. Source name is derived from each

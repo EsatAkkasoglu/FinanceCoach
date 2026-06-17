@@ -6,6 +6,7 @@ fetch/poll path is exercised separately under the ``network`` marker.
 """
 from __future__ import annotations
 
+import threading
 import time
 from types import SimpleNamespace
 
@@ -149,6 +150,32 @@ def test_fetch_one_304_short_circuits(monkeypatch):
     _url, parsed = nc._fetch_one("https://x.com/rss", "etag-1", None)
     assert parsed["status"] == 304
     assert not parsed.get("entries")
+
+
+def test_poll_if_stale_launches_background_poll_when_stale(monkeypatch):
+    """A stale feed kicks a background poll (the Cloud Run idle-wake refresh)."""
+    monkeypatch.setattr(nc.settings, "news_collector_enabled", True)
+    monkeypatch.setattr(nc, "_minutes_since_last_poll", lambda: 999.0)
+    fired = threading.Event()
+    monkeypatch.setattr(nc, "poll_all_feeds", lambda: fired.set())
+    assert nc.poll_if_stale() is True
+    assert fired.wait(timeout=2.0)
+
+
+def test_poll_if_stale_skips_when_fresh(monkeypatch):
+    monkeypatch.setattr(nc.settings, "news_collector_enabled", True)
+    monkeypatch.setattr(nc, "_minutes_since_last_poll", lambda: 0.0)
+
+    def _boom():
+        raise AssertionError("poll must not run when fresh")
+
+    monkeypatch.setattr(nc, "poll_all_feeds", _boom)
+    assert nc.poll_if_stale() is False
+
+
+def test_poll_if_stale_skips_when_disabled(monkeypatch):
+    monkeypatch.setattr(nc.settings, "news_collector_enabled", False)
+    assert nc.poll_if_stale() is False
 
 
 # ── HTTP layer (real ASGI stack via the TestClient fixture; no network/key) ───

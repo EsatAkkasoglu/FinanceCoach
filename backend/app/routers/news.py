@@ -22,7 +22,7 @@ from app.db.models import NewsAlert, NewsArticle, User, WatchKind, Watchlist
 from app.db.session import SessionLocal
 from app.routers.admin import require_admin
 from app.services.news_alerts import alert_payload
-from app.services.news_collector import poll_all_feeds
+from app.services.news_collector import poll_all_feeds, poll_if_stale
 
 router = APIRouter(prefix="/news", tags=["news"])
 
@@ -55,6 +55,10 @@ def news_feed(
     _user_id: int = Depends(get_current_user_id),
 ):
     """Return recent enriched headlines, newest first."""
+    # Opportunistic refresh: on Cloud Run an idle-reaped instance has no live
+    # scheduler, so a read kicks a background poll when the feed is stale. No-op
+    # when fresh or a poll is already running; never blocks this response.
+    poll_if_stale()
     with SessionLocal() as db:
         stmt = select(NewsArticle)
         if q:
