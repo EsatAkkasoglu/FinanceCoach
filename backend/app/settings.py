@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     # store raw headlines only (zero LLM cost / quota use).
     news_enrich_enabled: bool = Field(default=True, alias="FINCOACH_NEWS_ENRICH_ENABLED")
     news_enrich_batch_size: int = Field(default=40, alias="FINCOACH_NEWS_ENRICH_BATCH_SIZE")
+    # Per-feed HTTP timeout (seconds). Without this a single hung feed server can
+    # block the whole poll cycle indefinitely.
+    news_fetch_timeout: float = Field(default=10.0, alias="FINCOACH_NEWS_FETCH_TIMEOUT")
     # Articles older than this are pruned at the end of each poll.
     news_retention_days: int = Field(default=14, alias="FINCOACH_NEWS_RETENTION_DAYS")
 
@@ -140,6 +143,16 @@ class Settings(BaseSettings):
     @property
     def using_postgres(self) -> bool:
         return bool(self.database_url and self.database_url.startswith("postgresql"))
+
+    @property
+    def is_cloud_run(self) -> bool:
+        """True when running on Cloud Run (K_SERVICE is injected by the runtime).
+
+        The instance freezes when idle at min-instances=0, so an in-process
+        interval scheduler can't be relied on — polling must be driven by an
+        external trigger (Cloud Scheduler → POST /news/poll).
+        """
+        return bool(os.environ.get("K_SERVICE"))
 
     @property
     def db_url(self) -> str:

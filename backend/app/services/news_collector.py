@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -31,6 +32,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import feedparser
+import requests
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -203,11 +205,55 @@ Headlines:
 {headlines}"""
 
 
+def _apply_enrichment(result: BatchEnrichment, chunk: list[dict[str, Any]]) -> None:
+    """Copy a model's batch result back onto the article dicts (validated)."""
+    for item in result.items:
+        if not 0 <= item.index < len(chunk):
+            continue
+        sentiment = item.sentiment.strip().lower()
+        category = item.category.strip().lower()
+        art = chunk[item.index]
+        art["sentiment"] = sentiment if sentiment in _VALID_SENTIMENT else "neutral"
+        art["sentiment_score"] = max(-1.0, min(1.0, float(item.score)))
+        art["category"] = category if category in _VALID_CATEGORY else "other"
+        art["summary"] = (item.summary or "").strip()[:280] or None
+        tickers = ",".join(t.strip().upper() for t in (item.tickers or []) if t and t.strip())
+        art["tickers"] = tickers[:256] or None
+        art["enriched"] = 1
+
+
+def _enrich_chunk(chunk: list[dict[str, Any]]) -> None:
+    """Enrich one chunk in place, splitting on failure so one bad headline can't
+    sink the whole batch.
+
+    A single malformed structured-output item makes the *entire* ``.invoke``
+    parse raise — previously that dropped enrichment for all 40 articles in the
+    batch. Instead, on failure we bisect and retry each half, narrowing the blast
+    radius down to the single offending headline (which is then stored raw).
+    """
+    if not chunk:
+        return
+    listing = "\n".join(f"{i}. {a['title']}" for i, a in enumerate(chunk))
+    try:
+        result: BatchEnrichment = _get_enrich_llm().invoke(
+            _ENRICH_PROMPT.format(headlines=listing)
+        )
+    except Exception:  # noqa: BLE001 — never let enrichment break collection
+        if len(chunk) == 1:
+            log.warning("news enrichment failed for 1 headline; stored raw", exc_info=True)
+            return
+        mid = len(chunk) // 2
+        _enrich_chunk(chunk[:mid])
+        _enrich_chunk(chunk[mid:])
+        return
+    _apply_enrichment(result, chunk)
+
+
 def enrich_batch(articles: list[dict[str, Any]]) -> None:
     """Mutate ``articles`` in place, filling sentiment/score/category/summary.
 
-    Best-effort: on any failure the articles are left unenriched (stored raw) and
-    a warning is logged — the collector never crashes on enrichment.
+    Best-effort: on any failure the affected articles are left unenriched (stored
+    raw) and a warning is logged — the collector never crashes on enrichment.
     """
     if not articles or not settings.news_enrich_enabled:
         return
@@ -216,38 +262,52 @@ def enrich_batch(articles: list[dict[str, Any]]) -> None:
 
     batch_size = max(1, settings.news_enrich_batch_size)
     for start in range(0, len(articles), batch_size):
-        chunk = articles[start : start + batch_size]
-        listing = "\n".join(f"{i}. {a['title']}" for i, a in enumerate(chunk))
-        try:
-            result: BatchEnrichment = _get_enrich_llm().invoke(
-                _ENRICH_PROMPT.format(headlines=listing)
-            )
-        except Exception:  # noqa: BLE001 — never let enrichment break collection
-            log.warning("news enrichment failed for a batch of %d", len(chunk), exc_info=True)
-            continue
-        for item in result.items:
-            if not 0 <= item.index < len(chunk):
-                continue
-            sentiment = item.sentiment.strip().lower()
-            category = item.category.strip().lower()
-            art = chunk[item.index]
-            art["sentiment"] = sentiment if sentiment in _VALID_SENTIMENT else "neutral"
-            art["sentiment_score"] = max(-1.0, min(1.0, float(item.score)))
-            art["category"] = category if category in _VALID_CATEGORY else "other"
-            art["summary"] = (item.summary or "").strip()[:280] or None
-            tickers = ",".join(
-                t.strip().upper() for t in (item.tickers or []) if t and t.strip()
-            )
-            art["tickers"] = tickers[:256] or None
-            art["enriched"] = 1
+        _enrich_chunk(articles[start : start + batch_size])
 
 
 # ── Fetch (conditional GET via feedparser) ───────────────────────────────────
 
 
+def _bozo_result(exc: Exception) -> Any:
+    """A parsed-feed stand-in marking a fetch failure (so the loop counts it errored)."""
+    parsed = feedparser.parse(b"")
+    parsed["bozo"] = 1
+    parsed["bozo_exception"] = exc
+    parsed["status"] = None
+    return parsed
+
+
 def _fetch_one(url: str, etag: str | None, modified: str | None) -> tuple[str, Any]:
-    """Fetch+parse a single feed with conditional-GET headers. Pure-ish (network)."""
-    parsed = feedparser.parse(url, etag=etag, modified=modified, agent=_USER_AGENT)
+    """Fetch+parse a single feed with conditional GET and a hard timeout.
+
+    ``feedparser.parse(url)`` has no timeout knob, so a hung feed server could
+    block the whole poll indefinitely. We fetch with ``requests`` (bounded by
+    ``news_fetch_timeout``) and hand the bytes to feedparser, preserving the
+    304/etag/last-modified conditional-GET behavior the loop relies on.
+    """
+    headers = {"User-Agent": _USER_AGENT}
+    if etag:
+        headers["If-None-Match"] = etag
+    if modified:
+        headers["If-Modified-Since"] = modified
+    try:
+        resp = requests.get(url, headers=headers, timeout=settings.news_fetch_timeout)
+    except requests.RequestException as exc:
+        return url, _bozo_result(exc)
+
+    if resp.status_code == 304:
+        parsed = feedparser.parse(b"")
+        parsed["status"] = 304
+        return url, parsed
+
+    parsed = feedparser.parse(resp.content)
+    parsed["status"] = resp.status_code
+    # Surface caching validators the loop persists for the next conditional GET.
+    if resp.headers.get("ETag"):
+        parsed["etag"] = resp.headers["ETag"]
+    if resp.headers.get("Last-Modified"):
+        parsed["modified"] = resp.headers["Last-Modified"]
+        parsed["headers"] = {"last-modified": resp.headers["Last-Modified"]}
     return url, parsed
 
 
@@ -327,7 +387,31 @@ def _row_kwargs(a: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Guards against overlapping runs — the interval scheduler and a manual
+# POST /news/poll (Cloud Scheduler) can otherwise fire concurrently, doubling
+# every feed fetch and Gemini enrichment call for the same cycle.
+_poll_lock = threading.Lock()
+
+
 def poll_all_feeds() -> dict[str, Any]:
+    """Run one poll cycle, unless one is already in progress (then skip).
+
+    The actual work is in ``_poll_all_feeds``; this wrapper enforces a single
+    in-flight poll so a manual trigger can't pile on top of the scheduled one.
+    """
+    if not _poll_lock.acquire(blocking=False):
+        log.info("news poll already running — skipping this trigger")
+        return {
+            "skipped": True, "feeds_polled": 0, "feeds_unchanged": 0, "feeds_errored": 0,
+            "fetched": 0, "new": 0, "enriched": 0, "alerts": 0, "pruned": 0,
+        }
+    try:
+        return _poll_all_feeds()
+    finally:
+        _poll_lock.release()
+
+
+def _poll_all_feeds() -> dict[str, Any]:
     """Fetch every configured feed, dedup, enrich new items, persist. Sync.
 
     Returns a small summary dict; never raises (logs and returns partial counts)
@@ -465,12 +549,15 @@ def start_news_scheduler() -> None:
         return
     if _scheduler is not None:
         return
-    if settings.using_postgres:
-        log.warning(
-            "news collector scheduler started under Postgres — note that on Cloud Run "
-            "with min-instances=0 the instance freezes when idle and the timer will not "
-            "fire reliably. Prefer Cloud Scheduler → POST /news/poll there."
+    if settings.is_cloud_run:
+        # The instance freezes when idle at min-instances=0, so the interval
+        # timer would silently never fire. Don't start it (it's misleading);
+        # polling must be driven by Cloud Scheduler → POST /news/poll.
+        log.info(
+            "news collector: Cloud Run detected — in-process scheduler NOT started; "
+            "drive polling via Cloud Scheduler → POST /news/poll"
         )
+        return
 
     from apscheduler.schedulers.background import BackgroundScheduler  # noqa: PLC0415
 
