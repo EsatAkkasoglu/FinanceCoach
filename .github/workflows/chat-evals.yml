@@ -1,0 +1,78 @@
+name: Chat Evals (manual)
+
+# Runs the chat-quality eval harness against the real multi-agent graph using
+# the repo's GEMINI_API_KEY secret, then publishes the LLM-judge report as an
+# artifact + job summary. Manual trigger only (workflow_dispatch).
+#
+# NOTE: workflow_dispatch only appears once this file is on the default branch
+# (main). Merge it there, then run it from the Actions tab (or the API) and pick
+# an optional category/limit to keep a first run quick.
+
+on:
+  workflow_dispatch:
+    inputs:
+      category:
+        description: "Only run one category (e.g. advisory, regulatory) — optional"
+        required: false
+        type: string
+      limit:
+        description: "Cap number of items (e.g. 8) — optional"
+        required: false
+        type: string
+
+jobs:
+  evals:
+    name: Run + grade chat evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync backend deps
+        run: uv sync
+
+      - name: Run evals over the golden QA set
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+          COINDESK_API_KEY: ${{ secrets.COINDESK_API_KEY }}
+          # Inputs via env (not string-interpolated into the shell) to avoid injection.
+          CATEGORY: ${{ inputs.category }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          ARGS=""
+          [ -n "$CATEGORY" ] && ARGS="$ARGS --category $CATEGORY"
+          [ -n "$LIMIT" ] && ARGS="$ARGS --limit $LIMIT"
+          echo "run_evals$ARGS"
+          uv run python -m evals.run_evals $ARGS
+
+      - name: Grade the newest run with the LLM-judge
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          RUN=$(ls -t evals/results/run_*.json | head -1)
+          echo "Grading $RUN"
+          uv run python -m evals.grade "$(basename "$RUN")"
+
+      - name: Publish report to job summary
+        if: always()
+        run: |
+          REPORT=$(ls -t evals/results/*.report.md 2>/dev/null | head -1 || true)
+          if [ -n "$REPORT" ]; then cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"; else
+            echo "No report produced (check the run logs)." >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload results (transcripts + scores + report)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-eval-results
+          path: backend/evals/results/**
+          if-no-files-found: warn
