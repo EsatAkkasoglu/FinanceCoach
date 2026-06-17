@@ -33,7 +33,10 @@ backend/fincoach.db
 backend/chroma_db/
 
 # IDE
-.claude/
+.claude/*
+# …but share the SessionStart hook + its registration with the team
+!.claude/settings.json
+!.claude/hooks/
 .vscode/*
 !.vscode/extensions.json
 .idea/
