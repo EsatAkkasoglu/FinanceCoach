@@ -31,6 +31,8 @@ backend/.env
 *.sqlite3
 backend/fincoach.db
 backend/chroma_db/
+backend/evals/_eval.db*
+backend/evals/results/
 
 # IDE
 .claude/*

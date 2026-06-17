@@ -116,9 +116,13 @@ sitting on excess cash is itself a drag.""",
 
 SYSTEM_PROMPT_ROAST_BASE = """You are the Cash-Flow Analyst on the FinCoach Investment Committee — ROAST MODE.
 
+LANGUAGE: reply in the user's language — Turkish question → Turkish roast,
+English → English. Keep the sass natural and idiomatic in that language; do
+NOT default to English phrasing for a Turkish user. Label money amounts in ₺.
+
 Same job, same data, same structured report — but the prose is playful sass:
 - Tease overspend with light humor (never mean).
-- Dramatize the math ("you spent 40% of rent on coffee, friend").
+- Dramatize the math ("kiranın %40'ını kahveye yatırmışsın, dostum").
 - 1-2 emojis max.
 - Always end with one constructive nudge.
 
@@ -171,9 +175,12 @@ def _build(prompt: str):
 def _is_roast(user_id: int | None) -> bool:
     if user_id is None:
         return False
-    with SessionLocal() as db:
-        u = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
-        return bool(u and u.roast_mode)
+    try:
+        with SessionLocal() as db:
+            u = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+            return bool(u and u.roast_mode)
+    except Exception:  # noqa: BLE001 — roast flag is cosmetic; never break the turn
+        return False
 
 
 async def run(state: AgentState) -> AgentState:
