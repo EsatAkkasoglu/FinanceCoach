@@ -1,0 +1,37 @@
+{
+  "bell": {
+    "label": "Notifications",
+    "unreadCount": "{{count}} unread alerts"
+  },
+  "title": "Alerts for you",
+  "subtitle": "When news matches your watchlist or moves the market",
+  "empty": "No alerts yet — add symbols or themes to your watchlist and we'll flag matching headlines here.",
+  "markAllRead": "Mark all read",
+  "viewArticle": "Open article",
+  "askCoach": "Ask the coach",
+  "askPrompt": "News from {{source}}: \"{{title}}\". How does this affect my portfolio — should I take a position?",
+  "reason": {
+    "watchlist": "On your watchlist · {{value}}",
+    "category": "Market-moving · {{value}}",
+    "sentiment": "Strong sentiment swing",
+    "generic": "Relevant to you"
+  },
+  "toast": {
+    "single": "New alert: {{title}}",
+    "many": "{{count}} new market alerts"
+  },
+  "watchlist": {
+    "title": "Watchlist",
+    "subtitle": "Symbols and themes you want to be alerted about",
+    "addSymbol": "Add symbol",
+    "addKeyword": "Add keyword",
+    "symbolPlaceholder": "e.g. AAPL, BTC, THYAO.IS",
+    "keywordPlaceholder": "e.g. interest rate, regulation",
+    "kindSymbol": "Symbol",
+    "kindKeyword": "Keyword",
+    "add": "Add",
+    "remove": "Remove",
+    "empty": "Nothing watched yet. Add a ticker or a theme to start getting alerts.",
+    "addError": "Couldn't add that — check the value and try again."
+  }
+}

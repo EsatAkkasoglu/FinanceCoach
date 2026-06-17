@@ -1,0 +1,37 @@
+{
+  "bell": {
+    "label": "Bildirimler",
+    "unreadCount": "{{count}} okunmamış uyarı"
+  },
+  "title": "Senin için uyarılar",
+  "subtitle": "Haber watchlist'inle eşleştiğinde veya piyasayı hareketlendirdiğinde",
+  "empty": "Henüz uyarı yok — watchlist'ine sembol veya tema ekle, eşleşen başlıkları burada işaretleyelim.",
+  "markAllRead": "Tümünü okundu işaretle",
+  "viewArticle": "Haberi aç",
+  "askCoach": "Koça sor",
+  "askPrompt": "{{source}} kaynağından haber: \"{{title}}\". Bu portföyümü nasıl etkiler — pozisyon almalı mıyım?",
+  "reason": {
+    "watchlist": "Watchlist'inde · {{value}}",
+    "category": "Piyasayı hareketlendiren · {{value}}",
+    "sentiment": "Güçlü duygu değişimi",
+    "generic": "Seninle ilgili"
+  },
+  "toast": {
+    "single": "Yeni uyarı: {{title}}",
+    "many": "{{count}} yeni piyasa uyarısı"
+  },
+  "watchlist": {
+    "title": "İzleme listesi",
+    "subtitle": "Uyarı almak istediğin semboller ve temalar",
+    "addSymbol": "Sembol ekle",
+    "addKeyword": "Anahtar kelime ekle",
+    "symbolPlaceholder": "ör. AAPL, BTC, THYAO.IS",
+    "keywordPlaceholder": "ör. faiz, regülasyon",
+    "kindSymbol": "Sembol",
+    "kindKeyword": "Anahtar kelime",
+    "add": "Ekle",
+    "remove": "Kaldır",
+    "empty": "Henüz bir şey izlenmiyor. Uyarı almaya başlamak için bir sembol veya tema ekle.",
+    "addError": "Eklenemedi — değeri kontrol edip tekrar dene."
+  }
+}

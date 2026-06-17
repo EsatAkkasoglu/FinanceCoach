@@ -37,6 +37,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import FeedState, NewsArticle
 from app.db.session import SessionLocal
+from app.services.news_alerts import generate_alerts
 from app.settings import settings
 
 log = logging.getLogger("fincoach.news_collector")
@@ -154,6 +155,13 @@ class HeadlineEnrichment(BaseModel):
         description="One of: earnings, macro, regulation, ma, crypto, market, tech, other"
     )
     summary: str = Field(description="One short sentence summarizing the headline")
+    tickers: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Stock/crypto/fund symbols explicitly named in the headline (BIST → '.IS' "
+            "suffix, e.g. ASELS.IS; crypto bare, e.g. BTC). Empty list if none."
+        ),
+    )
 
 
 class BatchEnrichment(BaseModel):
@@ -180,9 +188,14 @@ def _get_enrich_llm():
 
 _ENRICH_PROMPT = """You are a financial news classifier. For each numbered headline below,
 return its sentiment (positive/neutral/negative) for an investor, a sentiment score in
-[-1, 1], a single category, and a one-sentence summary. Headlines may be English or Turkish.
+[-1, 1], a single category, a one-sentence summary, and any explicitly-named tradable
+symbols. Headlines may be English or Turkish.
 
 Categories: earnings, macro, regulation, ma (mergers & acquisitions), crypto, market, tech, other.
+
+Tickers: list only symbols clearly named in the headline. Use the canonical form —
+BIST stocks get a '.IS' suffix (e.g. ASELS.IS, THYAO.IS), crypto stays bare (e.g. BTC, ETH),
+US equities as-is (e.g. AAPL). Return an empty list when no symbol is named.
 
 Return one item per headline, preserving the given index.
 
@@ -222,6 +235,10 @@ def enrich_batch(articles: list[dict[str, Any]]) -> None:
             art["sentiment_score"] = max(-1.0, min(1.0, float(item.score)))
             art["category"] = category if category in _VALID_CATEGORY else "other"
             art["summary"] = (item.summary or "").strip()[:280] or None
+            tickers = ",".join(
+                t.strip().upper() for t in (item.tickers or []) if t and t.strip()
+            )
+            art["tickers"] = tickers[:256] or None
             art["enriched"] = 1
 
 
@@ -300,6 +317,7 @@ def _row_kwargs(a: dict[str, Any]) -> dict[str, Any]:
         "published_at": a.get("published_at"),
         "snippet": a.get("snippet"),
         "lang": a.get("lang") or "en",
+        "tickers": a.get("tickers"),
         "category": a.get("category"),
         "sentiment": a.get("sentiment"),
         "sentiment_score": a.get("sentiment_score"),
@@ -324,6 +342,7 @@ def poll_all_feeds() -> dict[str, Any]:
         "fetched": 0,
         "new": 0,
         "enriched": 0,
+        "alerts": 0,
         "pruned": 0,
     }
     if not feeds:
@@ -397,6 +416,19 @@ def poll_all_feeds() -> dict[str, Any]:
                 enrich_batch(fresh)
                 summary["enriched"] = sum(1 for a in fresh if a.get("enriched"))
                 summary["new"] = _persist(db, fresh)
+                # Match the just-stored articles against watchlists / importance
+                # and raise proactive alerts. Re-query so we have row ids + the
+                # canonical persisted values.
+                fresh_urls = [c["canonical_url"] for c in fresh if c.get("canonical_url")]
+                if fresh_urls:
+                    stored = (
+                        db.execute(
+                            select(NewsArticle).where(NewsArticle.canonical_url.in_(fresh_urls))
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    summary["alerts"] = generate_alerts(db, stored)
 
             # Retention prune.
             cutoff = datetime.utcnow() - timedelta(days=max(1, settings.news_retention_days))
@@ -411,10 +443,11 @@ def poll_all_feeds() -> dict[str, Any]:
 
     summary["elapsed_ms"] = int((time.monotonic() - started) * 1000)
     log.info(
-        "news poll: %d polled / %d unchanged / %d err → %d fetched, %d new, %d enriched, %d pruned (%dms)",
+        "news poll: %d polled / %d unchanged / %d err → %d fetched, %d new, %d enriched, "
+        "%d alerts, %d pruned (%dms)",
         summary["feeds_polled"], summary["feeds_unchanged"], summary["feeds_errored"],
-        summary["fetched"], summary["new"], summary["enriched"], summary["pruned"],
-        summary.get("elapsed_ms", 0),
+        summary["fetched"], summary["new"], summary["enriched"], summary["alerts"],
+        summary["pruned"], summary.get("elapsed_ms", 0),
     )
     return summary
 

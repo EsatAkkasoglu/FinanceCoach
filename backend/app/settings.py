@@ -70,6 +70,25 @@ class Settings(BaseSettings):
     # Articles older than this are pruned at the end of each poll.
     news_retention_days: int = Field(default=14, alias="FINCOACH_NEWS_RETENTION_DAYS")
 
+    # Proactive news alerts — after each poll, freshly-collected articles are
+    # matched against each user's watchlist (symbols/keywords) and a global
+    # importance threshold; matches raise a NewsAlert the frontend surfaces in a
+    # notification center + toast so the user can react ("take a position").
+    news_alert_enabled: bool = Field(default=True, alias="FINCOACH_NEWS_ALERT_ENABLED")
+    # |sentiment_score| at/above this raises an importance alert even with no
+    # watchlist hit (a strongly bullish/bearish headline is worth surfacing).
+    news_alert_score_threshold: float = Field(
+        default=0.6, alias="FINCOACH_NEWS_ALERT_SCORE_THRESHOLD"
+    )
+    # Categories that always clear the importance threshold (market-moving).
+    news_alert_categories: str = Field(
+        default="regulation,ma,earnings", alias="FINCOACH_NEWS_ALERT_CATEGORIES"
+    )
+
+    @property
+    def news_alert_category_set(self) -> set[str]:
+        return {c.strip().lower() for c in self.news_alert_categories.split(",") if c.strip()}
+
     # Auth
     jwt_secret: str = Field(default="dev-secret-change-me-in-production", alias="FINCOACH_JWT_SECRET")
     jwt_algorithm: str = "HS256"

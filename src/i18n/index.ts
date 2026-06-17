@@ -15,6 +15,7 @@ import enChat from "./locales/en/chat.json";
 import enOnboarding from "./locales/en/onboarding.json";
 import enDocuments from "./locales/en/documents.json";
 import enLanding from "./locales/en/landing.json";
+import enNotifications from "./locales/en/notifications.json";
 
 import trCommon from "./locales/tr/common.json";
 import trAuth from "./locales/tr/auth.json";
@@ -29,6 +30,7 @@ import trChat from "./locales/tr/chat.json";
 import trOnboarding from "./locales/tr/onboarding.json";
 import trDocuments from "./locales/tr/documents.json";
 import trLanding from "./locales/tr/landing.json";
+import trNotifications from "./locales/tr/notifications.json";
 import { getLanguageFromPath } from "@/lib/routing";
 
 export const defaultNS = "common";
@@ -47,6 +49,7 @@ export const resources = {
     onboarding: enOnboarding,
     documents: enDocuments,
     landing: enLanding,
+    notifications: enNotifications,
   },
   tr: {
     common: trCommon,
@@ -62,6 +65,7 @@ export const resources = {
     onboarding: trOnboarding,
     documents: trDocuments,
     landing: trLanding,
+    notifications: trNotifications,
   },
 } as const;
 

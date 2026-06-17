@@ -14,7 +14,15 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import (
-    Column, Date, DateTime, Float, ForeignKey, Integer, String, Text,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -309,3 +317,52 @@ class FeedState(Base):
     last_polled_at = Column(DateTime, nullable=True)
     last_status = Column(Integer, nullable=True)            # last HTTP status (200/304/…)
     error_count = Column(Integer, nullable=False, default=0)
+
+
+class WatchKind(str, Enum):
+    SYMBOL = "symbol"      # a ticker/fund code — matched against NewsArticle.tickers
+    KEYWORD = "keyword"    # a free-text theme — matched against title + snippet
+
+
+class Watchlist(Base):
+    """A symbol or keyword the user wants proactive news alerts for.
+
+    Drives ``services.news_alerts.generate_alerts``: a freshly-collected article
+    raises a ``NewsAlert`` when it matches a watchlist row (or clears the global
+    importance threshold). Single-user prototype, so rows are scoped to user_id=1.
+    """
+
+    __tablename__ = "watchlist"
+    __table_args__ = (UniqueConstraint("user_id", "kind", "value", name="uq_watchlist_user_kind_value"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    kind = Column(String(16), nullable=False, default=WatchKind.SYMBOL.value)
+    # Normalized at write time: symbols upper-cased, keywords lower-cased.
+    value = Column(String(128), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class NewsAlert(Base):
+    """A per-user proactive alert: 'this fresh headline is relevant to you'.
+
+    Written by the collector (out of the request path) when a new article matches
+    the user's watchlist or clears the importance threshold; read by the frontend
+    notification center via ``GET /news/alerts``. One alert per (user, article).
+    """
+
+    __tablename__ = "news_alert"
+    __table_args__ = (UniqueConstraint("user_id", "article_id", name="uq_news_alert_user_article"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    article_id = Column(
+        Integer, ForeignKey("news_article.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Why this fired: "watchlist:AAPL" | "category:regulation" | "sentiment".
+    reason = Column(String(64), nullable=False)
+    priority = Column(Integer, nullable=False, default=1)   # 2 = watchlist hit, 1 = importance
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    read_at = Column(DateTime, nullable=True)               # NULL = unread
+
+    article = relationship("NewsArticle")

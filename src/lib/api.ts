@@ -710,6 +710,91 @@ export async function getNewsFeed(params: NewsFeedParams = {}): Promise<NewsItem
   return data.items ?? [];
 }
 
+// ── Proactive news alerts + watchlist ────────────────────────────────────────
+
+/** A headline matched to the user's watchlist or the importance threshold. */
+export interface NewsAlert {
+  id: number;
+  reason: string;             // "watchlist:AAPL" | "category:regulation" | "sentiment"
+  priority: number;           // 2 = watchlist hit, 1 = importance
+  created_at: string | null;
+  read: boolean;
+  article: {
+    id: number;
+    title: string;
+    url: string;
+    source: string;
+    summary: string | null;
+    snippet: string | null;
+    lang: string;
+    category: string | null;
+    sentiment: "positive" | "neutral" | "negative" | null;
+    sentiment_score: number | null;
+    tickers: string | null;
+    published_at: string | null;
+  } | null;
+}
+
+export interface NewsAlertsResponse {
+  items: NewsAlert[];
+  count: number;
+  unread_count: number;
+}
+
+export async function getNewsAlerts(
+  params: { unreadOnly?: boolean; limit?: number } = {},
+): Promise<NewsAlertsResponse> {
+  const qs = new URLSearchParams();
+  if (params.unreadOnly) qs.set("unread_only", "true");
+  if (params.limit) qs.set("limit", String(params.limit));
+  const query = qs.toString();
+  const r = await apiFetch(`/news/alerts${query ? `?${query}` : ""}`);
+  if (!r.ok) return { items: [], count: 0, unread_count: 0 };
+  return r.json() as Promise<NewsAlertsResponse>;
+}
+
+/** Mark the given alert ids read, or all of the user's alerts when ids omitted. */
+export async function markAlertsRead(ids?: number[]): Promise<number> {
+  const r = await apiFetch(`/news/alerts/read`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(ids ? { ids } : {}),
+  });
+  if (!r.ok) return 0;
+  const data = (await r.json()) as { ok: boolean; updated: number };
+  return data.updated ?? 0;
+}
+
+export type WatchKind = "symbol" | "keyword";
+
+export interface WatchlistItem {
+  id: number;
+  kind: WatchKind;
+  value: string;
+}
+
+export async function listWatchlist(): Promise<WatchlistItem[]> {
+  const r = await apiFetch(`/news/watchlist`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { items: WatchlistItem[] };
+  return data.items ?? [];
+}
+
+export async function addWatchlistItem(kind: WatchKind, value: string): Promise<WatchlistItem | null> {
+  const r = await apiFetch(`/news/watchlist`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, value }),
+  });
+  if (!r.ok) return null;
+  return r.json() as Promise<WatchlistItem>;
+}
+
+export async function removeWatchlistItem(id: number): Promise<boolean> {
+  const r = await apiFetch(`/news/watchlist/${id}`, { method: "DELETE" });
+  return r.ok;
+}
+
 // ── Documents ────────────────────────────────────────────────────────────────
 
 export interface DocumentEntry {

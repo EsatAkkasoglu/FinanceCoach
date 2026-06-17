@@ -7,6 +7,7 @@ import { onIdTokenChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { Portfolio } from "@/components/portfolio/Portfolio";
@@ -466,6 +467,8 @@ export default function App() {
             />
             {/* Only show currency switcher on financial pages — compact dropdown */}
             {showCurrency && <CurrencySwitcher variant="compact" />}
+            {/* Proactive news alerts — polls + popover with "ask the coach" CTA */}
+            <NotificationBell />
             {/* Language + tour controls — inline so they don't overlap the chat send button */}
             {renderLanguageControls("header")}
           </div>

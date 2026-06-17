@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { StepRiskQuiz } from "@/components/onboarding/StepRiskQuiz";
 import { RISK_QUIZ, scoreToLabel } from "@/components/onboarding/data";
 import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
+import { WatchlistManager } from "@/components/notifications/WatchlistManager";
 
 // ─── UX copy / data ───────────────────────────────────────────────────────────
 
@@ -483,6 +484,9 @@ function BehaviourPanel() {
               />
             </div>
           </div>
+        </Card>
+        <Card>
+          <WatchlistManager />
         </Card>
       </div>
     </>
