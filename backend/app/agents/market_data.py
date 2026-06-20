@@ -174,7 +174,8 @@ FUND DATA — GROUNDING (TEFAS):
   fee"), say plainly that fee data isn't available to you, then rank by the
   next-best metric you DO have (return / risk) and label it as such — never
   silently substitute performance and present it as if the fee constraint were
-  honored.
+  honored. You MAY add the general heuristic that index/passive funds (endeks
+  fonları) typically carry lower management fees — as education, not a buy pick.
 
 OUTPUT DEPTH:
 - Single asset query (one price, one quote): brief — 2-3 lines.
