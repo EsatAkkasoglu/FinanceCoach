@@ -45,11 +45,13 @@ class Settings(BaseSettings):
     # the news_articles table so /chat and the dashboard read pre-computed
     # results (ms-level) instead of hitting feeds on every request.
     #
-    # Deployment note: the in-process scheduler only fires while the process is
-    # alive. On Cloud Run with min-instances=0 the instance freezes when idle,
-    # so set FINCOACH_NEWS_COLLECTOR_ENABLED=false there and drive the poll via
-    # Cloud Scheduler → POST /news/poll instead. On the desktop sidecar leave it
-    # enabled (the process is always running while the app is open).
+    # Deployment note: keep this enabled everywhere, including Cloud Run. The
+    # in-process scheduler polls ~15s after each cold start and every interval
+    # while the instance is warm; a fully-idle (scaled-to-zero) instance simply
+    # isn't serving anyone. GET /news/feed additionally triggers a background
+    # stale-refresh, so a user opening the app after a long idle gets fresh news.
+    # For a guaranteed cadence regardless of traffic, also point Cloud Scheduler
+    # at POST /news/poll. On the desktop sidecar the process is always running.
     news_collector_enabled: bool = Field(default=True, alias="FINCOACH_NEWS_COLLECTOR_ENABLED")
     news_poll_minutes: int = Field(default=10, alias="FINCOACH_NEWS_POLL_MINUTES")
     # Comma-separated standing RSS feed URLs. Source name is derived from each
@@ -67,8 +69,30 @@ class Settings(BaseSettings):
     # store raw headlines only (zero LLM cost / quota use).
     news_enrich_enabled: bool = Field(default=True, alias="FINCOACH_NEWS_ENRICH_ENABLED")
     news_enrich_batch_size: int = Field(default=40, alias="FINCOACH_NEWS_ENRICH_BATCH_SIZE")
+    # Per-feed HTTP timeout (seconds). Without this a single hung feed server can
+    # block the whole poll cycle indefinitely.
+    news_fetch_timeout: float = Field(default=10.0, alias="FINCOACH_NEWS_FETCH_TIMEOUT")
     # Articles older than this are pruned at the end of each poll.
     news_retention_days: int = Field(default=14, alias="FINCOACH_NEWS_RETENTION_DAYS")
+
+    # Proactive news alerts — after each poll, freshly-collected articles are
+    # matched against each user's watchlist (symbols/keywords) and a global
+    # importance threshold; matches raise a NewsAlert the frontend surfaces in a
+    # notification center + toast so the user can react ("take a position").
+    news_alert_enabled: bool = Field(default=True, alias="FINCOACH_NEWS_ALERT_ENABLED")
+    # |sentiment_score| at/above this raises an importance alert even with no
+    # watchlist hit (a strongly bullish/bearish headline is worth surfacing).
+    news_alert_score_threshold: float = Field(
+        default=0.6, alias="FINCOACH_NEWS_ALERT_SCORE_THRESHOLD"
+    )
+    # Categories that always clear the importance threshold (market-moving).
+    news_alert_categories: str = Field(
+        default="regulation,ma,earnings", alias="FINCOACH_NEWS_ALERT_CATEGORIES"
+    )
+
+    @property
+    def news_alert_category_set(self) -> set[str]:
+        return {c.strip().lower() for c in self.news_alert_categories.split(",") if c.strip()}
 
     # Auth
     jwt_secret: str = Field(default="dev-secret-change-me-in-production", alias="FINCOACH_JWT_SECRET")
@@ -121,6 +145,16 @@ class Settings(BaseSettings):
     @property
     def using_postgres(self) -> bool:
         return bool(self.database_url and self.database_url.startswith("postgresql"))
+
+    @property
+    def is_cloud_run(self) -> bool:
+        """True when running on Cloud Run (K_SERVICE is injected by the runtime).
+
+        The instance freezes when idle at min-instances=0, so an in-process
+        interval scheduler can't be relied on — polling must be driven by an
+        external trigger (Cloud Scheduler → POST /news/poll).
+        """
+        return bool(os.environ.get("K_SERVICE"))
 
     @property
     def db_url(self) -> str:

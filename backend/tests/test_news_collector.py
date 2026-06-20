@@ -6,6 +6,7 @@ fetch/poll path is exercised separately under the ``network`` marker.
 """
 from __future__ import annotations
 
+import threading
 import time
 from types import SimpleNamespace
 
@@ -90,6 +91,91 @@ def test_enrich_batch_noop_when_disabled(monkeypatch):
 
 def test_enrich_batch_empty_is_safe():
     nc.enrich_batch([])  # must not raise
+
+
+def test_enrich_bisects_on_failure(monkeypatch):
+    """One unparseable headline must not sink the whole batch — the chunk is
+    bisected until the offending single item is isolated, the rest enriched."""
+    monkeypatch.setattr(nc.settings, "news_enrich_enabled", True)
+    monkeypatch.setattr(nc.settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(nc.settings, "news_enrich_batch_size", 50)
+
+    class _FakeLLM:
+        def invoke(self, prompt: str):
+            # Headlines are listed after the "Headlines:" marker, one per line.
+            body = prompt.rsplit("Headlines:", 1)[-1]
+            count = len([ln for ln in body.splitlines() if ln.strip()])
+            if count > 1:
+                raise ValueError("simulated structured-output parse failure")
+            return nc.BatchEnrichment(
+                items=[nc.HeadlineEnrichment(
+                    index=0, sentiment="positive", score=0.5, category="crypto",
+                    summary="ok", tickers=["BTC"],
+                )]
+            )
+
+    monkeypatch.setattr(nc, "_get_enrich_llm", lambda: _FakeLLM())
+    arts = [{"title": f"Headline {i}", "enriched": 0} for i in range(3)]
+    nc.enrich_batch(arts)
+    assert all(a.get("enriched") == 1 for a in arts)
+    assert all(a.get("sentiment") == "positive" for a in arts)
+
+
+def test_poll_lock_skips_overlapping_run():
+    """A second poll while one is in flight returns immediately as skipped."""
+    assert nc._poll_lock.acquire(blocking=False)
+    try:
+        summary = nc.poll_all_feeds()
+        assert summary.get("skipped") is True
+        assert summary["new"] == 0
+    finally:
+        nc._poll_lock.release()
+
+
+def test_fetch_one_timeout_marks_feed_errored(monkeypatch):
+    def _boom(*_a, **_k):
+        raise nc.requests.exceptions.Timeout("slow feed")
+
+    monkeypatch.setattr(nc.requests, "get", _boom)
+    url, parsed = nc._fetch_one("https://x.com/rss", None, None)
+    assert url == "https://x.com/rss"
+    assert parsed["bozo"] == 1
+    assert parsed["status"] is None
+    assert not parsed.get("entries")
+
+
+def test_fetch_one_304_short_circuits(monkeypatch):
+    resp = SimpleNamespace(status_code=304, content=b"", headers={})
+    monkeypatch.setattr(nc.requests, "get", lambda *a, **k: resp)
+    _url, parsed = nc._fetch_one("https://x.com/rss", "etag-1", None)
+    assert parsed["status"] == 304
+    assert not parsed.get("entries")
+
+
+def test_poll_if_stale_launches_background_poll_when_stale(monkeypatch):
+    """A stale feed kicks a background poll (the Cloud Run idle-wake refresh)."""
+    monkeypatch.setattr(nc.settings, "news_collector_enabled", True)
+    monkeypatch.setattr(nc, "_minutes_since_last_poll", lambda: 999.0)
+    fired = threading.Event()
+    monkeypatch.setattr(nc, "poll_all_feeds", lambda: fired.set())
+    assert nc.poll_if_stale() is True
+    assert fired.wait(timeout=2.0)
+
+
+def test_poll_if_stale_skips_when_fresh(monkeypatch):
+    monkeypatch.setattr(nc.settings, "news_collector_enabled", True)
+    monkeypatch.setattr(nc, "_minutes_since_last_poll", lambda: 0.0)
+
+    def _boom():
+        raise AssertionError("poll must not run when fresh")
+
+    monkeypatch.setattr(nc, "poll_all_feeds", _boom)
+    assert nc.poll_if_stale() is False
+
+
+def test_poll_if_stale_skips_when_disabled(monkeypatch):
+    monkeypatch.setattr(nc.settings, "news_collector_enabled", False)
+    assert nc.poll_if_stale() is False
 
 
 # ── HTTP layer (real ASGI stack via the TestClient fixture; no network/key) ───

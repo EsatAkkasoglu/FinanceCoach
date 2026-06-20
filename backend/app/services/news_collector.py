@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -31,12 +32,14 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import feedparser
+import requests
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import FeedState, NewsArticle
 from app.db.session import SessionLocal
+from app.services.news_alerts import generate_alerts
 from app.settings import settings
 
 log = logging.getLogger("fincoach.news_collector")
@@ -154,6 +157,13 @@ class HeadlineEnrichment(BaseModel):
         description="One of: earnings, macro, regulation, ma, crypto, market, tech, other"
     )
     summary: str = Field(description="One short sentence summarizing the headline")
+    tickers: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Stock/crypto/fund symbols explicitly named in the headline (BIST → '.IS' "
+            "suffix, e.g. ASELS.IS; crypto bare, e.g. BTC). Empty list if none."
+        ),
+    )
 
 
 class BatchEnrichment(BaseModel):
@@ -180,9 +190,14 @@ def _get_enrich_llm():
 
 _ENRICH_PROMPT = """You are a financial news classifier. For each numbered headline below,
 return its sentiment (positive/neutral/negative) for an investor, a sentiment score in
-[-1, 1], a single category, and a one-sentence summary. Headlines may be English or Turkish.
+[-1, 1], a single category, a one-sentence summary, and any explicitly-named tradable
+symbols. Headlines may be English or Turkish.
 
 Categories: earnings, macro, regulation, ma (mergers & acquisitions), crypto, market, tech, other.
+
+Tickers: list only symbols clearly named in the headline. Use the canonical form —
+BIST stocks get a '.IS' suffix (e.g. ASELS.IS, THYAO.IS), crypto stays bare (e.g. BTC, ETH),
+US equities as-is (e.g. AAPL). Return an empty list when no symbol is named.
 
 Return one item per headline, preserving the given index.
 
@@ -190,11 +205,55 @@ Headlines:
 {headlines}"""
 
 
+def _apply_enrichment(result: BatchEnrichment, chunk: list[dict[str, Any]]) -> None:
+    """Copy a model's batch result back onto the article dicts (validated)."""
+    for item in result.items:
+        if not 0 <= item.index < len(chunk):
+            continue
+        sentiment = item.sentiment.strip().lower()
+        category = item.category.strip().lower()
+        art = chunk[item.index]
+        art["sentiment"] = sentiment if sentiment in _VALID_SENTIMENT else "neutral"
+        art["sentiment_score"] = max(-1.0, min(1.0, float(item.score)))
+        art["category"] = category if category in _VALID_CATEGORY else "other"
+        art["summary"] = (item.summary or "").strip()[:280] or None
+        tickers = ",".join(t.strip().upper() for t in (item.tickers or []) if t and t.strip())
+        art["tickers"] = tickers[:256] or None
+        art["enriched"] = 1
+
+
+def _enrich_chunk(chunk: list[dict[str, Any]]) -> None:
+    """Enrich one chunk in place, splitting on failure so one bad headline can't
+    sink the whole batch.
+
+    A single malformed structured-output item makes the *entire* ``.invoke``
+    parse raise — previously that dropped enrichment for all 40 articles in the
+    batch. Instead, on failure we bisect and retry each half, narrowing the blast
+    radius down to the single offending headline (which is then stored raw).
+    """
+    if not chunk:
+        return
+    listing = "\n".join(f"{i}. {a['title']}" for i, a in enumerate(chunk))
+    try:
+        result: BatchEnrichment = _get_enrich_llm().invoke(
+            _ENRICH_PROMPT.format(headlines=listing)
+        )
+    except Exception:  # noqa: BLE001 — never let enrichment break collection
+        if len(chunk) == 1:
+            log.warning("news enrichment failed for 1 headline; stored raw", exc_info=True)
+            return
+        mid = len(chunk) // 2
+        _enrich_chunk(chunk[:mid])
+        _enrich_chunk(chunk[mid:])
+        return
+    _apply_enrichment(result, chunk)
+
+
 def enrich_batch(articles: list[dict[str, Any]]) -> None:
     """Mutate ``articles`` in place, filling sentiment/score/category/summary.
 
-    Best-effort: on any failure the articles are left unenriched (stored raw) and
-    a warning is logged — the collector never crashes on enrichment.
+    Best-effort: on any failure the affected articles are left unenriched (stored
+    raw) and a warning is logged — the collector never crashes on enrichment.
     """
     if not articles or not settings.news_enrich_enabled:
         return
@@ -203,34 +262,52 @@ def enrich_batch(articles: list[dict[str, Any]]) -> None:
 
     batch_size = max(1, settings.news_enrich_batch_size)
     for start in range(0, len(articles), batch_size):
-        chunk = articles[start : start + batch_size]
-        listing = "\n".join(f"{i}. {a['title']}" for i, a in enumerate(chunk))
-        try:
-            result: BatchEnrichment = _get_enrich_llm().invoke(
-                _ENRICH_PROMPT.format(headlines=listing)
-            )
-        except Exception:  # noqa: BLE001 — never let enrichment break collection
-            log.warning("news enrichment failed for a batch of %d", len(chunk), exc_info=True)
-            continue
-        for item in result.items:
-            if not 0 <= item.index < len(chunk):
-                continue
-            sentiment = item.sentiment.strip().lower()
-            category = item.category.strip().lower()
-            art = chunk[item.index]
-            art["sentiment"] = sentiment if sentiment in _VALID_SENTIMENT else "neutral"
-            art["sentiment_score"] = max(-1.0, min(1.0, float(item.score)))
-            art["category"] = category if category in _VALID_CATEGORY else "other"
-            art["summary"] = (item.summary or "").strip()[:280] or None
-            art["enriched"] = 1
+        _enrich_chunk(articles[start : start + batch_size])
 
 
 # ── Fetch (conditional GET via feedparser) ───────────────────────────────────
 
 
+def _bozo_result(exc: Exception) -> Any:
+    """A parsed-feed stand-in marking a fetch failure (so the loop counts it errored)."""
+    parsed = feedparser.parse(b"")
+    parsed["bozo"] = 1
+    parsed["bozo_exception"] = exc
+    parsed["status"] = None
+    return parsed
+
+
 def _fetch_one(url: str, etag: str | None, modified: str | None) -> tuple[str, Any]:
-    """Fetch+parse a single feed with conditional-GET headers. Pure-ish (network)."""
-    parsed = feedparser.parse(url, etag=etag, modified=modified, agent=_USER_AGENT)
+    """Fetch+parse a single feed with conditional GET and a hard timeout.
+
+    ``feedparser.parse(url)`` has no timeout knob, so a hung feed server could
+    block the whole poll indefinitely. We fetch with ``requests`` (bounded by
+    ``news_fetch_timeout``) and hand the bytes to feedparser, preserving the
+    304/etag/last-modified conditional-GET behavior the loop relies on.
+    """
+    headers = {"User-Agent": _USER_AGENT}
+    if etag:
+        headers["If-None-Match"] = etag
+    if modified:
+        headers["If-Modified-Since"] = modified
+    try:
+        resp = requests.get(url, headers=headers, timeout=settings.news_fetch_timeout)
+    except requests.RequestException as exc:
+        return url, _bozo_result(exc)
+
+    if resp.status_code == 304:
+        parsed = feedparser.parse(b"")
+        parsed["status"] = 304
+        return url, parsed
+
+    parsed = feedparser.parse(resp.content)
+    parsed["status"] = resp.status_code
+    # Surface caching validators the loop persists for the next conditional GET.
+    if resp.headers.get("ETag"):
+        parsed["etag"] = resp.headers["ETag"]
+    if resp.headers.get("Last-Modified"):
+        parsed["modified"] = resp.headers["Last-Modified"]
+        parsed["headers"] = {"last-modified": resp.headers["Last-Modified"]}
     return url, parsed
 
 
@@ -300,6 +377,7 @@ def _row_kwargs(a: dict[str, Any]) -> dict[str, Any]:
         "published_at": a.get("published_at"),
         "snippet": a.get("snippet"),
         "lang": a.get("lang") or "en",
+        "tickers": a.get("tickers"),
         "category": a.get("category"),
         "sentiment": a.get("sentiment"),
         "sentiment_score": a.get("sentiment_score"),
@@ -309,7 +387,61 @@ def _row_kwargs(a: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Guards against overlapping runs — the interval scheduler and a manual
+# POST /news/poll (Cloud Scheduler) can otherwise fire concurrently, doubling
+# every feed fetch and Gemini enrichment call for the same cycle.
+_poll_lock = threading.Lock()
+
+
 def poll_all_feeds() -> dict[str, Any]:
+    """Run one poll cycle, unless one is already in progress (then skip).
+
+    The actual work is in ``_poll_all_feeds``; this wrapper enforces a single
+    in-flight poll so a manual trigger can't pile on top of the scheduled one.
+    """
+    if not _poll_lock.acquire(blocking=False):
+        log.info("news poll already running — skipping this trigger")
+        return {
+            "skipped": True, "feeds_polled": 0, "feeds_unchanged": 0, "feeds_errored": 0,
+            "fetched": 0, "new": 0, "enriched": 0, "alerts": 0, "pruned": 0,
+        }
+    try:
+        return _poll_all_feeds()
+    finally:
+        _poll_lock.release()
+
+
+def _minutes_since_last_poll() -> float | None:
+    """Minutes since the most recent feed poll, or None if never polled."""
+    try:
+        with SessionLocal() as db:
+            last = db.execute(select(func.max(FeedState.last_polled_at))).scalar_one_or_none()
+    except Exception:  # noqa: BLE001 — staleness check must never break a read
+        return None
+    if last is None:
+        return None
+    return (datetime.utcnow() - last).total_seconds() / 60.0
+
+
+def poll_if_stale() -> bool:
+    """Kick a background poll if the feed is older than the poll interval.
+
+    Cheap and non-blocking — called from GET /news/feed so a Cloud Run instance
+    that just woke from idle (its interval scheduler having died with the
+    previous instance) refreshes news when a user actually opens the app. The
+    staleness gate + ``_poll_lock`` ensure at most one poll runs per interval.
+    Returns True if a poll was launched.
+    """
+    if not settings.news_collector_enabled or _poll_lock.locked():
+        return False
+    age = _minutes_since_last_poll()
+    if age is not None and age < max(1, settings.news_poll_minutes):
+        return False
+    threading.Thread(target=poll_all_feeds, name="news-poll-stale", daemon=True).start()
+    return True
+
+
+def _poll_all_feeds() -> dict[str, Any]:
     """Fetch every configured feed, dedup, enrich new items, persist. Sync.
 
     Returns a small summary dict; never raises (logs and returns partial counts)
@@ -324,6 +456,7 @@ def poll_all_feeds() -> dict[str, Any]:
         "fetched": 0,
         "new": 0,
         "enriched": 0,
+        "alerts": 0,
         "pruned": 0,
     }
     if not feeds:
@@ -397,6 +530,19 @@ def poll_all_feeds() -> dict[str, Any]:
                 enrich_batch(fresh)
                 summary["enriched"] = sum(1 for a in fresh if a.get("enriched"))
                 summary["new"] = _persist(db, fresh)
+                # Match the just-stored articles against watchlists / importance
+                # and raise proactive alerts. Re-query so we have row ids + the
+                # canonical persisted values.
+                fresh_urls = [c["canonical_url"] for c in fresh if c.get("canonical_url")]
+                if fresh_urls:
+                    stored = (
+                        db.execute(
+                            select(NewsArticle).where(NewsArticle.canonical_url.in_(fresh_urls))
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    summary["alerts"] = generate_alerts(db, stored)
 
             # Retention prune.
             cutoff = datetime.utcnow() - timedelta(days=max(1, settings.news_retention_days))
@@ -411,10 +557,11 @@ def poll_all_feeds() -> dict[str, Any]:
 
     summary["elapsed_ms"] = int((time.monotonic() - started) * 1000)
     log.info(
-        "news poll: %d polled / %d unchanged / %d err → %d fetched, %d new, %d enriched, %d pruned (%dms)",
+        "news poll: %d polled / %d unchanged / %d err → %d fetched, %d new, %d enriched, "
+        "%d alerts, %d pruned (%dms)",
         summary["feeds_polled"], summary["feeds_unchanged"], summary["feeds_errored"],
-        summary["fetched"], summary["new"], summary["enriched"], summary["pruned"],
-        summary.get("elapsed_ms", 0),
+        summary["fetched"], summary["new"], summary["enriched"], summary["alerts"],
+        summary["pruned"], summary.get("elapsed_ms", 0),
     )
     return summary
 
@@ -432,11 +579,17 @@ def start_news_scheduler() -> None:
         return
     if _scheduler is not None:
         return
-    if settings.using_postgres:
-        log.warning(
-            "news collector scheduler started under Postgres — note that on Cloud Run "
-            "with min-instances=0 the instance freezes when idle and the timer will not "
-            "fire reliably. Prefer Cloud Scheduler → POST /news/poll there."
+    if settings.is_cloud_run:
+        # The in-process scheduler still runs here and is worth keeping: it polls
+        # ~15s after each cold start and every interval while the instance stays
+        # warm. The only gap is a fully-idle instance (scaled to zero) — but then
+        # nobody is using the app. `poll_if_stale` (called from GET /news/feed)
+        # covers the "user opens the app after a long idle" case, and Cloud
+        # Scheduler → POST /news/poll remains available for guaranteed cadence.
+        log.info(
+            "news collector: Cloud Run detected — scheduler runs while warm; "
+            "reads trigger a stale-refresh, and Cloud Scheduler → POST /news/poll "
+            "can drive a guaranteed cadence"
         )
 
     from apscheduler.schedulers.background import BackgroundScheduler  # noqa: PLC0415

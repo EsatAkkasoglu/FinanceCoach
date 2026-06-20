@@ -18,12 +18,27 @@ from app.agents._helpers import normalize_content
 from app.agents.advisor import ReasoningDriver
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
+from app.auth import get_ui_language
 from app.settings import settings
 
 log = logging.getLogger("fincoach.risk_profiler")
 
 CONSERVATIVE_MAX = 50
 BALANCED_MAX = 90
+
+# Localized profile labels so the deterministic summary doesn't leak English
+# (and an arbitrary "/125") into a Turkish user's reply.
+_PROFILE_TR = {"conservative": "temkinli", "balanced": "dengeli", "aggressive": "agresif"}
+
+
+def _summary_text(score: int, profile: str, low: int, high: int) -> str:
+    """One-line risk summary in the UI language (synthesizer weaves it further)."""
+    if get_ui_language() == "tr":
+        return (
+            f"Risk skorun: {score}/125 — {_PROFILE_TR.get(profile, profile)}. "
+            f"Önerilen hisse senedi bandı: %{low}-{high}."
+        )
+    return f"Risk score: {score}/125 — {profile}. Suggested equity band: {low}-{high}%."
 
 
 def score_to_profile(score: int) -> str:
@@ -107,8 +122,17 @@ def _get_llm():
 
 
 _UPDATE_RE = re.compile(
-    r"(?:update|set|change|make|güncelle|ayarla|yap)\D{0,40}?(\d{1,3})",
-    re.IGNORECASE,
+    r"""
+    risk\w*                                   # 'risk', 'riskimi', 'riskini' …
+    \s*
+    (?:score|skor\w*|puan\w*|profil\w*)?      # optional 'score/skor/puan/profil'
+    \s*
+    (?:to|olarak|=|:|->|yap|ayarla|güncelle|set|change|make)?  # optional connector/verb
+    \s*
+    (\d{1,3})                                 # the score itself
+    (?!\s*(?:kademe|basamak|adım|kez|defa|puan\s+(?:düşür|art|yüksel)))  # not a step/count phrase
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
@@ -197,10 +221,7 @@ async def run(state: AgentState) -> AgentState:
             drivers=[],
         )
         # Return the error too so the synthesizer can mention it if needed.
-        summary_text = (
-            f"Risk score: {score}/125 — {derived_profile}. "
-            f"Suggested equity band: {equity_low}-{equity_high}%."
-        )
+        summary_text = _summary_text(score, derived_profile, equity_low, equity_high)
         return {
             "messages": [AIMessage(content=summary_text)],
             "citations": tool_calls,
@@ -217,10 +238,7 @@ async def run(state: AgentState) -> AgentState:
 
     # 5) Build the user-facing summary message (terse — synthesizer will weave).
     reasoning_text = " ".join(brief.reasoning).strip()
-    summary_text = (
-        f"Risk score: {brief.score}/125 — {brief.profile}. "
-        f"Suggested equity band: {brief.equity_low}-{brief.equity_high}%."
-    )
+    summary_text = _summary_text(brief.score, brief.profile, brief.equity_low, brief.equity_high)
     if reasoning_text:
         summary_text = f"{summary_text} {reasoning_text}"
 

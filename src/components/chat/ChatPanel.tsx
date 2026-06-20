@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { streamChat, sendFeedback, autotitleConversation, parseDocument, transcribeAudio, type Citation as ApiCitation } from "@/lib/api";
 import { useChatStore, useAgentVizStore, useConversationStore, useSettingsStore, type ToolActivity, type MessageAttachment } from "@/store";
 import { cn } from "@/lib/cn";
@@ -192,6 +193,23 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
   useEffect(() => {
     scrollAnchor.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
+
+  // Deep-link seed: a "?ask=…" param (e.g. from a news-alert "ask the coach"
+  // CTA) pre-fills the composer once, then is cleared so a refresh / back nav
+  // doesn't re-seed. The user still presses send — we never auto-submit.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current) return;
+    const ask = searchParams.get("ask");
+    if (!ask) return;
+    seededRef.current = true;
+    setInput((prev) => (prev ? prev : ask));
+    const next = new URLSearchParams(searchParams);
+    next.delete("ask");
+    setSearchParams(next, { replace: true });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [searchParams, setSearchParams]);
 
   // Auto-resize textarea up to 6 lines.
   function autoResize() {
