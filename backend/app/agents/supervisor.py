@@ -207,6 +207,12 @@ PLANNING RULES:
     "What do you recommend?" needs budget_coach + risk_profiler + portfolio +
     market_data (and usually news_sentiment for catalyst awareness). They
     run in parallel.
+  • DIRECTIONAL / OUTLOOK questions — "will X go up/down", "is it in a down/
+    up-trend", "olası düşüş/yükseliş", "düşer mi / yükselir mi", "what's the
+    outlook" (any language) — dispatch BOTH market_data (price-action /
+    technicals / derivatives) AND news_sentiment (catalysts). A directional
+    call must be researched on price-action AND headlines, so the answer can
+    say "technically X, and on the news side Y" — never one side alone.
   • For questions that DO require a fresh allocation plan (see the
     requires_advisor test below), default to the full lineup:
       [budget_coach, risk_profiler, portfolio, market_data, news_sentiment].
@@ -423,6 +429,22 @@ def _keyword_fallback_plan(
         chosen.append("budget_coach")
     if any(k in text for k in ("haber", "news", "söylenti", "sentiment", "trend")):
         chosen.append("news_sentiment")
+    # Directional / outlook questions ("olası düşüş/yükseliş", "düşer mi", "rally",
+    # "outlook") must combine BOTH the technical read AND news catalysts, so the
+    # up/down call is researched on price-action AND headlines, never one alone.
+    directional = any(
+        k in text
+        for k in (
+            "düşüş", "yükseliş", "düşer", "yüksel", "düşecek", "yükselecek",
+            "ralli", "rally", "drop", "fall", "pump", "rise", "selloff",
+            "outlook", "beklenti", "olası", "yön", "hareket",
+        )
+    )
+    if directional:
+        if "news_sentiment" not in chosen:
+            chosen.append("news_sentiment")
+        if "market_data" not in chosen:
+            chosen.append("market_data")
     if any(k in text for k in ("risk", "profil")):
         chosen.append("risk_profiler")
     # Explicit document keywords always pull in document_parser.
