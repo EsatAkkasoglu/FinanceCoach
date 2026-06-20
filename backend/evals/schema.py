@@ -22,7 +22,7 @@ QA_DIR = EVALS_DIR / "qa_sets"
 Category = Literal[
     "portfolio", "funds", "crypto", "market", "budget", "goals",
     "advisory", "news", "documents", "out_of_scope", "regulatory",
-    "ambiguous", "adversarial", "followup",
+    "ambiguous", "adversarial", "followup", "grounding",
 ]
 
 
