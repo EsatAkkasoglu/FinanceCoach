@@ -22,6 +22,7 @@ import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { AuthPage } from "@/components/auth/AuthPage";
 import { LandingPage } from "@/components/landing/LandingPage";
 import { DemoTour, TourReplayButton } from "@/components/tour/DemoTour";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAuthStore, useConversationStore, useUserStore, useTourStore } from "@/store";
 import { buildLocalizedPath, getLanguageFromPath, isSupportedLanguage, stripLanguagePrefix } from "@/lib/routing";
 import {
@@ -405,9 +406,11 @@ export default function App() {
           sidebar) floats above it. */}
       <div className="app-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
         {!reduceMotion && (
-          <Suspense fallback={null}>
-            <AmbientField3D />
-          </Suspense>
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}>
+              <AmbientField3D />
+            </Suspense>
+          </ErrorBoundary>
         )}
       </div>
 
@@ -489,6 +492,7 @@ export default function App() {
             }
           >
             <div className={onChatRoute ? "mx-auto h-full w-full max-w-4xl px-4 pt-4 pb-3 md:px-6" : "mx-auto w-full max-w-5xl"}>
+            <ErrorBoundary>
             <Routes location={location}>
               <Route path="/" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="/:lang/dashboard" element={<Dashboard />} />
@@ -505,6 +509,7 @@ export default function App() {
               <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
             </Routes>
+            </ErrorBoundary>
             </div>
           </motion.main>
         </AnimatePresence>

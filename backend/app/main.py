@@ -50,7 +50,7 @@ from app.routers.news import router as news_router
 from app.routers.symbols import router as symbols_router
 from app.services.document_processor.router import router as documents_router
 from app.services.news_collector import shutdown_news_scheduler, start_news_scheduler
-from app.settings import configure_langsmith, settings
+from app.settings import DEFAULT_JWT_SECRET, configure_langsmith, settings
 from app.tools._cache import cache_reset
 
 log = logging.getLogger("fincoach")
@@ -82,6 +82,14 @@ def _safe_error_message(exc: Exception) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("FinCoach starting up (demo_mode=%s)", settings.demo_mode)
+    # Fail fast on a public deploy that still ships the well-known dev JWT secret —
+    # anyone who read the repo could otherwise forge HS256 tokens for any user.
+    # Prefer Firebase ID tokens in cloud; the local JWT path is for the sidecar.
+    if settings.is_cloud_run and settings.jwt_secret == DEFAULT_JWT_SECRET:
+        raise RuntimeError(
+            "FINCOACH_JWT_SECRET must be overridden on Cloud Run (the default is public). "
+            "Set a strong secret, or rely on Firebase ID tokens."
+        )
     configure_langsmith()
     init_db()
     # Background news poller (thread-based; no-op if disabled). Runs in both the
@@ -154,11 +162,18 @@ async def strip_api_prefix(request, call_next):
     return await call_next(request)
 
 
-# Allow all origins (Tauri WebView2 + Firebase Hosting + local dev).
+# Local Tauri WebView2 + dev need a wildcard, but the same code runs on the public
+# Cloud Run service — there, lock CORS to the Firebase Hosting origins so a third
+# party can't make authenticated cross-origin calls for a logged-in user. (Prod is
+# same-origin via the /api Hosting rewrite, so this is defense-in-depth.)
+_CLOUD_ORIGINS = [
+    "https://fincoach-esat.web.app",
+    "https://fincoach-esat.firebaseapp.com",
+]
 # Explicit allow_headers ensures CORS headers appear on error responses too.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CLOUD_ORIGINS if settings.is_cloud_run else ["*"],
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["Content-Type", "Authorization"],

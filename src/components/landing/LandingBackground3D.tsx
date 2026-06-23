@@ -38,6 +38,13 @@ export default function LandingBackground3D() {
     let W = el.clientWidth;
     let H = el.clientHeight;
 
+    // three r184 is WebGL2-only; bail to the static gradient backdrop if the GPU/
+    // context is unavailable (older GPU, WebKitGTK, blocklisted) instead of
+    // throwing. The root ErrorBoundary would otherwise show the crash card here.
+    if (!document.createElement("canvas").getContext("webgl2")) {
+      return;
+    }
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, W / H, 0.1, 100);
     camera.position.z = 14;
