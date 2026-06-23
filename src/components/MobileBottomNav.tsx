@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { LayoutDashboard, Briefcase, Compass, Target, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { isNavEnabled } from "@/lib/features";
 import { buildLocalizedPath, getLanguageFromPath, isSupportedLanguage, stripLanguagePrefix } from "@/lib/routing";
 import { useConversationStore } from "@/store";
 
@@ -51,9 +52,12 @@ export function MobileBottomNav({ onChatPress }: Props) {
     navigate(buildLocalizedPath(lang, path));
   }
 
+  // Chat is always present; other tabs honor the hero-loop feature flags.
+  const visibleTabs = TABS.filter(({ path }) => path === "/chat" || isNavEnabled(path));
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-line bg-surface/95 backdrop-blur-md md:hidden">
-      {TABS.map(({ path, icon: Icon }) => {
+      {visibleTabs.map(({ path, icon: Icon }) => {
         const active = currentPath === path || currentPath.startsWith(`${path}/`);
         return (
           <button

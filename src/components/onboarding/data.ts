@@ -113,3 +113,28 @@ export function scoreToLabel(score: number): "conservative" | "balanced" | "aggr
   if (score <= 90) return "balanced";
   return "aggressive";
 }
+
+/** Canonical 0-125 risk scale used by scoreToLabel + the backend risk_profiler. */
+export const RISK_SCALE_MAX = 125;
+
+/**
+ * Short quiz for the one-screen onboarding (URUN_ODAK "hızlı 3 soru"). The full
+ * RISK_QUIZ stays available for a later deep re-assessment.
+ */
+export const RISK_QUIZ_SHORT: QuizQuestion[] = RISK_QUIZ.slice(0, 3);
+
+/** Max achievable raw score for a question set (sum of each question's best option). */
+export function maxQuizScore(questions: QuizQuestion[]): number {
+  return questions.reduce((sum, q) => sum + Math.max(...q.options.map((o) => o.points)), 0);
+}
+
+/**
+ * Re-normalize a raw quiz score onto the canonical 0-125 scale so the
+ * conservative/balanced/aggressive bands map regardless of how many questions
+ * were asked (the 3-question short quiz tops out well below 125 otherwise).
+ */
+export function normalizeRiskScore(raw: number, questions: QuizQuestion[]): number {
+  const max = maxQuizScore(questions);
+  if (max <= 0) return 0;
+  return Math.round((raw / max) * RISK_SCALE_MAX);
+}

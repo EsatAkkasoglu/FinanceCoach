@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { RISK_QUIZ, scoreToLabel } from "./data";
+import { RISK_QUIZ, normalizeRiskScore, scoreToLabel, type QuizQuestion } from "./data";
 import trOnboarding from "@/i18n/locales/tr/onboarding.json";
 import enOnboarding from "@/i18n/locales/en/onboarding.json";
 import { cn } from "@/lib/cn";
@@ -7,6 +7,8 @@ import { cn } from "@/lib/cn";
 interface Props {
   answers: Record<string, number>;
   onChange: (questionId: string, points: number) => void;
+  /** Override the question set (e.g. the 3-question short quiz). Defaults to the full quiz. */
+  questions?: QuizQuestion[];
 }
 
 const LABEL_COLOR: Record<string, string> = {
@@ -17,11 +19,13 @@ const LABEL_COLOR: Record<string, string> = {
 
 type RiskTranslations = typeof trOnboarding;
 
-export function StepRiskQuiz({ answers, onChange }: Props) {
+export function StepRiskQuiz({ answers, onChange, questions = RISK_QUIZ }: Props) {
   const { t, i18n } = useTranslation("onboarding");
   const riskTr = (i18n.language === "tr" ? trOnboarding : enOnboarding) as RiskTranslations;
   const score = Object.values(answers).reduce((a, b) => a + b, 0);
-  const label = scoreToLabel(score);
+  // Normalize onto the 0-125 scale so the label preview is honest even when a
+  // reduced question set is used (the raw score otherwise never reaches "aggressive").
+  const label = scoreToLabel(normalizeRiskScore(score, questions));
   const completed = Object.keys(answers).length;
 
   return (
@@ -30,17 +34,15 @@ export function StepRiskQuiz({ answers, onChange }: Props) {
         <h2 className="text-2xl font-semibold tracking-tight">{t("risk.title")}</h2>
         <p className="mt-1 text-sm text-content-muted">{t("risk.subtitle")}</p>
         <div className="mt-2 text-xs text-content-muted">
-          {t("risk.progress", { completed, total: RISK_QUIZ.length })} ·{" "}
+          {t("risk.progress", { completed, total: questions.length })} ·{" "}
           <span className={cn("font-semibold", LABEL_COLOR[label])}>
-            {completed === RISK_QUIZ.length
-              ? `${label} (${score}/125)`
-              : t("risk.inProgress")}
+            {completed === questions.length ? label : t("risk.inProgress")}
           </span>
         </div>
       </div>
 
       <div className="space-y-4">
-        {RISK_QUIZ.map((q, idx) => {
+        {questions.map((q, idx) => {
           const qTr = riskTr.risk.questions[q.id as keyof typeof riskTr.risk.questions] as
             | { prompt: string; options: string[] }
             | undefined;

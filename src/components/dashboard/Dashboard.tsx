@@ -20,7 +20,7 @@ import {
   TrendingUp, TrendingDown, Sparkles, AlertCircle, Flame, Newspaper, Coins,
   type LucideIcon,
   ArrowUpRight, ArrowDownRight, PiggyBank,
-  Info, ArrowRight, Wallet, Receipt, Target, Briefcase, Activity,
+  Info, ArrowRight, Wallet, Receipt, Target, Briefcase, Activity, ExternalLink,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -326,6 +326,9 @@ export function Dashboard() {
           loading={isLoading}
         />
 
+        {/* Today's brief — the "comes back" hook gets hero placement, right under the greeting */}
+        <BriefingCard items={briefing} loading={isLoading} fetchedAt={briefingFetchedAt} />
+
         {/* Spotlight row — performance chart gets the width, allocation rides shotgun */}
         <NetWorthCard totals={totals} holdings={holdings} history={history} loading={isLoading} />
         <AllocationCard holdings={holdings} riskProfile={riskProfile} loading={isLoading} />
@@ -338,9 +341,6 @@ export function Dashboard() {
         {/* Detail row — holdings table wide, top mover beside it */}
         <HoldingsTable holdings={holdings} loading={isLoading} />
         <TopMoverCard holdings={holdings} loading={isLoading} />
-
-        {/* Briefing — full bleed */}
-        <BriefingCard items={briefing} loading={isLoading} fetchedAt={briefingFetchedAt} />
 
         {/* Market headlines — pre-collected & sentiment-tagged by the backend */}
         <NewsPanel span="md:col-span-2 lg:col-span-12" limit={6} />
@@ -959,9 +959,21 @@ function BriefingCard({ items, loading, fetchedAt }: {
                 )}
               >
                 <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", toneText[tone] ?? toneText.neutral)} />
-                <div>
+                <div className="min-w-0">
                   <span className="text-content-muted mr-1">{it.label}:</span>
-                  <span>{it.text}</span>
+                  {it.url ? (
+                    <a
+                      href={it.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline-offset-2 transition hover:text-accent hover:underline"
+                    >
+                      {it.text}
+                      <ExternalLink className="ml-1 inline h-3 w-3 align-baseline opacity-60" />
+                    </a>
+                  ) : (
+                    <span>{it.text}</span>
+                  )}
                 </div>
               </motion.li>
             );

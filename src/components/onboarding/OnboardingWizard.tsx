@@ -1,83 +1,65 @@
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-import { useUserStore, useSettingsStore } from "@/store";
-import { submitOnboarding, createAccount, createSubscription, fetchMe } from "@/lib/api";
-import { useAuthStore } from "@/store";
-import { cn } from "@/lib/cn";
+import { useAuthStore, useSettingsStore, useUserStore } from "@/store";
+import { fetchMe, submitOnboarding } from "@/lib/api";
 
-import { StepWelcome } from "./StepWelcome";
 import { StepGoals, type GoalDraft } from "./StepGoals";
-import { StepFinances, type FinancesDraft, type AccountDraft } from "./StepFinances";
 import { StepRiskQuiz } from "./StepRiskQuiz";
 import { StepPortfolio, type HoldingDraft } from "./StepPortfolio";
-import { RISK_QUIZ, scoreToLabel, type AvatarId, type FinancialChallengeId } from "./data";
+import { RISK_QUIZ_SHORT, normalizeRiskScore, scoreToLabel } from "./data";
 
-const STEP_KEYS = ["welcome", "goals", "finances", "risk", "portfolio"] as const;
+/**
+ * One-screen onboarding (docs/URUN_ODAK.md): name + one goal + a 3-question risk
+ * quiz + 1-2 holdings, then straight into the app. Deferred details (avatar,
+ * display currency, income/accounts, financial challenges) are dropped from v1
+ * and collected later, after the user has seen first value. Currency defaults to
+ * TRY and avatar to "fox".
+ */
 
 interface FormState {
   name: string;
-  avatar: AvatarId;
-  currency: "TRY" | "USD" | "EUR";
   goal: GoalDraft;
-  financialChallenges: FinancialChallengeId[];
-  finances: FinancesDraft;
   quizAnswers: Record<string, number>;
   holdings: HoldingDraft[];
 }
 
 const INITIAL: FormState = {
   name: "",
-  avatar: "fox",
-  currency: "TRY",
   goal: { type: "home", title: "Buy a home", amount: 0, targetDate: "" },
-  financialChallenges: [],
-  finances: { monthlyIncome: 0, accounts: [], incomeSources: [] },
   quizAnswers: {},
   holdings: [],
 };
 
 export function OnboardingWizard() {
   const { t } = useTranslation("onboarding");
-  const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(INITIAL);
   const { setProfile, completeOnboarding } = useUserStore();
   const setDisplayCurrency = useSettingsStore((s) => s.setDisplayCurrency);
 
-  const riskScore = useMemo(
+  const rawRisk = useMemo(
     () => Object.values(form.quizAnswers).reduce((a, b) => a + b, 0),
-    [form.quizAnswers]
+    [form.quizAnswers],
   );
-
-  const canAdvance = useMemo(() => {
-    switch (step) {
-      case 0: return form.name.trim().length > 0;
-      case 1: return form.goal.amount > 0 && form.goal.targetDate.length > 0;
-      case 2: return true;
-      case 3: return Object.keys(form.quizAnswers).length === RISK_QUIZ.length;
-      case 4: return true;
-      default: return false;
-    }
-  }, [step, form]);
+  const riskAnswered = Object.keys(form.quizAnswers).length === RISK_QUIZ_SHORT.length;
+  const canComplete =
+    form.name.trim().length > 0 && form.goal.amount > 0 && form.goal.targetDate.length > 0;
 
   async function finish() {
     setSubmitting(true);
     try {
-      // If the user skipped the risk quiz, default to a balanced profile
-      // (a sensible neutral 60/40) instead of the score-0 "conservative".
-      const answeredRisk = Object.keys(form.quizAnswers).length > 0;
-      const effectiveScore = answeredRisk ? riskScore : 70;
+      // Re-normalize the 3-question raw score onto the canonical 0-125 scale so the
+      // conservative/balanced/aggressive bands still map. Skipped quiz → balanced 70.
+      const effectiveScore = riskAnswered ? normalizeRiskScore(rawRisk, RISK_QUIZ_SHORT) : 70;
       const profile = scoreToLabel(effectiveScore);
-      const incomeCurrency = form.finances.incomeSources[0]?.currency ?? form.currency;
 
       await submitOnboarding({
         name: form.name.trim(),
-        avatar: form.avatar,
-        monthly_income: form.finances.monthlyIncome,
+        avatar: "fox",
+        monthly_income: 0,
         risk_score: effectiveScore,
         risk_profile: profile,
         spending_pace: 3,
@@ -97,40 +79,11 @@ export function OnboardingWizard() {
           })),
       });
 
-      if (form.finances.accounts.length > 0) {
-        await Promise.allSettled(
-          form.finances.accounts.map((acc: AccountDraft) =>
-            createAccount({
-              name: acc.name,
-              kind: acc.kind,
-              balance: acc.balance,
-              currency: acc.currency,
-              institution: acc.institution || null,
-            })
-          )
-        );
-      }
-
-      if (form.finances.monthlyIncome > 0) {
-        const incomeLabel =
-          form.finances.incomeSources[0]?.label ?? `${form.name.trim()}'s income`;
-        await createSubscription({
-          name: incomeLabel,
-          amount: form.finances.monthlyIncome,
-          currency: incomeCurrency,
-          cycle: "monthly",
-          direction: "income",
-          category: "income",
-        }).catch(() => {});
-      }
-
-      // Persist the chosen display currency
-      setDisplayCurrency(form.currency);
-
+      setDisplayCurrency("TRY");
       setProfile({
         name: form.name.trim(),
-        avatar: form.avatar,
-        monthlyIncome: form.finances.monthlyIncome,
+        avatar: "fox",
+        monthlyIncome: 0,
         riskScore: effectiveScore,
         riskProfile: profile,
       });
@@ -145,156 +98,72 @@ export function OnboardingWizard() {
     }
   }
 
-  const isLast = step === STEP_KEYS.length - 1;
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-6">
-      <div className="w-full max-w-xl">
-        {/* Progress stepper */}
-        <nav aria-label={t("progressLabel", { defaultValue: "Setup progress" })}>
-          <ol role="list" className="mb-8 flex items-center justify-center gap-2">
-            {STEP_KEYS.map((key, i) => {
-              const stepAriaLabel = i < step
-                ? `Step ${i + 1} of ${STEP_KEYS.length}: ${key}, completed`
-                : i === step
-                  ? `Step ${i + 1} of ${STEP_KEYS.length}: ${key}, current`
-                  : `Step ${i + 1} of ${STEP_KEYS.length}: ${key}`;
-              return (
-                <li key={key} className="flex items-center gap-2">
-                  <div
-                    aria-current={i === step ? "step" : undefined}
-                    aria-label={stepAriaLabel}
-                    className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium transition",
-                      i < step && "border-accent bg-accent text-accent-fg",
-                      i === step && "border-accent text-accent shadow-glow",
-                      i > step && "border-line text-content-muted"
-                    )}
-                  >
-                    {i < step ? <Check aria-hidden="true" className="h-3.5 w-3.5" /> : i + 1}
-                  </div>
-                  {i < STEP_KEYS.length - 1 && (
-                    <div
-                      aria-hidden="true"
-                      className={cn(
-                        "h-px w-6 transition",
-                        i < step ? "bg-accent" : "bg-default"
-                      )}
-                    />
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
-
-        {/* Step body */}
-        <div className="card min-h-[420px]">
-          <motion.div
-            key={step}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            {step === 0 && (
-              <StepWelcome
-                name={form.name}
-                avatar={form.avatar}
-                currency={form.currency}
-                onChange={(p) => setForm((s) => ({ ...s, ...p }))}
-              />
-            )}
-            {step === 1 && (
-              <StepGoals
-                goal={form.goal}
-                financialChallenges={form.financialChallenges}
-                onChange={(patch) =>
-                  setForm((s) => ({
-                    ...s,
-                    ...(patch.goal && { goal: { ...s.goal, ...patch.goal } }),
-                    ...(patch.financialChallenges !== undefined && { financialChallenges: patch.financialChallenges }),
-                  }))
-                }
-              />
-            )}
-            {step === 2 && (
-              <StepFinances
-                value={form.finances}
-                onChange={(p) => setForm((s) => ({ ...s, finances: { ...s.finances, ...p } }))}
-              />
-            )}
-            {step === 3 && (
-              <StepRiskQuiz
-                answers={form.quizAnswers}
-                onChange={(qid, pts) =>
-                  setForm((s) => ({
-                    ...s,
-                    quizAnswers: { ...s.quizAnswers, [qid]: pts },
-                  }))
-                }
-              />
-            )}
-            {step === 4 && (
-              <StepPortfolio
-                holdings={form.holdings}
-                onChange={(h) => setForm((s) => ({ ...s, holdings: h }))}
-              />
-            )}
-          </motion.div>
-        </div>
-
-        {/* Navigation */}
-        <div className="mt-4 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
-            disabled={step === 0}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-content-muted disabled:opacity-30 hover:text-content"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {t("back")}
-          </button>
-
-          <div className="flex items-center gap-3">
-            {step === 2 && (
-              <span className="hidden text-xs text-content-muted sm:inline">
-                {t("stepOptional")}
-              </span>
-            )}
-            {/* Risk quiz is the one hard blocker — let users skip to a balanced default */}
-            {step === 3 && !canAdvance && (
-              <button
-                type="button"
-                onClick={() => setStep((s) => s + 1)}
-                className="text-sm text-content-muted underline-offset-4 transition hover:text-content hover:underline"
-              >
-                {t("skipForNow")}
-              </button>
-            )}
-
-          {!isLast ? (
-            <button
-              type="button"
-              onClick={() => setStep((s) => s + 1)}
-              disabled={!canAdvance}
-              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-glow disabled:opacity-40"
-            >
-              {t("next")}
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={finish}
-              disabled={submitting}
-              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-glow disabled:opacity-40"
-            >
-              <Sparkles className="h-4 w-4" />
-              {submitting ? t("settingUp") : t("complete")}
-            </button>
-          )}
+      <div className="w-full max-w-xl space-y-5">
+        {/* Name */}
+        <div className="card space-y-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{t("welcome.title")}</h1>
+            <p className="mt-1 text-sm text-content-muted">{t("welcome.subtitle")}</p>
           </div>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wide text-content-muted">
+              {t("welcome.whatToCall")}
+            </span>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
+              placeholder={t("welcome.namePlaceholder")}
+              className="mt-2 w-full rounded-lg border border-line bg-surface px-4 py-3 text-base outline-none focus:border-accent"
+            />
+          </label>
         </div>
+
+        {/* Goal */}
+        <div className="card">
+          <StepGoals
+            goal={form.goal}
+            financialChallenges={[]}
+            showChallenges={false}
+            onChange={(patch) =>
+              setForm((s) => ({
+                ...s,
+                ...(patch.goal && { goal: { ...s.goal, ...patch.goal } }),
+              }))
+            }
+          />
+        </div>
+
+        {/* Risk — 3 quick questions */}
+        <div className="card">
+          <StepRiskQuiz
+            questions={RISK_QUIZ_SHORT}
+            answers={form.quizAnswers}
+            onChange={(qid, pts) =>
+              setForm((s) => ({ ...s, quizAnswers: { ...s.quizAnswers, [qid]: pts } }))
+            }
+          />
+        </div>
+
+        {/* Starting portfolio (optional) */}
+        <div className="card">
+          <StepPortfolio
+            holdings={form.holdings}
+            onChange={(h) => setForm((s) => ({ ...s, holdings: h }))}
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={finish}
+          disabled={submitting || !canComplete}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-medium text-accent-fg shadow-glow transition disabled:opacity-40"
+        >
+          <Sparkles className="h-4 w-4" />
+          {submitting ? t("settingUp") : t("complete")}
+        </button>
       </div>
     </div>
   );

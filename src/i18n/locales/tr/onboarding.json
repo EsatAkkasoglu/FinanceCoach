@@ -107,7 +107,7 @@
   },
   "risk": {
     "title": "Risk profili",
-    "subtitle": "5 hızlı soru. Yanıtlarınız her tavsiyeyi şekillendirir.",
+    "subtitle": "Birkaç hızlı soru. Yanıtlarınız her tavsiyeyi şekillendirir.",
     "progress": "{{completed}}/{{total}} yanıtlandı",
     "inProgress": "devam ediyor",
     "questions": {

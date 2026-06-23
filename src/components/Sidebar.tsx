@@ -21,6 +21,7 @@ import {
   ChevronLeft, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { isNavEnabled } from "@/lib/features";
 import { buildLocalizedPath, getLanguageFromPath, isSupportedLanguage, stripLanguagePrefix } from "@/lib/routing";
 import {
   listConversations, createConversation, deleteConversation, updateConversationTitle,
@@ -388,7 +389,12 @@ export function Sidebar({
 
         {/* ── Main nav ── */}
         <nav className="flex flex-col gap-0.5 px-2 pb-2">
-          {NAV_SECTIONS.map((section, si) => (
+          {NAV_SECTIONS.map((section, si) => {
+            // Hide deferred surfaces (Budget/Documents) from the primary nav per
+            // docs/URUN_ODAK.md; routes stay deep-linkable. Drop now-empty sections.
+            const items = section.items.filter(({ path }) => isNavEnabled(path));
+            if (items.length === 0) return null;
+            return (
             <div key={si} className={si > 0 ? "mt-1" : ""}>
               <AnimatePresence>
                 {!effectiveCollapsed && section.label && (
@@ -404,7 +410,7 @@ export function Sidebar({
                 )}
               </AnimatePresence>
 
-              {section.items.map(({ path, key, icon: Icon }) => {
+              {items.map(({ path, key, icon: Icon }) => {
                 const active = currentPath === path || currentPath.startsWith(`${path}/`);
                 return (
                   <button
@@ -440,7 +446,8 @@ export function Sidebar({
                 );
               })}
             </div>
-          ))}
+            );
+          })}
 
           {/* Settings — Account section */}
           <div className="mt-1">
