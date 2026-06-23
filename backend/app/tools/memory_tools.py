@@ -42,7 +42,7 @@ def query_memory(text: str, k: int = 5) -> list[dict[str, Any]]:
     res = col.query(query_texts=[text], n_results=k)
     docs = res.get("documents", [[]])[0]
     metas = res.get("metadatas", [[]])[0]
-    return [{"text": d, "metadata": m} for d, m in zip(docs, metas)]
+    return [{"text": d, "metadata": m} for d, m in zip(docs, metas, strict=False)]
 
 
 @tool

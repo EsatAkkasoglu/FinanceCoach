@@ -34,6 +34,7 @@ def _extract_pdf_text(data: bytes) -> str:
     """Cheap text extraction via pdfplumber (no API call). Returns empty string on failure."""
     try:
         import io
+
         import pdfplumber
         with pdfplumber.open(io.BytesIO(data)) as pdf:
             return "\n".join(p.extract_text() or "" for p in pdf.pages).strip()

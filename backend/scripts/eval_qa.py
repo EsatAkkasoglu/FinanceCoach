@@ -29,7 +29,6 @@ from pathlib import Path
 
 import httpx
 
-
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 REPORTS_DIR = BACKEND_DIR / "reports"
 
@@ -111,7 +110,7 @@ def create_conversation(client: httpx.Client, base_url: str) -> tuple[str, str]:
     return body["id"], body["thread_id"]
 
 
-def _iter_sse(stream) -> "Iterable[tuple[str, dict]]":  # noqa: F821
+def _iter_sse(stream) -> Iterable[tuple[str, dict]]:  # noqa: F821
     """Yield (event_name, data_dict) pairs from an open httpx streaming response.
 
     SSE frames are terminated by a blank line. We read line-by-line via

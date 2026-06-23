@@ -87,7 +87,7 @@ def demo_login():
 
     Idempotent — safe to call many times. Seeds realistic data on first call.
     """
-    DEMO_USERNAME = "demo"
+    DEMO_USERNAME = "demo"  # noqa: N806
     with SessionLocal() as db:
         user = db.execute(select(User).where(User.username == DEMO_USERNAME)).scalar_one_or_none()
         if user is None:

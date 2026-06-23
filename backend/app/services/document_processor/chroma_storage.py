@@ -74,7 +74,7 @@ class ChromaEmbeddingStorage:
         ids: list[str] = []
         metadatas: list[dict] = []
 
-        for i, chunk in enumerate(chunks):
+        for i in range(len(chunks)):
             # Stable ID so re-uploading the same file overwrites instead of duplicating.
             chunk_id = hashlib.sha256(
                 f"{self._user_id}:{filename}:{i}".encode()

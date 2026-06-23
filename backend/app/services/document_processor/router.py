@@ -2,17 +2,17 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.auth import get_current_user_id
 from app.services.document_processor.base import (
+    SUPPORTED_MIME_TYPES,
     DocumentSource,
     NoOpStorage,
     ProcessorError,
-    SUPPORTED_MIME_TYPES,
 )
 from app.services.document_processor.chroma_storage import ChromaEmbeddingStorage
 from app.services.document_processor.gemini_processor import GeminiDocumentProcessor
@@ -111,7 +111,7 @@ def list_documents(user_id: int = Depends(get_current_user_id)) -> DocumentListR
     for d in raw:
         ts = d.get("created_at") or 0
         try:
-            iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+            iso = datetime.fromtimestamp(ts, tz=UTC).isoformat()
         except (OSError, OverflowError, ValueError):
             iso = ""
         entries.append(DocumentEntry(

@@ -16,22 +16,17 @@ import re
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date as date_cls, datetime
+from datetime import date as date_cls
+from datetime import datetime
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sse_starlette.sse import EventSourceResponse
 
-from app.settings import configure_langsmith, settings
-from app.auth import current_user_id_var, get_current_user_id
-from app.auth.routes import router as auth_router
-from app.tools._cache import cache_reset
-from app.db.models import Conversation, Goal, Holding, MessageFeedback, User
-from app.db.session import SessionLocal, init_db
 from app.agents.supervisor import (
     ADVISOR_NODE,
     AGENT_NODES,
@@ -39,6 +34,10 @@ from app.agents.supervisor import (
     SYNTHESIZER_NODE,
     build_supervisor,
 )
+from app.auth import current_user_id_var, get_current_user_id
+from app.auth.routes import router as auth_router
+from app.db.models import Conversation, Goal, Holding, MessageFeedback, User
+from app.db.session import SessionLocal, init_db
 from app.routers.admin import router as admin_router
 from app.routers.audio import router as audio_router
 from app.routers.budget import router as budget_router
@@ -51,11 +50,22 @@ from app.routers.news import router as news_router
 from app.routers.symbols import router as symbols_router
 from app.services.document_processor.router import router as documents_router
 from app.services.news_collector import shutdown_news_scheduler, start_news_scheduler
+from app.settings import configure_langsmith, settings
+from app.tools._cache import cache_reset
 
 log = logging.getLogger("fincoach")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 _GOOGLE_API_KEY_RE = re.compile(r"AIza[0-9A-Za-z_-]{20,}")
+
+# Scrub Alpha Vantage rate-limit / premium-upsell notices out of tool output
+# before it reaches the UI (used by _summarize_tool_output for non-JSON output).
+_AV_RATELIMIT_RE = re.compile(
+    r"(AV info[^\"\\}]*|We have detected your API key[^\"\\}]*?premium endpoints\.?"
+    r"|.*?\b25 requests per day\b[^\"\\}]*?premium endpoints\.?"
+    r"|Thank you for using Alpha Vantage[^\"\\}]*?premium plans[^\"\\}]*?)",
+    re.IGNORECASE,
+)
 
 
 def _safe_error_message(exc: Exception) -> str:
@@ -79,17 +89,19 @@ async def lifespan(app: FastAPI):
     start_news_scheduler()
 
     import threading
+
     from app.tools.fund_tools import prewarm_universe
 
     if settings.using_postgres:
-        from psycopg_pool import AsyncConnectionPool
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
         # Neon (serverless Postgres) closes idle server-side connections after
         # ~5 min. Cloud Run min-instances=0 means the instance may restart with
         # stale pool connections, causing "the connection is closed" errors.
         # min_size=0: no persistent connections while idle.
         # max_idle=60: evict connections idle for >60 s before Neon closes them.
         from psycopg.rows import dict_row
+        from psycopg_pool import AsyncConnectionPool
         pool = AsyncConnectionPool(
             settings.checkpointer_url,
             min_size=0,
@@ -433,7 +445,7 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
         # Top-level node names we surface as activity to the frontend. Every
         # one runs inside the graph; only the synthesizer ends up in a visible
         # bubble — everything else is `internal: True` (activity panel only).
-        INTERNAL_NODES = {STRATEGIST_NODE, ADVISOR_NODE, *AGENT_NODES.keys()}
+        INTERNAL_NODES = {STRATEGIST_NODE, ADVISOR_NODE, *AGENT_NODES.keys()}  # noqa: N806
 
         # Track which top-level node a tool call is happening under so the
         # UI can attribute each tool chip to its desk. With parallel specialist
@@ -876,7 +888,7 @@ async def list_portfolio(user_id: int = Depends(get_current_user_id)):
         )
     quote_map = {
         h.ticker: (q if isinstance(q, dict) else None)
-        for h, q in zip(non_cash, quotes)
+        for h, q in zip(non_cash, quotes, strict=False)
     }
 
     enriched: list[dict] = []

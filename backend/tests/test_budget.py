@@ -180,7 +180,6 @@ def test_budget_summary_shape(client):
 
 
 def test_subscription_direction_income(client):
-    today = date.today()
     r = client.post("/subscriptions", json={
         "name": "Salary",
         "amount": 50000,

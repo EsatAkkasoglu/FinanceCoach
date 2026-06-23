@@ -10,10 +10,10 @@ from typing import Any
 from langchain_core.tools import tool
 from sqlalchemy import select
 
+from app.agents.risk_profiler import score_to_profile
 from app.auth import get_current_user_id_or_none
 from app.db.models import User
 from app.db.session import SessionLocal
-from app.agents.risk_profiler import score_to_profile
 
 
 @tool

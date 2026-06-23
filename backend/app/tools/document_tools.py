@@ -127,7 +127,7 @@ def search_documents(query: str, k: int = 5) -> list[dict[str, Any]]:
     dists = (res.get("distances") or [[]])[0]
 
     hits: list[dict[str, Any]] = []
-    for text, meta, dist in zip(docs, metas, dists):
+    for text, meta, dist in zip(docs, metas, dists, strict=False):
         if not text:
             continue
         # Chroma returns cosine distance; convert to similarity in [0, 1].

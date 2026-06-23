@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import pytest
 
-from app.settings import settings
-
 from app.services.document_processor import (
     DocumentSource,
     NoOpStorage,
@@ -19,7 +17,7 @@ from app.services.document_processor import (
     ProfileExtraction,
 )
 from app.services.document_processor.base import INLINE_LIMIT_BYTES
-
+from app.settings import settings
 
 # ── Pure unit tests ────────────────────────────────────────────────────────
 

@@ -73,6 +73,12 @@ target-version = "py311"
 select = ["E", "F", "I", "W", "N", "UP", "B"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# Enum classes deliberately inherit (str, Enum) for JSON/DB value identity.
+# Migrating to StrEnum changes str()/serialization semantics on persisted
+# columns, so suppress UP042 here rather than risk altering stored values.
+"app/db/models.py" = ["UP042"]
+
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency/parameter helpers are designed to be called in argument
 # defaults — exempt them from B008 (ruff's documented FastAPI recommendation).

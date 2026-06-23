@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from langgraph.prebuilt import create_react_agent
 
+from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
-from app.agents._helpers import build_findings, extract_tool_calls, latest_human_turn
 from app.tools.memory_tools import query_memory
 
 SYSTEM_PROMPT = """You are the Memory agent for FinCoach.

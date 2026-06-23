@@ -1,4 +1,7 @@
-import json, traceback, sys
+import json
+import sys
+import traceback
+
 from app.tools import market_tools
 
 try:

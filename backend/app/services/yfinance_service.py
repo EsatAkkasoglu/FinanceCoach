@@ -336,7 +336,7 @@ def search(keywords: str, max_results: int = 10) -> list[dict[str, Any]]:
     except Exception as exc:  # noqa: BLE001
         raise YFinanceError(f"yfinance search failed for {keywords!r}: {exc}") from exc
 
-    _US_EXCHANGES = {"NYQ", "NMS", "NGM", "NCM", "ASE", "PCX", "NYSEArca"}
+    _US_EXCHANGES = {"NYQ", "NMS", "NGM", "NCM", "ASE", "PCX", "NYSEArca"}  # noqa: N806
     out: list[dict[str, Any]] = []
     for q in quotes:
         sym = q.get("symbol")

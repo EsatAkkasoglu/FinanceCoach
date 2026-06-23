@@ -1,7 +1,7 @@
 """Password hashing (bcrypt) + JWT encode/decode."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
@@ -22,7 +22,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_token(user_id: int, username: str) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
         "username": username,

@@ -20,8 +20,6 @@ All three use the model configured in settings (GEMINI_VISION_MODEL).
 from __future__ import annotations
 
 import argparse
-import io
-import json
 import mimetypes
 import sys
 import time
@@ -36,7 +34,6 @@ from pydantic import BaseModel, Field
 from app.services.document_processor.base import DocumentSource
 from app.services.document_processor.gemini_processor import (
     GeminiDocumentProcessor,
-    VISION_DUMP_PROMPT,
 )
 from app.settings import settings
 

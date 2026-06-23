@@ -5,7 +5,6 @@ from typing import Annotated, Any, TypedDict
 
 from langgraph.graph.message import add_messages
 
-
 RESET_SENTINEL = "__reset__"
 
 

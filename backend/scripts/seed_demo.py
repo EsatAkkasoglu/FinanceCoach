@@ -41,7 +41,6 @@ from sqlalchemy import delete, select  # noqa: E402
 from app.db.models import Holding, Transaction, User  # noqa: E402
 from app.db.session import SessionLocal, init_db  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Pattern config — tune these to shape the demo persona's spending
 # ---------------------------------------------------------------------------
@@ -352,10 +351,10 @@ def main() -> int:
     print()
     print(summarize(rows))
     print()
-    print(f"Done. Run the backend and ask the Coach:")
-    print(f"  - 'How much did I spend last month?'")
-    print(f"  - 'What's my biggest expense category?'")
-    print(f"  - 'Compare this month to last month'")
+    print("Done. Run the backend and ask the Coach:")
+    print("  - 'How much did I spend last month?'")
+    print("  - 'What's my biggest expense category?'")
+    print("  - 'Compare this month to last month'")
     return 0
 
 

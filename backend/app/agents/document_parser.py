@@ -23,7 +23,6 @@ from app.agents.llm import get_llm
 from app.agents.state import AgentState
 from app.tools.document_tools import list_uploaded_documents, search_documents
 
-
 SYSTEM_PROMPT = """You are the Document Analyst for FinCoach.
 
 Your responsibility: answer questions about documents the user has uploaded
