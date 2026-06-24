@@ -281,10 +281,11 @@ async def run(state: AgentState) -> AgentState:
     ui_lang = get_ui_language()
     lang_name = {"en": "English", "tr": "Turkish"}.get(ui_lang, "English")
     lang_directive = (
-        f"RESPONSE LANGUAGE: mirror the user's current message. UI language "
-        f"hint is {lang_name} ({ui_lang}) — use it as a tiebreaker when the "
-        f"message is too short to detect. Reply AND suggestions in the same "
-        f"language.\n\n"
+        f"RESPONSE LANGUAGE — STRICT: reply (and chips) in the SAME language as the "
+        f"user's current message. The UI language is {lang_name} ({ui_lang}); default "
+        f"to it only when the message is too short to tell. The findings and advisor "
+        f"brief may be written in another language — do NOT adopt their language: an "
+        f"English question over Turkish (TRY) data still gets an English reply.\n\n"
     )
 
     payload = (
