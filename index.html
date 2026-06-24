@@ -2,15 +2,155 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FinCoach</title>
+
+    <!-- Primary meta -->
+    <title>FinCoach — AI finance coach for portfolio, budget &amp; goals</title>
+    <meta
+      name="description"
+      content="FinCoach is your AI finance coach — track your portfolio, budget, and funds, set goals, and get clear answers backed by real market data and citations."
+    />
+    <meta
+      name="keywords"
+      content="AI finance coach, portfolio tracker, budgeting app, TEFAS funds, investment goals, financial planning, money management"
+    />
+    <meta name="author" content="FinCoach" />
+    <meta name="application-name" content="FinCoach" />
+    <meta name="apple-mobile-web-app-title" content="FinCoach" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <link rel="canonical" href="https://fincoach-esat.web.app/" />
+
+    <!-- Language alternates -->
+    <link rel="alternate" hreflang="en" href="https://fincoach-esat.web.app/en" />
+    <link rel="alternate" hreflang="tr" href="https://fincoach-esat.web.app/tr" />
+    <link rel="alternate" hreflang="x-default" href="https://fincoach-esat.web.app/" />
+
+    <!-- Theme + icons -->
+    <meta name="theme-color" content="#0a0c12" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#0a0c12" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/favicon.svg" color="#1fb57a" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FinCoach" />
+    <meta property="og:title" content="FinCoach — your AI finance coach" />
+    <meta
+      property="og:description"
+      content="Track your portfolio, budget, and funds, set goals, and get clear answers backed by real market data and citations. Free while in beta."
+    />
+    <meta property="og:url" content="https://fincoach-esat.web.app/" />
+    <meta property="og:image" content="https://fincoach-esat.web.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="FinCoach — your AI finance coach, explained with citations" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="tr_TR" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="FinCoach — your AI finance coach" />
+    <meta
+      name="twitter:description"
+      content="Portfolio, budget, funds, and goals — explained in plain language by seven specialist AI agents, with citations you can verify."
+    />
+    <meta name="twitter:image" content="https://fincoach-esat.web.app/og-image.png" />
+    <meta name="twitter:image:alt" content="FinCoach — your AI finance coach, explained with citations" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
+
+    <!-- Structured data: Organization, WebSite, SoftwareApplication, FAQ -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://fincoach-esat.web.app/#organization",
+            "name": "FinCoach",
+            "url": "https://fincoach-esat.web.app/",
+            "logo": "https://fincoach-esat.web.app/icon-512.png",
+            "description": "AI finance coach for portfolio, budget, funds, and goals — every answer backed by real data and citations."
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://fincoach-esat.web.app/#website",
+            "url": "https://fincoach-esat.web.app/",
+            "name": "FinCoach",
+            "inLanguage": ["en", "tr"],
+            "publisher": { "@id": "https://fincoach-esat.web.app/#organization" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "FinCoach",
+            "applicationCategory": "FinanceApplication",
+            "operatingSystem": "Web, Windows",
+            "url": "https://fincoach-esat.web.app/",
+            "description": "FinCoach is an AI finance coach that tracks your portfolio, budget, and funds, plans your goals, and answers questions in plain language with citations from real market data.",
+            "featureList": [
+              "AI coach with cited answers",
+              "Portfolio tracking with live prices",
+              "Smart multi-currency budgeting",
+              "Turkish fund (TEFAS) analysis",
+              "Goal planning and projections",
+              "PDF statement import"
+            ],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "description": "Free while in beta"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is FinCoach?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "FinCoach is an AI finance coach that tracks your portfolio, budget, and funds, plans your goals, and answers money questions in plain language. Every market claim comes with a citation you can check."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How much does FinCoach cost?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "FinCoach is free while in beta. There is no card required and sample data is included so you can try it in seconds."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Where does FinCoach get its data?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "FinCoach uses real sources including Google Gemini, yfinance, TEFAS, SEC EDGAR, NewsAPI, and the Fear & Greed index, and links the source on every answer."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is FinCoach financial advice?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. FinCoach is an educational prototype that explains your finances in plain language. Its outputs are not financial advice."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
