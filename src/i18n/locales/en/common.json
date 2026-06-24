@@ -31,7 +31,10 @@
   "errors": {
     "backendUnreachable": "Backend not reachable. Start it with `uv run uvicorn app.main:app`.",
     "sessionExpired": "Session expired. Please sign in again.",
-    "demoMode": "Demo mode is on — using cached responses"
+    "demoMode": "Demo mode is on — using cached responses",
+    "crashTitle": "Something went wrong",
+    "crashBody": "This panel hit an unexpected error. You can try again without losing your session.",
+    "crashReset": "Try again"
   },
   "currency": {
     "try": "TRY",

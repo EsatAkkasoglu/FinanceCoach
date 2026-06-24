@@ -31,7 +31,10 @@
   "errors": {
     "backendUnreachable": "Sunucuya ulaşılamıyor. `uv run uvicorn app.main:app` komutu ile başlatın.",
     "sessionExpired": "Oturum süresi doldu. Lütfen tekrar giriş yapın.",
-    "demoMode": "Demo modu açık — önbelleğe alınmış yanıtlar kullanılıyor"
+    "demoMode": "Demo modu açık — önbelleğe alınmış yanıtlar kullanılıyor",
+    "crashTitle": "Bir şeyler ters gitti",
+    "crashBody": "Bu bölümde beklenmeyen bir hata oluştu. Oturumunuzu kaybetmeden tekrar deneyebilirsiniz.",
+    "crashReset": "Tekrar dene"
   },
   "currency": {
     "try": "TRY",

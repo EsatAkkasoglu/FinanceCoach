@@ -22,9 +22,11 @@ interface Props {
     goal?: Partial<GoalDraft>;
     financialChallenges?: FinancialChallengeId[];
   }) => void;
+  /** Show the "challenges" chips. Hidden in the one-screen onboarding. */
+  showChallenges?: boolean;
 }
 
-export function StepGoals({ goal, financialChallenges, onChange }: Props) {
+export function StepGoals({ goal, financialChallenges, onChange, showChallenges = true }: Props) {
   const { t } = useTranslation("onboarding");
   const selected = GOAL_TYPES.find((g) => g.id === goal.type);
 
@@ -102,35 +104,37 @@ export function StepGoals({ goal, financialChallenges, onChange }: Props) {
         </div>
       )}
 
-      <div className="space-y-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-content-muted">
-            {t("goals.familiar")}
-          </p>
-          <p className="mt-0.5 text-sm text-content-muted">{t("goals.familiarHint")}</p>
+      {showChallenges && (
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-content-muted">
+              {t("goals.familiar")}
+            </p>
+            <p className="mt-0.5 text-sm text-content-muted">{t("goals.familiarHint")}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {FINANCIAL_CHALLENGES.map((ch) => {
+              const active = financialChallenges.includes(ch.id as FinancialChallengeId);
+              return (
+                <button
+                  key={ch.id}
+                  type="button"
+                  onClick={() => toggleChallenge(ch.id as FinancialChallengeId)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition",
+                    active
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-line text-content-muted hover:border-accent/50"
+                  )}
+                >
+                  <span>{ch.emoji}</span>
+                  {t(`goals.challenges.${ch.id}`)}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {FINANCIAL_CHALLENGES.map((ch) => {
-            const active = financialChallenges.includes(ch.id as FinancialChallengeId);
-            return (
-              <button
-                key={ch.id}
-                type="button"
-                onClick={() => toggleChallenge(ch.id as FinancialChallengeId)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition",
-                  active
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-line text-content-muted hover:border-accent/50"
-                )}
-              >
-                <span>{ch.emoji}</span>
-                {t(`goals.challenges.${ch.id}`)}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

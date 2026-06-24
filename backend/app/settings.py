@@ -9,6 +9,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
+# Default JWT secret — only acceptable for local/dev. Cloud Run startup refuses
+# to boot with this value (see the lifespan guard in main.py).
+DEFAULT_JWT_SECRET = "dev-secret-change-me-in-production"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -95,7 +99,7 @@ class Settings(BaseSettings):
         return {c.strip().lower() for c in self.news_alert_categories.split(",") if c.strip()}
 
     # Auth
-    jwt_secret: str = Field(default="dev-secret-change-me-in-production", alias="FINCOACH_JWT_SECRET")
+    jwt_secret: str = Field(default=DEFAULT_JWT_SECRET, alias="FINCOACH_JWT_SECRET")
     jwt_algorithm: str = "HS256"
     jwt_ttl_seconds: int = Field(default=60 * 60 * 24 * 30, alias="FINCOACH_JWT_TTL_SECONDS")  # 30 days
 

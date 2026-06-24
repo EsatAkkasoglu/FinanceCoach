@@ -45,6 +45,14 @@ export function mountScene(
 ): () => void {
   const { fov = 60, cameraZ = 10, maxDpr = 1.75 } = opts;
 
+  // WebGL2 may be unavailable (older GPUs, WebKitGTK on Linux, a blocklisted or
+  // disabled GPU). three r184 is WebGL2-only, so probe on a throwaway canvas and
+  // bail to a no-op teardown rather than throwing — callers keep working and the
+  // static CSS backdrop shows through; only the decorative motion layer is skipped.
+  if (!document.createElement("canvas").getContext("webgl2")) {
+    return () => {};
+  }
+
   let width = Math.max(1, el.clientWidth);
   let height = Math.max(1, el.clientHeight);
 
@@ -52,15 +60,23 @@ export function mountScene(
   const camera = new THREE.PerspectiveCamera(fov, width / height, 0.1, 100);
   camera.position.z = cameraZ;
 
-  const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    alpha: true,
-    powerPreference: "high-performance",
-  });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDpr));
-  renderer.setSize(width, height);
-  renderer.setClearColor(0x000000, 0);
-  el.appendChild(renderer.domElement);
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance",
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDpr));
+    renderer.setSize(width, height);
+    renderer.setClearColor(0x000000, 0);
+    el.appendChild(renderer.domElement);
+  } catch (err) {
+    // Context creation can still fail after a positive probe (driver crash,
+    // too many live contexts). Degrade silently to the static backdrop.
+    console.warn("mountScene: WebGL renderer unavailable, skipping scene", err);
+    return () => {};
+  }
 
   const { onFrame, dispose } = build({ scene, camera, renderer, width, height });
 
@@ -94,6 +110,23 @@ export function mountScene(
   };
   document.addEventListener("visibilitychange", onVis);
 
+  // WebGL context can be lost (GPU reset, driver hiccup, tab eviction). Pause the
+  // loop on loss and resume on restore instead of silently freezing the canvas.
+  const onContextLost = (e: Event) => {
+    e.preventDefault();
+    cancelAnimationFrame(raf);
+    running = false;
+  };
+  const onContextRestored = () => {
+    if (!running) {
+      running = true;
+      last = performance.now();
+      animate();
+    }
+  };
+  renderer.domElement.addEventListener("webglcontextlost", onContextLost);
+  renderer.domElement.addEventListener("webglcontextrestored", onContextRestored);
+
   const ro = new ResizeObserver(() => {
     width = Math.max(1, el.clientWidth);
     height = Math.max(1, el.clientHeight);
@@ -106,6 +139,8 @@ export function mountScene(
   return () => {
     cancelAnimationFrame(raf);
     document.removeEventListener("visibilitychange", onVis);
+    renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
+    renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
     ro.disconnect();
     dispose?.();
     renderer.dispose();
@@ -117,7 +152,8 @@ export function mountScene(
 export function makeGlowSprite(size = 64): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return new THREE.CanvasTexture(canvas);
   const half = size / 2;
   const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
   grad.addColorStop(0, "rgba(255,255,255,1)");

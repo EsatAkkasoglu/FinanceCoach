@@ -107,7 +107,7 @@
   },
   "risk": {
     "title": "Risk profile",
-    "subtitle": "5 quick questions. Your answers shape every recommendation.",
+    "subtitle": "A few quick questions. Your answers shape every recommendation.",
     "progress": "{{completed}}/{{total}} answered",
     "inProgress": "in progress",
     "questions": {

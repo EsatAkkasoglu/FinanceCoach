@@ -1,0 +1,33 @@
+# FinCoach — https://fincoach-esat.web.app
+# Search + social crawlers are welcome on all public pages.
+
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Explicitly welcome AI / answer-engine crawlers (GEO/AEO).
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+Sitemap: https://fincoach-esat.web.app/sitemap.xml
