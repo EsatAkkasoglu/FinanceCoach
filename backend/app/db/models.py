@@ -366,3 +366,20 @@ class NewsAlert(Base):
     read_at = Column(DateTime, nullable=True)               # NULL = unread
 
     article = relationship("NewsArticle")
+
+
+class Waitlist(Base):
+    """Landing-page early-access signups — Phase 0 demand validation.
+
+    Public (no auth): the marketing landing posts here when a visitor asks for
+    early access to a paid tier. One row per email; ``tier`` captures which plan
+    they wanted (the willingness-to-pay signal), ``source`` where they signed up.
+    """
+
+    __tablename__ = "waitlist"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(254), unique=True, nullable=False, index=True)
+    tier = Column(String(32), nullable=True)        # "pro" | "team" | None
+    source = Column(String(64), nullable=True)      # "pricing" | "cta" | …
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

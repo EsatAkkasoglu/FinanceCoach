@@ -795,6 +795,26 @@ export async function removeWatchlistItem(id: number): Promise<boolean> {
   return r.ok;
 }
 
+// ── Waitlist (landing early-access — Phase 0 demand validation) ───────────────
+
+/** Record an early-access signup. Public endpoint; resolves true on success. */
+export async function joinWaitlist(
+  email: string,
+  tier?: string,
+  source?: string,
+): Promise<boolean> {
+  try {
+    const r = await fetch(`${API_BASE}/waitlist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, tier, source }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 // ── Documents ────────────────────────────────────────────────────────────────
 
 export interface DocumentEntry {

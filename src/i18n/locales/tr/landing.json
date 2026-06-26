@@ -167,7 +167,16 @@
         "featured": false,
         "badge": ""
       }
-    ]
+    ],
+    "waitlist": {
+      "title": "Pro çıkınca haberin olsun mu?",
+      "subtitle": "E-postanı bırak; gelişmiş ajanlar, sınırsız içe aktarma ve akıllı uyarılar yayına girdiği an sana haber verelim.",
+      "placeholder": "sen@eposta.com",
+      "button": "Haber ver",
+      "success": "Listedesin — en kısa sürede ulaşacağız.",
+      "error": "Bir şeyler ters gitti. Lütfen tekrar dene.",
+      "invalid": "Lütfen geçerli bir e-posta adresi gir."
+    }
   },
   "cta": {
     "title": "Paranın kontrolünü almaya hazır mısın?",

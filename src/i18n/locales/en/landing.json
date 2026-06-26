@@ -167,7 +167,16 @@
         "featured": false,
         "badge": ""
       }
-    ]
+    ],
+    "waitlist": {
+      "title": "Want Pro when it lands?",
+      "subtitle": "Drop your email and we'll let you know the moment advanced agents, unlimited imports, and smart alerts go live.",
+      "placeholder": "you@email.com",
+      "button": "Notify me",
+      "success": "You're on the list — we'll be in touch.",
+      "error": "Something went wrong. Please try again.",
+      "invalid": "Please enter a valid email address."
+    }
   },
   "cta": {
     "title": "Ready to take control of your money?",
