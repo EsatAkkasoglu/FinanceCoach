@@ -135,7 +135,7 @@
   "pricing": {
     "eyebrow": "Pricing",
     "title": "Start free. Upgrade when you're ready.",
-    "subtitle": "FinCoach is completely free while in beta. No card, no catch.",
+    "subtitle": "Start free and go Pro when you need unlimited coaching. Cancel anytime.",
     "tiers": [
       {
         "name": "Free",
@@ -149,11 +149,11 @@
       },
       {
         "name": "Pro",
-        "price": "Soon",
-        "period": "",
+        "price": "₺199",
+        "period": "/mo · VAT incl.",
         "desc": "For power users who want deeper analysis and automation.",
-        "features": ["Advanced specialist agents", "Unlimited document import", "Priority live data", "Smart alerts"],
-        "cta": "Coming soon",
+        "features": ["Unlimited AI coaching", "Advanced specialist agents", "Unlimited document import", "Priority live data", "Smart alerts"],
+        "cta": "Go Pro",
         "featured": false,
         "badge": ""
       },

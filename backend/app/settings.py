@@ -101,13 +101,13 @@ class Settings(BaseSettings):
     # Plan limits — free tier monthly chat-turn cap (cost control). Pro is
     # uncapped. 0 disables the gate entirely (treat everyone as unlimited).
     free_monthly_chat_turns: int = Field(
-        default=50, alias="FINCOACH_FREE_MONTHLY_CHAT_TURNS"
+        default=15, alias="FINCOACH_FREE_MONTHLY_CHAT_TURNS"
     )
 
     # Billing — Pro plan price + iyzico credentials. When the iyzico keys are
     # unset the billing layer falls back to the in-process "mock" provider
     # (local dev / tests). Set all three to activate real iyzico checkout.
-    pro_plan_price: float = Field(default=149.0, alias="FINCOACH_PRO_PLAN_PRICE")
+    pro_plan_price: float = Field(default=199.0, alias="FINCOACH_PRO_PLAN_PRICE")
     pro_plan_currency: str = Field(default="TRY", alias="FINCOACH_PRO_PLAN_CURRENCY")
     iyzico_api_key: str = Field(default="", alias="IYZICO_API_KEY")
     iyzico_secret_key: str = Field(default="", alias="IYZICO_SECRET_KEY")
