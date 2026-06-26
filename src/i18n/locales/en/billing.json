@@ -1,0 +1,17 @@
+{
+  "planLabel": "Plan",
+  "free": "Free",
+  "pro": "Pro",
+  "currentFree": "You're on the Free plan.",
+  "currentPro": "You're on Pro — thank you!",
+  "upgrade": "Upgrade to Pro",
+  "upgradeDesc": "Unlimited coaching, advanced agents, and smart alerts.",
+  "perMonth": "/mo",
+  "starting": "Redirecting to checkout…",
+  "return": {
+    "verifying": "Confirming your payment…",
+    "success": "You're on Pro now — welcome aboard!",
+    "failed": "Payment wasn't completed. You can try again.",
+    "back": "Back to app"
+  }
+}

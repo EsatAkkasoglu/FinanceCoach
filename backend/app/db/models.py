@@ -409,3 +409,26 @@ class UsageCounter(Base):
     period = Column(String(7), nullable=False, index=True)   # "YYYY-MM" (UTC)
     chat_turns = Column(Integer, nullable=False, default=0)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class BillingCheckout(Base):
+    """A single checkout/payment attempt for a paid plan.
+
+    Provider-agnostic: ``provider`` names the gateway ("mock" | "iyzico" | …)
+    and ``provider_ref`` is its opaque handle (iyzico checkout-form token,
+    etc.). On a successful ``finalize`` the user's tier is upgraded and
+    ``paid_at`` stamped. One row per attempt — history is kept for audit.
+    """
+
+    __tablename__ = "billing_checkout"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    provider = Column(String(32), nullable=False)            # "mock" | "iyzico"
+    plan = Column(String(32), nullable=False)                # "pro"
+    amount = Column(Float, nullable=False)
+    currency = Column(String(8), nullable=False, default="TRY")
+    provider_ref = Column(String(255), nullable=True, index=True)  # token / conversationId
+    status = Column(String(16), nullable=False, default="pending")  # pending|paid|failed|canceled
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    paid_at = Column(DateTime, nullable=True)

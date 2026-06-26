@@ -1,0 +1,17 @@
+{
+  "planLabel": "Plan",
+  "free": "Ücretsiz",
+  "pro": "Pro",
+  "currentFree": "Ücretsiz plandasın.",
+  "currentPro": "Pro'dasın — teşekkürler!",
+  "upgrade": "Pro'ya geç",
+  "upgradeDesc": "Sınırsız koçluk, gelişmiş ajanlar ve akıllı uyarılar.",
+  "perMonth": "/ay",
+  "starting": "Ödeme sayfasına yönlendiriliyorsun…",
+  "return": {
+    "verifying": "Ödemen doğrulanıyor…",
+    "success": "Artık Pro'dasın — aramıza hoş geldin!",
+    "failed": "Ödeme tamamlanamadı. Tekrar deneyebilirsin.",
+    "back": "Uygulamaya dön"
+  }
+}

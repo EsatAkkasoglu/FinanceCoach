@@ -18,6 +18,7 @@ import { StepRiskQuiz } from "@/components/onboarding/StepRiskQuiz";
 import { RISK_QUIZ, scoreToLabel } from "@/components/onboarding/data";
 import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
 import { WatchlistManager } from "@/components/notifications/WatchlistManager";
+import { UpgradeCard } from "@/components/billing/UpgradeCard";
 
 // ─── UX copy / data ───────────────────────────────────────────────────────────
 
@@ -587,6 +588,9 @@ function ProfilePanel() {
       />
 
       <div className="space-y-5">
+        {/* Plan / upgrade */}
+        <UpgradeCard />
+
         {/* Avatar */}
         <Card>
           <h3 className="mb-3 text-sm font-semibold">{t("profile.spiritAnimal")}</h3>

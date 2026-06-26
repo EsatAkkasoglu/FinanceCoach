@@ -99,6 +99,65 @@ export interface AuthUser {
   consent_current?: boolean;
 }
 
+// ── Billing ──────────────────────────────────────────────────────────────────
+
+export interface BillingPlan {
+  code: string;
+  price: number;
+  currency: string;
+  period: string;
+}
+
+export interface BillingPlansResponse {
+  provider: string;
+  tier: string;
+  plans: BillingPlan[];
+}
+
+export async function getBillingPlans(): Promise<BillingPlansResponse | null> {
+  try {
+    const r = await apiFetch("/billing/plans");
+    if (!r.ok) return null;
+    return (await r.json()) as BillingPlansResponse;
+  } catch {
+    return null;
+  }
+}
+
+/** Start a checkout and return the gateway redirect URL (null on failure). */
+export async function startCheckout(plan: string, returnUrl: string): Promise<string | null> {
+  try {
+    const r = await apiFetch("/billing/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan, return_url: returnUrl }),
+    });
+    if (!r.ok) return null;
+    const data = (await r.json()) as { redirect_url?: string };
+    return data.redirect_url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Confirm a checkout on the return page. Returns the resulting status. */
+export async function finalizeCheckout(
+  ref: string,
+  params: Record<string, string> = {},
+): Promise<{ status: string; tier?: string } | null> {
+  try {
+    const r = await apiFetch("/billing/finalize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref, params }),
+    });
+    if (!r.ok) return { status: "error" };
+    return (await r.json()) as { status: string; tier?: string };
+  } catch {
+    return null;
+  }
+}
+
 /** sessionStorage flag: a register-mode Google redirect needs consent recorded. */
 export const PENDING_CONSENT_KEY = "fincoach-pending-consent";
 

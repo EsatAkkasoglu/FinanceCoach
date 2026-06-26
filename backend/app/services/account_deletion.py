@@ -21,6 +21,7 @@ from sqlalchemy import delete, text
 
 from app.db.models import (
     Account,
+    BillingCheckout,
     ChatMessage,
     Conversation,
     Document,
@@ -49,6 +50,7 @@ _USER_SCOPED_MODELS = [
     NewsAlert,
     Watchlist,
     UsageCounter,
+    BillingCheckout,
     ChatMessage,
     Conversation,
     Goal,

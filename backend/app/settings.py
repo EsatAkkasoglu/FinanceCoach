@@ -104,6 +104,21 @@ class Settings(BaseSettings):
         default=50, alias="FINCOACH_FREE_MONTHLY_CHAT_TURNS"
     )
 
+    # Billing — Pro plan price + iyzico credentials. When the iyzico keys are
+    # unset the billing layer falls back to the in-process "mock" provider
+    # (local dev / tests). Set all three to activate real iyzico checkout.
+    pro_plan_price: float = Field(default=149.0, alias="FINCOACH_PRO_PLAN_PRICE")
+    pro_plan_currency: str = Field(default="TRY", alias="FINCOACH_PRO_PLAN_CURRENCY")
+    iyzico_api_key: str = Field(default="", alias="IYZICO_API_KEY")
+    iyzico_secret_key: str = Field(default="", alias="IYZICO_SECRET_KEY")
+    iyzico_base_url: str = Field(
+        default="https://sandbox-api.iyzipay.com", alias="IYZICO_BASE_URL"
+    )
+
+    @property
+    def iyzico_configured(self) -> bool:
+        return bool(self.iyzico_api_key and self.iyzico_secret_key)
+
     # Auth
     jwt_secret: str = Field(default=DEFAULT_JWT_SECRET, alias="FINCOACH_JWT_SECRET")
     jwt_algorithm: str = "HS256"
