@@ -11,7 +11,7 @@
 
 | Konu | Durum | SaaS için anlamı |
 |---|---|---|
-| Çok-kiracılık | `user_id=1` hardcoded; Firebase Auth erişimi geçer ama **veri izolasyonu yok** | **#1 teknik blok.** Gerçek SaaS = her sorgu kullanıcıya scope'lanmalı |
+| Çok-kiracılık | **Veri katmanı zaten kullanıcı-bazlı** — koddan doğrulandı: `register` gerçek kullanıcı yaratıyor, auth token'dan gerçek `user_id` çözüyor, tüm router'lar `Depends(get_current_user_id)` ile scope'lu, chat `thread_id`'yi `u{id}:` ile namespace'liyor, ChromaDB retrieval `where={"user_id"}` ile filtreli. (CLAUDE.md'nin "her şey user_id=1" notu **bayat**.) Kalan tek kod açığı background news-alert fan-out'tu → bu oturumda düzeltildi. | **Eski "#1 blok" büyük ölçüde HAZIR.** Kalan: kayıt/login UI cilası + kenar durumların testi |
 | Deploy | Cloud Run + Neon Postgres + Firebase zaten kurulu | Altyapı çoğu hazır — avantaj |
 | Birim maliyet | ~$0.012/tur (bkz. `BIRIM_MALIYET_FIYAT.md`) | Marj iyi **ama** rate-limit şart |
 | Ödeme | Yok | Phase 1 bloğu (iyzico/Stripe/Lemon Squeezy) |
@@ -38,10 +38,12 @@ kitleyi değiştir. Sinyal varsa → inşa.
 
 ## Phase 1 — ÇOK-KİRACILI MVP (asıl iş; yalnızca Phase 0 sinyaliyle)
 
-1. **Multi-tenancy (en büyük blok).** `user_id=1` hardcode'unu kaldır; Firebase
-   uid → user satırı; HER sorgu authenticated user'a scope'lansın; veri
-   izolasyonu + testleri. Mevcut tek-kullanıcı veri akışları tek tek gözden
-   geçirilmeli.
+1. **Multi-tenancy (büyük ölçüde HAZIR — sanılandan küçük iş).** Veri katmanı
+   zaten kullanıcı-bazlı izole (yukarıdaki tablo + kod). Kalanlar: (a) background
+   news-alert fan-out → ✅ bu oturumda düzeltildi; (b) izolasyon kenar-durumları
+   için birkaç entegrasyon testi (iki kullanıcı, A'nın verisi B'ye sızmamalı);
+   (c) hâlâ default `user_id=1` taşıyan yan yollar (`ChromaEmbeddingStorage`
+   default'u, eval seed) zararsız ama denetlenmeli. **Haftalarca refactor DEĞİL.**
 2. **Ödeme + abonelik.** TR için iyzico (yerel kart/3D), global için Lemon
    Squeezy/Stripe. Freemium: ücretsiz takip + 10 mesaj/ay · Pro sınırsız* +
    uyarılar.
