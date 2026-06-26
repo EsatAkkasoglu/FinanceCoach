@@ -815,6 +815,18 @@ export async function joinWaitlist(
   }
 }
 
+/** Total waitlist signups, for landing social proof. Resolves null on failure. */
+export async function getWaitlistCount(): Promise<number | null> {
+  try {
+    const r = await fetch(`${API_BASE}/waitlist/count`);
+    if (!r.ok) return null;
+    const data = (await r.json()) as { count?: number };
+    return typeof data.count === "number" ? data.count : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Documents ────────────────────────────────────────────────────────────────
 
 export interface DocumentEntry {

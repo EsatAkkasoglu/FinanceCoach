@@ -175,7 +175,9 @@
       "button": "Notify me",
       "success": "You're on the list — we'll be in touch.",
       "error": "Something went wrong. Please try again.",
-      "invalid": "Please enter a valid email address."
+      "invalid": "Please enter a valid email address.",
+      "count_one": "{{count}} person is already on the list",
+      "count_other": "{{count}} people are already on the list"
     }
   },
   "cta": {

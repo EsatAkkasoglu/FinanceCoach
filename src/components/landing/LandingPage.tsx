@@ -44,7 +44,7 @@ import {
   Mail,
   type LucideIcon,
 } from "lucide-react";
-import { loginDemo, joinWaitlist } from "@/lib/api";
+import { loginDemo, joinWaitlist, getWaitlistCount } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { buildLocalizedPath, getLanguageFromPath, type SupportedLanguage } from "@/lib/routing";
 import { toast } from "sonner";
@@ -1078,6 +1078,17 @@ function WaitlistForm() {
   const { t } = useTranslation("landing");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void getWaitlistCount().then((n) => {
+      if (alive) setCount(n);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -1090,6 +1101,7 @@ function WaitlistForm() {
     const ok = await joinWaitlist(v, "pro", "pricing");
     if (ok) {
       setStatus("done");
+      setCount((c) => (c === null ? c : c + 1));
       toast.success(t("pricing.waitlist.success"));
     } else {
       setStatus("idle");
@@ -1138,6 +1150,15 @@ function WaitlistForm() {
             {t("pricing.waitlist.button")}
           </button>
         </form>
+      )}
+      {count !== null && count > 0 && (
+        <p className="mt-4 inline-flex items-center gap-2 text-caption text-content-muted">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent/60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+          </span>
+          {t("pricing.waitlist.count", { count })}
+        </p>
       )}
     </div>
   );
