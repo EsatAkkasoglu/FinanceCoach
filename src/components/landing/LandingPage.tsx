@@ -101,7 +101,7 @@ function BrandMark({ size = 18 }: { size?: number }) {
   );
 }
 
-function Wordmark() {
+export function Wordmark() {
   return (
     <span className="flex items-center gap-2">
       <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent shadow-glow">
@@ -1165,7 +1165,7 @@ function WaitlistForm() {
 }
 
 /* ───────────────────────── Pricing ───────────────────────── */
-function PricingSection({ onRegister }: { onRegister: () => void }) {
+export function PricingSection({ onRegister }: { onRegister: () => void }) {
   const { t } = useTranslation("landing");
   const tiers = t("pricing.tiers", { returnObjects: true }) as unknown as Tier[];
   const focusWaitlist = () => {

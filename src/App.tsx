@@ -22,6 +22,7 @@ import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { AuthPage } from "@/components/auth/AuthPage";
 import { LandingPage } from "@/components/landing/LandingPage";
 import { LegalPage } from "@/components/legal/LegalPage";
+import { PricingPage } from "@/components/landing/PricingPage";
 import { BillingReturn } from "@/components/billing/BillingReturn";
 import { DemoTour, TourReplayButton } from "@/components/tour/DemoTour";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -368,6 +369,10 @@ export default function App() {
         </>
       );
     }
+    // Public pricing page (deep-linkable for the payment-provider review).
+    if (appPathForAuth === "/pricing") {
+      return <PricingPage />;
+    }
     if (isAuthPath) {
       return (
         <>
@@ -527,6 +532,7 @@ export default function App() {
               <Route path="/:lang/chat" element={<ChatRoute />} />
               <Route path="/:lang/chat/:convId" element={<ChatRoute />} />
               <Route path="/:lang/legal/:doc" element={<LegalPage />} />
+              <Route path="/:lang/pricing" element={<PricingPage />} />
               <Route path="/:lang/billing/return" element={<BillingReturn />} />
               <Route path="/:lang" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
