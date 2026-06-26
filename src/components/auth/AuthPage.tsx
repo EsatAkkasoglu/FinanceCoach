@@ -36,13 +36,19 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoStatusMsg, setDemoStatusMsg] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
   const setUser = useAuthStore((s) => s.setUser);
 
   const busy = submitting || googleLoading || demoLoading;
+  const lang = getLanguageFromPath(location.pathname) ?? "en";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (submitting) return;
+    if (mode === "register" && !consent) {
+      toast.error(t("consentRequired"));
+      return;
+    }
     setSubmitting(true);
     try {
       const fn = mode === "login" ? login : register;
@@ -59,6 +65,10 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
 
   async function handleGoogle() {
     if (googleLoading) return;
+    if (mode === "register" && !consent) {
+      toast.error(t("consentRequired"));
+      return;
+    }
     setGoogleLoading(true);
     try {
       const user = await loginWithGoogle();
@@ -205,9 +215,44 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
               />
             </label>
 
+            {isRegister && (
+              <label className="flex items-start gap-2.5 pt-1 text-caption text-content-muted">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-accent accent-accent focus:ring-1 focus:ring-accent/40"
+                />
+                <span>
+                  <Trans
+                    t={t}
+                    i18nKey="consent"
+                    components={{
+                      terms: (
+                        <a
+                          href={buildLocalizedPath(lang, "/legal/terms")}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-accent underline-offset-2 hover:underline"
+                        />
+                      ),
+                      privacy: (
+                        <a
+                          href={buildLocalizedPath(lang, "/legal/privacy")}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-accent underline-offset-2 hover:underline"
+                        />
+                      ),
+                    }}
+                  />
+                </span>
+              </label>
+            )}
+
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || (isRegister && !consent)}
               className="w-full rounded-lg border border-line bg-surface-raised px-4 py-2.5 text-sm font-medium transition hover:border-content-muted disabled:opacity-50"
             >
               {submitting ? t("pleaseWait") : isRegister ? t("createAccountBtn") : t("signIn")}

@@ -13,7 +13,11 @@ import {
   type LegalSlug,
 } from "./legalContent";
 
-const CHROME: Record<SupportedLanguage, { back: string; eyebrow: string; nav: Record<LegalSlug, string> }> = {
+type Chrome = { back: string; eyebrow: string; nav: Record<LegalSlug, string> };
+
+// Partial + EN fallback so adding a SupportedLanguage never breaks the build;
+// untranslated languages degrade to the English chrome.
+const CHROME: Partial<Record<SupportedLanguage, Chrome>> = {
   en: {
     back: "Back",
     eyebrow: "Legal",
@@ -50,7 +54,7 @@ export function LegalPage() {
     : "privacy";
 
   const doc = useMemo(() => getLegalDoc(lang, slug), [lang, slug]);
-  const chrome = CHROME[lang];
+  const chrome = CHROME[lang] ?? CHROME.en!;
 
   return (
     <div className="min-h-screen bg-[hsl(var(--bg))] px-4 py-10 sm:px-6">

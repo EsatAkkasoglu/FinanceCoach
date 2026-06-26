@@ -320,8 +320,12 @@ const TR: Bundle = {
   },
 };
 
+// Registry keyed by language. To add a language later, translate a Bundle and
+// add it here — untranslated languages gracefully fall back to English.
+const BUNDLES: Partial<Record<SupportedLanguage, Bundle>> = { en: EN, tr: TR };
+
 export function getLegalDoc(lang: SupportedLanguage, slug: LegalSlug): LegalDoc {
-  const bundle = lang === "tr" ? TR : EN;
+  const bundle = BUNDLES[lang] ?? EN;
   return bundle[slug];
 }
 
