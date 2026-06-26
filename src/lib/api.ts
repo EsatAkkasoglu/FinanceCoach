@@ -815,6 +815,28 @@ export async function joinWaitlist(
   }
 }
 
+// ── Usage / plan limits ──────────────────────────────────────────────────────
+
+export interface UsageInfo {
+  period: string;
+  tier: string;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  unlimited: boolean;
+}
+
+/** Current month's metered usage for the signed-in user. Null on failure. */
+export async function getUsage(): Promise<UsageInfo | null> {
+  try {
+    const r = await apiFetch("/usage");
+    if (!r.ok) return null;
+    return (await r.json()) as UsageInfo;
+  } catch {
+    return null;
+  }
+}
+
 /** Total waitlist signups, for landing social proof. Resolves null on failure. */
 export async function getWaitlistCount(): Promise<number | null> {
   try {
@@ -993,6 +1015,31 @@ export async function* streamChat(
     }),
     signal,
   });
+
+  // Plan gate (and any other non-stream error) returns a JSON body, not SSE.
+  // Surface the limit message as an error event so the chat UI can react.
+  if (!resp.ok) {
+    let message = "";
+    let limitReached = false;
+    try {
+      const body = (await resp.json()) as { detail?: unknown };
+      const detail = body?.detail;
+      if (detail && typeof detail === "object") {
+        const d = detail as { error?: string; message?: string };
+        limitReached = d.error === "monthly_limit_reached";
+        message = d.message ?? "";
+      } else if (typeof detail === "string") {
+        message = detail;
+      }
+    } catch {
+      /* non-JSON error body — fall through to a generic message */
+    }
+    yield {
+      type: "error",
+      payload: { status: resp.status, limitReached, message },
+    };
+    return;
+  }
   if (!resp.body) throw new Error("no stream body");
 
   const reader = resp.body.getReader();

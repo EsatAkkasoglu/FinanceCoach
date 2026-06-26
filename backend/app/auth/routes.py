@@ -100,6 +100,7 @@ def demo_login():
                 monthly_income=35000.0,
                 risk_score=72,
                 risk_profile="balanced",
+                tier="pro",  # jurors/demo never hit the free monthly cap
             )
             db.add(user)
             db.flush()

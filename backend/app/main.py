@@ -51,6 +51,7 @@ from app.routers.symbols import router as symbols_router
 from app.routers.waitlist import router as waitlist_router
 from app.services.document_processor.router import router as documents_router
 from app.services.news_collector import shutdown_news_scheduler, start_news_scheduler
+from app.services.usage import check_and_increment, get_usage
 from app.settings import DEFAULT_JWT_SECRET, configure_langsmith, settings
 from app.tools._cache import cache_reset
 
@@ -380,6 +381,16 @@ async def delete_conversation(conv_id: str, user_id: int = Depends(get_current_u
     return {"ok": True}
 
 
+# ── Usage / plan limits ──────────────────────────────────────────────────────
+
+@app.get("/usage")
+async def read_usage(user_id: int = Depends(get_current_user_id)):
+    """Current month's metered usage for the authenticated user (UI meter)."""
+    with SessionLocal() as db:
+        tier = db.execute(select(User.tier).where(User.id == user_id)).scalar_one_or_none()
+        return get_usage(db, user_id, tier)
+
+
 # ── Chat ─────────────────────────────────────────────────────────────────────
 
 @app.post("/chat")
@@ -421,6 +432,21 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
             ).scalar_one_or_none()
             if owns is None or owns != thread_id:
                 raise HTTPException(403, "conversation not found")
+
+    # Plan gate: count this metered (LLM-spending) turn and refuse free-tier
+    # users who've hit the monthly cap — before we start any Gemini work.
+    with SessionLocal() as db:
+        tier = db.execute(select(User.tier).where(User.id == user_id)).scalar_one_or_none()
+        allowed, usage = check_and_increment(db, user_id, tier)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "monthly_limit_reached",
+                "message": "Aylık mesaj limitine ulaştın. Pro'ya geçince sınırsız.",
+                "usage": usage,
+            },
+        )
 
     # Make user_id + UI display currency visible to deeply-nested LangGraph
     # tools / synthesizer via ContextVars.

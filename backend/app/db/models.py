@@ -84,6 +84,7 @@ class User(Base):
     risk_score = Column(Integer, default=50)              # 0-125
     risk_profile = Column(String(32), default=RiskProfile.BALANCED.value)
     roast_mode = Column(Integer, default=0)               # 0/1 bool flag
+    tier = Column(String(16), nullable=False, default="free")  # "free" | "pro"
     created_at = Column(DateTime, default=datetime.utcnow)
 
     holdings = relationship("Holding", back_populates="user", cascade="all, delete-orphan")
@@ -383,3 +384,24 @@ class Waitlist(Base):
     tier = Column(String(32), nullable=True)        # "pro" | "team" | None
     source = Column(String(64), nullable=True)      # "pricing" | "cta" | …
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class UsageCounter(Base):
+    """Per-user monthly metered-action counter (chat turns) for plan limits.
+
+    One row per ``(user_id, period)`` where ``period`` is the UTC calendar
+    month ``"YYYY-MM"``. The chat endpoint increments ``chat_turns`` on each
+    accepted turn; free-tier users are gated when they exceed the configured
+    monthly cap. Pro users are never gated (no row pressure either way).
+    """
+
+    __tablename__ = "usage_counter"
+    __table_args__ = (
+        UniqueConstraint("user_id", "period", name="uq_usage_user_period"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    period = Column(String(7), nullable=False, index=True)   # "YYYY-MM" (UTC)
+    chat_turns = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

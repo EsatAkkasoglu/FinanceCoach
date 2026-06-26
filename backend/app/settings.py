@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     def news_alert_category_set(self) -> set[str]:
         return {c.strip().lower() for c in self.news_alert_categories.split(",") if c.strip()}
 
+    # Plan limits — free tier monthly chat-turn cap (cost control). Pro is
+    # uncapped. 0 disables the gate entirely (treat everyone as unlimited).
+    free_monthly_chat_turns: int = Field(
+        default=50, alias="FINCOACH_FREE_MONTHLY_CHAT_TURNS"
+    )
+
     # Auth
     jwt_secret: str = Field(default=DEFAULT_JWT_SECRET, alias="FINCOACH_JWT_SECRET")
     jwt_algorithm: str = "HS256"
