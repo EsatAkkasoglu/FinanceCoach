@@ -14,8 +14,8 @@ from app.db.session import SessionLocal
 from app.services.billing import (
     finalize_checkout,
     get_plan,
-    get_provider,
     list_plans,
+    payments_mode,
     start_checkout,
 )
 
@@ -38,8 +38,10 @@ class FinalizeRequest(BaseModel):
 def get_plans(user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         tier = db.get(User, user_id).tier if db.get(User, user_id) else "free"
+    mode = payments_mode()
     return {
-        "provider": get_provider().name,
+        "mode": mode,                 # "live" | "mock" | "unavailable"
+        "live": mode != "unavailable",
         "tier": tier,
         "plans": [
             {"code": p.code, "price": p.price, "currency": p.currency, "period": p.period}
@@ -53,6 +55,10 @@ def create_checkout(body: CheckoutRequest, user_id: int = Depends(get_current_us
     plan = get_plan(body.plan)
     if plan is None:
         raise HTTPException(404, "unknown plan")
+    # Payments not wired in this deploy yet (no gateway keys) — tell the UI so it
+    # routes to the "coming soon" page instead of granting Pro via the mock.
+    if payments_mode() == "unavailable":
+        return {"status": "unavailable"}
     callback = body.return_url or "/billing/return"
     with SessionLocal() as db:
         user = db.get(User, user_id)

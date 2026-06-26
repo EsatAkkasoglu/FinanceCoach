@@ -24,6 +24,7 @@ import { LandingPage } from "@/components/landing/LandingPage";
 import { LegalPage } from "@/components/legal/LegalPage";
 import { PricingPage } from "@/components/landing/PricingPage";
 import { BillingReturn } from "@/components/billing/BillingReturn";
+import { OopsPage } from "@/components/billing/OopsPage";
 import { DemoTour, TourReplayButton } from "@/components/tour/DemoTour";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAuthStore, useConversationStore, useUserStore, useTourStore } from "@/store";
@@ -373,6 +374,10 @@ export default function App() {
     if (appPathForAuth === "/pricing") {
       return <PricingPage />;
     }
+    // Shared status / "coming soon" page (also reachable while logged out).
+    if (appPathForAuth === "/oops") {
+      return <OopsPage />;
+    }
     if (isAuthPath) {
       return (
         <>
@@ -534,6 +539,7 @@ export default function App() {
               <Route path="/:lang/legal/:doc" element={<LegalPage />} />
               <Route path="/:lang/pricing" element={<PricingPage />} />
               <Route path="/:lang/billing/return" element={<BillingReturn />} />
+              <Route path="/:lang/oops" element={<OopsPage />} />
               <Route path="/:lang" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />

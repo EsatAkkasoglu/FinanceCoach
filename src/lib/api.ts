@@ -124,19 +124,26 @@ export async function getBillingPlans(): Promise<BillingPlansResponse | null> {
   }
 }
 
-/** Start a checkout and return the gateway redirect URL (null on failure). */
-export async function startCheckout(plan: string, returnUrl: string): Promise<string | null> {
+export type CheckoutResult =
+  | { status: "ok"; redirectUrl: string }
+  | { status: "unavailable" }   // payments not wired in this deploy yet
+  | { status: "error" };        // network / unexpected
+
+/** Start a checkout. Discriminated result so the UI can route each case. */
+export async function startCheckout(plan: string, returnUrl: string): Promise<CheckoutResult> {
   try {
     const r = await apiFetch("/billing/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan, return_url: returnUrl }),
     });
-    if (!r.ok) return null;
-    const data = (await r.json()) as { redirect_url?: string };
-    return data.redirect_url ?? null;
+    if (!r.ok) return { status: "error" };
+    const data = (await r.json()) as { redirect_url?: string; status?: string };
+    if (data.status === "unavailable") return { status: "unavailable" };
+    if (data.redirect_url) return { status: "ok", redirectUrl: data.redirect_url };
+    return { status: "error" };
   } catch {
-    return null;
+    return { status: "error" };
   }
 }
 

@@ -14,10 +14,23 @@ def _tier(username: str = "demo") -> str:
 
 def test_plans_lists_pro_and_mock_provider(client):
     body = client.get("/billing/plans").json()
-    assert body["provider"] == "mock"          # no iyzico keys in tests
+    assert body["mode"] == "mock"              # no iyzico keys, not Cloud Run
+    assert body["live"] is True                # mock still lets the flow run
     assert body["tier"] == "free"
     codes = [p["code"] for p in body["plans"]]
     assert "pro" in codes
+
+
+def test_checkout_unavailable_in_prod_without_keys(client, monkeypatch):
+    # Simulate a Cloud Run deploy with no gateway keys: must NOT mock-grant Pro.
+    monkeypatch.setenv("K_SERVICE", "fincoach-backend")
+    plans = client.get("/billing/plans").json()
+    assert plans["mode"] == "unavailable" and plans["live"] is False
+
+    co = client.post("/billing/checkout", json={"plan": "pro"})
+    assert co.status_code == 200
+    assert co.json() == {"status": "unavailable"}
+    assert _tier() == "free"                   # no upgrade happened
 
 
 def test_checkout_then_finalize_upgrades_to_pro(client):

@@ -31,9 +31,14 @@ export function BillingReturn() {
     const conv = params.get("conversationId");
     if (conv) extra.conversationId = conv;
     void finalizeCheckout(ref, extra).then((res) => {
-      setStatus(res?.status === "paid" ? "success" : "failed");
+      if (res?.status === "paid") {
+        setStatus("success");
+      } else {
+        // Failed/canceled → the shared status page with the right message + game.
+        navigate(buildLocalizedPath(lang, "/oops?reason=payment_failed"), { replace: true });
+      }
     });
-  }, [ref, params]);
+  }, [ref, params, navigate, lang]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[hsl(var(--bg))] px-4">

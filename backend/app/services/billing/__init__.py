@@ -21,6 +21,21 @@ log = logging.getLogger("fincoach.billing")
 __all__ = ["get_provider", "start_checkout", "finalize_checkout", "get_plan", "list_plans", "Plan"]
 
 
+def payments_mode() -> str:
+    """How billing behaves right now:
+
+    - "live": iyzico configured → real checkout.
+    - "mock": no keys but local/dev → in-process mock (tests, local demos).
+    - "unavailable": no keys in a production (Cloud Run) deploy → DON'T grant
+      Pro for free via the mock; the UI sends the user to a "coming soon" page.
+    """
+    if settings.iyzico_configured:
+        return "live"
+    if settings.is_cloud_run:
+        return "unavailable"
+    return "mock"
+
+
 def get_provider() -> PaymentProvider:
     """The active provider — real iyzico when configured, else the mock."""
     if settings.iyzico_configured:

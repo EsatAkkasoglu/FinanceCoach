@@ -13,5 +13,31 @@
     "success": "You're on Pro now — welcome aboard!",
     "failed": "Payment wasn't completed. You can try again.",
     "back": "Back to app"
+  },
+  "oops": {
+    "title": {
+      "coming_soon": "Pro is almost here",
+      "checkout_error": "Couldn't start checkout",
+      "payment_failed": "Payment didn't go through",
+      "generic": "Something went sideways"
+    },
+    "body": {
+      "coming_soon": "Our payment system is in final review — Pro opens in a few days. Your free plan keeps working in the meantime, and you'll be the first to know when Pro goes live.",
+      "checkout_error": "We couldn't reach the payment service just now. Please try again in a moment.",
+      "payment_failed": "Your payment wasn't completed and your card was not charged. You can try again anytime.",
+      "generic": "Something unexpected happened. Please try again in a bit."
+    },
+    "back": "Back to app",
+    "backPricing": "See plans"
+  },
+  "game": {
+    "title": "Coin tap",
+    "subtitle": "While you're here — tap the coins before they fade. 20 seconds on the clock.",
+    "start": "Play",
+    "restart": "Play again",
+    "score": "Score",
+    "best": "Best",
+    "gameOver": "Time's up!",
+    "newBest": "New best!"
   }
 }

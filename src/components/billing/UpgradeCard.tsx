@@ -1,9 +1,8 @@
 /** Settings card: shows the current plan and starts a Pro checkout. */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Sparkles, Loader2, Check } from "lucide-react";
-import { toast } from "sonner";
 
 import { getBillingPlans, startCheckout, type BillingPlan } from "@/lib/api";
 import { getLanguageFromPath, buildLocalizedPath } from "@/lib/routing";
@@ -11,6 +10,7 @@ import { getLanguageFromPath, buildLocalizedPath } from "@/lib/routing";
 export function UpgradeCard() {
   const { t } = useTranslation("billing");
   const location = useLocation();
+  const navigate = useNavigate();
   const lang = getLanguageFromPath(location.pathname) ?? "en";
 
   const [tier, setTier] = useState<string>("free");
@@ -29,17 +29,21 @@ export function UpgradeCard() {
     return () => { alive = false; };
   }, []);
 
+  function toOops(reason: string) {
+    navigate(buildLocalizedPath(lang, `/oops?reason=${reason}`));
+  }
+
   async function upgrade() {
     setStarting(true);
     const returnUrl = `${window.location.origin}${buildLocalizedPath(lang, "/billing/return")}`;
-    const url = await startCheckout("pro", returnUrl);
-    if (!url) {
-      setStarting(false);
-      toast.error(t("return.failed"));
+    const res = await startCheckout("pro", returnUrl);
+    if (res.status === "ok") {
+      window.location.href = res.redirectUrl;
       return;
     }
-    toast.message(t("starting"));
-    window.location.href = url;
+    setStarting(false);
+    // Payments not wired yet → "coming soon"; anything else → generic checkout error.
+    toOops(res.status === "unavailable" ? "coming_soon" : "checkout_error");
   }
 
   if (loading) return null;
