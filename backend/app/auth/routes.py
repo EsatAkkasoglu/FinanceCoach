@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -15,6 +15,7 @@ from app.auth.firebase_verify import decode_firebase_token
 from app.auth.security import create_token, hash_password, verify_password
 from app.db.models import Account, Goal, Holding, Subscription, Transaction, User
 from app.db.session import SessionLocal
+from app.services.consent import CURRENT_CONSENT_VERSION, consent_state
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 _bearer = HTTPBearer(auto_error=False)
@@ -25,6 +26,12 @@ USERNAME_RE = re.compile(r"^[a-zA-Z0-9_.-]{3,32}$")
 class Credentials(BaseModel):
     username: str = Field(min_length=3, max_length=32)
     password: str = Field(min_length=6, max_length=128)
+
+
+class RegisterRequest(Credentials):
+    # KVKK consent captured at sign-up. Optional for backward compat (demo/tests
+    # that predate consent); the UI always sends True and gates submission on it.
+    accept_terms: bool = Field(default=False)
 
 
 class AuthResponse(BaseModel):
@@ -39,11 +46,12 @@ def _user_dict(u: User) -> dict:
         "name": u.name,
         "avatar": u.avatar,
         "has_onboarded": bool(u.name),
+        **consent_state(u),
     }
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: Credentials):
+def register(payload: RegisterRequest):
     username = payload.username.strip().lower()
     if not USERNAME_RE.match(username):
         raise HTTPException(400, "username may only contain letters, digits, _ . -")
@@ -54,6 +62,10 @@ def register(payload: Credentials):
             password_hash=hash_password(payload.password),
             name="",
         )
+        # Stamp KVKK consent atomically with account creation when accepted.
+        if payload.accept_terms:
+            user.consented_at = datetime.utcnow()
+            user.consent_version = CURRENT_CONSENT_VERSION
         db.add(user)
         try:
             db.commit()

@@ -50,6 +50,7 @@ from app.routers.news import router as news_router
 from app.routers.symbols import router as symbols_router
 from app.routers.waitlist import router as waitlist_router
 from app.services.account_deletion import delete_user_account
+from app.services.consent import record_consent
 from app.services.document_processor.router import router as documents_router
 from app.services.news_collector import shutdown_news_scheduler, start_news_scheduler
 from app.services.usage import check_and_increment, get_usage
@@ -393,6 +394,17 @@ async def read_usage(user_id: int = Depends(get_current_user_id)):
 
 
 # ── Account / KVKK data rights ────────────────────────────────────────────────
+
+@app.post("/account/consent", status_code=200)
+async def post_consent(user_id: int = Depends(get_current_user_id)):
+    """Record KVKK/Terms consent for the signed-in user (current policy version).
+
+    Used by sign-up paths that can't stamp consent inline (e.g. Google/Firebase)
+    and to re-consent after a policy update. Idempotent.
+    """
+    with SessionLocal() as db:
+        return record_consent(db, user_id)
+
 
 @app.delete("/account", status_code=200)
 async def delete_account(user_id: int = Depends(get_current_user_id)):

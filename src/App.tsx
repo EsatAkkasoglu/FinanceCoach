@@ -31,6 +31,8 @@ import {
   createConversation,
   fetchMe,
   handleGoogleRedirectResult,
+  recordConsent,
+  PENDING_CONSENT_KEY,
   getProfile,
   onUnauthorized,
   DEMO_TOKEN_KEY,
@@ -182,7 +184,15 @@ export default function App() {
   useEffect(() => {
     // Handle Google redirect result first (prod sign-in flow)
     handleGoogleRedirectResult()
-      .then((u) => { if (u) setUser(u); })
+      .then((u) => {
+        if (!u) return;
+        setUser(u);
+        // A register-mode Google redirect left a flag — record KVKK consent now.
+        if (sessionStorage.getItem(PENDING_CONSENT_KEY)) {
+          sessionStorage.removeItem(PENDING_CONSENT_KEY);
+          void recordConsent().catch(() => undefined);
+        }
+      })
       .catch(() => {});
 
     // onIdTokenChanged fires on login, logout AND silent token refresh (~1 hr).

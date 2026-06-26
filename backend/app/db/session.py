@@ -55,6 +55,8 @@ _PENDING_COLUMNS: list[tuple[str, str, str]] = [
     ("goal",         "currency",       "VARCHAR(8) DEFAULT 'TRY'"),
     ("holding",      "currency",       "VARCHAR(8) NOT NULL DEFAULT 'USD'"),
     ("user",         "tier",           "VARCHAR(16) NOT NULL DEFAULT 'free'"),
+    ("user",         "consented_at",   "DATETIME"),
+    ("user",         "consent_version", "VARCHAR(32)"),
 ]
 
 

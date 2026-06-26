@@ -85,6 +85,10 @@ class User(Base):
     risk_profile = Column(String(32), default=RiskProfile.BALANCED.value)
     roast_mode = Column(Integer, default=0)               # 0/1 bool flag
     tier = Column(String(16), nullable=False, default="free")  # "free" | "pro"
+    # KVKK/GDPR provable consent: when the user accepted, and which policy
+    # version (so a policy update can prompt re-consent).
+    consented_at = Column(DateTime, nullable=True)
+    consent_version = Column(String(32), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     holdings = relationship("Holding", back_populates="user", cascade="all, delete-orphan")

@@ -94,6 +94,22 @@ export interface AuthUser {
   name: string;
   avatar: string;
   has_onboarded: boolean;
+  consented?: boolean;
+  consent_version?: string | null;
+  consent_current?: boolean;
+}
+
+/** sessionStorage flag: a register-mode Google redirect needs consent recorded. */
+export const PENDING_CONSENT_KEY = "fincoach-pending-consent";
+
+/** Record KVKK/Terms consent for the signed-in user (current policy version). */
+export async function recordConsent(): Promise<boolean> {
+  try {
+    const r = await apiFetch("/account/consent", { method: "POST" });
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Sync the current Firebase user with the backend and return the local profile. */

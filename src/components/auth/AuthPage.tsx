@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useNavigate, useLocation } from "react-router-dom";
-import { login, register, loginWithGoogle, loginDemo } from "@/lib/api";
+import { login, register, loginWithGoogle, loginDemo, recordConsent, PENDING_CONSENT_KEY } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { toast } from "sonner";
 import { Sparkles, ArrowRight } from "lucide-react";
@@ -53,6 +53,8 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
     try {
       const fn = mode === "login" ? login : register;
       const user = await fn(email.trim(), password);
+      // Record KVKK/Terms consent server-side (the box is required to get here).
+      if (mode === "register") await recordConsent().catch(() => undefined);
       setUser(user);
       toast.success(mode === "login" ? `Welcome back, ${user.username}` : "Account created");
     } catch (err) {
@@ -70,11 +72,19 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
       return;
     }
     setGoogleLoading(true);
+    // In prod, loginWithGoogle redirects (page reload) and the lines below never
+    // run — leave a flag so App.tsx records consent when the redirect returns.
+    if (mode === "register") sessionStorage.setItem(PENDING_CONSENT_KEY, "1");
     try {
       const user = await loginWithGoogle();
+      if (mode === "register") {
+        await recordConsent().catch(() => undefined);
+        sessionStorage.removeItem(PENDING_CONSENT_KEY);
+      }
       setUser(user);
       toast.success(`Welcome, ${user.name || user.username}`);
     } catch (err) {
+      sessionStorage.removeItem(PENDING_CONSENT_KEY);  // attempt failed — don't carry it over
       const msg = err instanceof Error ? err.message : "Google sign-in failed";
       toast.error(msg);
     } finally {
