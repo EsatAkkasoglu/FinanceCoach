@@ -49,6 +49,7 @@ from app.routers.networth import router as networth_router
 from app.routers.news import router as news_router
 from app.routers.symbols import router as symbols_router
 from app.routers.waitlist import router as waitlist_router
+from app.services.account_deletion import delete_user_account
 from app.services.document_processor.router import router as documents_router
 from app.services.news_collector import shutdown_news_scheduler, start_news_scheduler
 from app.services.usage import check_and_increment, get_usage
@@ -389,6 +390,21 @@ async def read_usage(user_id: int = Depends(get_current_user_id)):
     with SessionLocal() as db:
         tier = db.execute(select(User.tier).where(User.id == user_id)).scalar_one_or_none()
         return get_usage(db, user_id, tier)
+
+
+# ── Account / KVKK data rights ────────────────────────────────────────────────
+
+@app.delete("/account", status_code=200)
+async def delete_account(user_id: int = Depends(get_current_user_id)):
+    """KVKK/GDPR right to erasure: delete the user and all their data.
+
+    Irreversible. Purges every user-scoped store (relational rows, ChromaDB
+    document + memory vectors, chat-transcript checkpoints). The client must
+    drop its session afterwards (the bearer token now points at a gone user).
+    """
+    with SessionLocal() as db:
+        summary = delete_user_account(db, user_id)
+    return {"ok": True, "deleted": summary["rows"]}
 
 
 # ── Chat ─────────────────────────────────────────────────────────────────────

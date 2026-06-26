@@ -837,6 +837,12 @@ export async function getUsage(): Promise<UsageInfo | null> {
   }
 }
 
+/** KVKK right to erasure: delete the signed-in user + all their data. */
+export async function deleteMyAccount(): Promise<boolean> {
+  const r = await apiFetch("/account", { method: "DELETE" });
+  return r.ok;
+}
+
 /** Total waitlist signups, for landing social proof. Resolves null on failure. */
 export async function getWaitlistCount(): Promise<number | null> {
   try {

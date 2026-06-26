@@ -21,6 +21,7 @@ import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { AuthPage } from "@/components/auth/AuthPage";
 import { LandingPage } from "@/components/landing/LandingPage";
+import { LegalPage } from "@/components/legal/LegalPage";
 import { DemoTour, TourReplayButton } from "@/components/tour/DemoTour";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAuthStore, useConversationStore, useUserStore, useTourStore } from "@/store";
@@ -347,6 +348,15 @@ export default function App() {
     const appPathForAuth = stripLanguagePrefix(location.pathname);
     const isRegisterPath = appPathForAuth === "/register";
     const isAuthPath = appPathForAuth === "/login" || appPathForAuth === "/register";
+    // Legal pages are public — reachable from the marketing footer while logged out.
+    if (appPathForAuth.startsWith("/legal/") || appPathForAuth === "/legal") {
+      return (
+        <>
+          <LegalPage />
+          {languageSwitcher}
+        </>
+      );
+    }
     if (isAuthPath) {
       return (
         <>
@@ -505,6 +515,7 @@ export default function App() {
               <Route path="/:lang/documents" element={<Documents />} />
               <Route path="/:lang/chat" element={<ChatRoute />} />
               <Route path="/:lang/chat/:convId" element={<ChatRoute />} />
+              <Route path="/:lang/legal/:doc" element={<LegalPage />} />
               <Route path="/:lang" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />

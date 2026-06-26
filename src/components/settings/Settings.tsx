@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSettingsStore, useUserStore, type GeminiModelId } from "@/store";
 import { AVATARS } from "@/components/onboarding/data";
-import { getProfile, updateProfile, type UserProfile } from "@/lib/api";
+import { getProfile, updateProfile, deleteMyAccount, logout, type UserProfile } from "@/lib/api";
+import { useAuthStore } from "@/store";
 import {
   Cpu, Palette, SlidersHorizontal, UserCircle2, AlertTriangle,
   Moon, Sun, Flame, RotateCcw, Eye, EyeOff, Check, KeyRound,
-  Newspaper, Sparkles, Loader2, RefreshCw,
+  Newspaper, Sparkles, Loader2, RefreshCw, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Disclaimer } from "@/components/ui/Disclaimer";
@@ -764,30 +765,105 @@ function RetakeQuizModal({
 function DangerPanel() {
   const { t } = useTranslation("settings");
   const { resetOnboarding } = useUserStore();
+  const setUser = useAuthStore((s) => s.setUser);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmWord = t("danger.deleteConfirmWord");
+  const canDelete = confirmText.trim().toUpperCase() === confirmWord.toUpperCase();
+
+  async function handleDelete() {
+    if (!canDelete) return;
+    setDeleting(true);
+    try {
+      const ok = await deleteMyAccount();
+      if (!ok) {
+        toast.error(t("danger.deleteError"));
+        setDeleting(false);
+        return;
+      }
+      toast.success(t("danger.deleteSuccess"));
+      // Drop the session — the bearer token now points at a deleted user.
+      await logout().catch(() => undefined);
+      setUser(null);
+    } catch {
+      toast.error(t("danger.deleteError"));
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       <PanelHeader title={t("danger.title")} description={t("danger.subtitle")} />
-      <div className="rounded-xl border border-loss/40 bg-loss/5 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium">{t("danger.resetOnboarding")}</p>
-            <p className="mt-0.5 text-xs text-content-muted">
-              {t("danger.resetOnboardingDesc")}
-            </p>
+      <div className="space-y-4">
+        <div className="rounded-xl border border-loss/40 bg-loss/5 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">{t("danger.resetOnboarding")}</p>
+              <p className="mt-0.5 text-xs text-content-muted">
+                {t("danger.resetOnboardingDesc")}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                if (window.confirm("This will clear your profile and restart onboarding. Continue?")) {
+                  resetOnboarding();
+                }
+              }}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-loss px-3 py-1.5 text-xs font-medium text-loss transition hover:bg-loss hover:text-white"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset
+            </button>
           </div>
-          <button
-            onClick={() => {
-              if (window.confirm("This will clear your profile and restart onboarding. Continue?")) {
-                resetOnboarding();
-              }
-            }}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-loss px-3 py-1.5 text-xs font-medium text-loss transition hover:bg-loss hover:text-white"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Reset
-          </button>
+        </div>
+
+        <div className="rounded-xl border border-loss/40 bg-loss/5 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">{t("danger.deleteAccount")}</p>
+              <p className="mt-0.5 text-xs text-content-muted">
+                {t("danger.deleteAccountDesc")}
+              </p>
+            </div>
+            <button
+              onClick={() => { setConfirmText(""); setConfirmOpen(true); }}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-loss px-3 py-1.5 text-xs font-medium text-loss transition hover:bg-loss hover:text-white"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t("danger.deleteAccountButton")}
+            </button>
+          </div>
         </div>
       </div>
+
+      <Modal
+        open={confirmOpen}
+        onClose={() => !deleting && setConfirmOpen(false)}
+        title={t("danger.deleteConfirmTitle")}
+        description={t("danger.deleteConfirmBody")}
+        size="md"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)} type="button" disabled={deleting}>
+              {t("danger.deleteCancel")}
+            </Button>
+            <Button onClick={handleDelete} loading={deleting} disabled={!canDelete}>
+              {t("danger.deleteConfirmCta")}
+            </Button>
+          </>
+        }
+      >
+        <input
+          type="text"
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={t("danger.deleteConfirmPlaceholder")}
+          autoFocus
+          className="w-full rounded-lg border border-loss/50 bg-surface-raised px-3 py-2 text-sm text-content placeholder:text-content-muted focus:outline-none focus:ring-1 focus:ring-loss"
+        />
+      </Modal>
     </>
   );
 }

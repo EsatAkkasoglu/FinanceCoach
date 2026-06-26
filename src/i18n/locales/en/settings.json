@@ -69,7 +69,18 @@
     "title": "Danger Zone",
     "subtitle": "These actions can't be undone.",
     "resetOnboarding": "Reset onboarding",
-    "resetOnboardingDesc": "Clears your name, income, and risk profile. You'll go through the wizard again."
+    "resetOnboardingDesc": "Clears your name, income, and risk profile. You'll go through the wizard again.",
+    "deleteAccount": "Delete account",
+    "deleteAccountDesc": "Permanently erases your account and all data — holdings, transactions, documents, chats, everything (KVKK right to erasure). This cannot be undone.",
+    "deleteAccountButton": "Delete",
+    "deleteConfirmTitle": "Delete your account?",
+    "deleteConfirmBody": "This permanently erases your account and every piece of data tied to it. There is no recovery. To confirm, type DELETE below.",
+    "deleteConfirmPlaceholder": "Type DELETE to confirm",
+    "deleteConfirmWord": "DELETE",
+    "deleteConfirmCta": "Permanently delete",
+    "deleteCancel": "Cancel",
+    "deleteSuccess": "Your account and data have been deleted.",
+    "deleteError": "Couldn't delete your account. Please try again."
   },
   "language": {
     "title": "Language",

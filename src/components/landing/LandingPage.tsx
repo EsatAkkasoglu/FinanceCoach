@@ -1300,7 +1300,9 @@ function LandingFooter({
 }) {
   const { t } = useTranslation("landing");
   const { t: tc } = useTranslation("common");
+  const navigate = useNavigate();
   const L = (k: string) => t(`footer.links.${k}` as "footer.links.features");
+  const goLegal = (doc: string) => navigate(buildLocalizedPath(lang, `/legal/${doc}`));
 
   return (
     <footer id="contact" className="scroll-mt-24 border-t border-line bg-surface/40 px-4 pb-10 pt-16 sm:px-6 lg:px-8">
@@ -1347,9 +1349,9 @@ function LandingFooter({
           <div>
             <p className="text-overline uppercase text-content-muted">{t("footer.columns.legal")}</p>
             <ul className="mt-4 space-y-2.5 text-body-sm">
-              <li><span className="text-content-muted">{L("privacy")}</span></li>
-              <li><span className="text-content-muted">{L("terms")}</span></li>
-              <li><span className="text-content-muted">{L("disclaimer")}</span></li>
+              <li><button onClick={() => goLegal("privacy")} className="text-content-muted transition hover:text-content">{L("privacy")}</button></li>
+              <li><button onClick={() => goLegal("terms")} className="text-content-muted transition hover:text-content">{L("terms")}</button></li>
+              <li><button onClick={() => goLegal("disclaimer")} className="text-content-muted transition hover:text-content">{L("disclaimer")}</button></li>
             </ul>
           </div>
         </div>
