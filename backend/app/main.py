@@ -958,7 +958,11 @@ def _quote_or_none(ticker: str, asset_class: str | None = None) -> dict | None:
         if asset_class == "fund":
             from app.tools.fund_tools import get_fund_quote
             result = get_fund_quote.invoke({"code": ticker})
-            if not isinstance(result, dict) or not result.get("ok") or not result.get("price"):
+            # get_fund_quote returns {code, title, price, currency, …} on success
+            # or {code, error} on failure — there is NO "ok" key. The old check
+            # required result["ok"], so it ALWAYS fell through to None and the
+            # portfolio showed cost basis as the live price (0 % gain for funds).
+            if not isinstance(result, dict) or result.get("error") or not result.get("price"):
                 return None
             return {"price": result["price"], "currency": result.get("currency", "TRY")}
         from app.tools.market_tools import get_quote
