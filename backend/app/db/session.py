@@ -80,7 +80,10 @@ def _migrate_inplace() -> None:
                 continue
             # Postgres has no DATETIME type — use TIMESTAMP there.
             ddl_sql = ddl.replace("DATETIME", "TIMESTAMP") if is_pg else ddl
-            conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN {column} {ddl_sql}'))
+            # table/column come only from the static _PENDING_COLUMNS list above
+            # (never user input), but quote both identifiers anyway so this stays
+            # injection-proof if that list is ever fed from config.
+            conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {ddl_sql}'))
 
 
 def get_session():

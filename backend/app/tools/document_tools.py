@@ -29,6 +29,7 @@ from typing import Any
 import chromadb
 from langchain_core.tools import tool
 
+from app.agents._injection_guard import defang_untrusted
 from app.auth import get_current_user_id_or_none
 from app.settings import settings
 
@@ -135,7 +136,9 @@ def search_documents(query: str, k: int = 5) -> list[dict[str, Any]]:
         if similarity < MIN_SIMILARITY:
             continue
         hits.append({
-            "text": text,
+            # Uploaded-document text is untrusted: defang any injection control
+            # phrases before it enters the agent's context (OWASP LLM01).
+            "text": defang_untrusted(text),
             "filename": (meta or {}).get("filename"),
             "chunk_index": (meta or {}).get("chunk_index"),
             "similarity": round(similarity, 3),

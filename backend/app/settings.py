@@ -122,7 +122,14 @@ class Settings(BaseSettings):
     # Auth
     jwt_secret: str = Field(default=DEFAULT_JWT_SECRET, alias="FINCOACH_JWT_SECRET")
     jwt_algorithm: str = "HS256"
-    jwt_ttl_seconds: int = Field(default=60 * 60 * 24 * 30, alias="FINCOACH_JWT_TTL_SECONDS")  # 30 days
+    # 7 days: long enough that demo jurors/local sidecar users aren't re-prompted
+    # constantly, short enough that a leaked token's blast-radius window is bounded
+    # (Firebase ID tokens, the primary path in cloud, rotate ~hourly regardless).
+    jwt_ttl_seconds: int = Field(default=60 * 60 * 24 * 7, alias="FINCOACH_JWT_TTL_SECONDS")  # 7 days
+    # Brute-force / signup-spam guard on /auth/*. Enforced automatically on Cloud
+    # Run; set this to force it on locally (off by default so dev/tests aren't
+    # throttled). See app/auth/ratelimit.py.
+    auth_rate_limit_force: bool = Field(default=False, alias="FINCOACH_AUTH_RATELIMIT_FORCE")
 
     # LLM
     # Locked to Gemini 3.1 Flash-Lite for cheapest multimodal inference ($0.25 / 1M input).

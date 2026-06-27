@@ -65,12 +65,13 @@ def start_checkout(db, user: User, plan: Plan, callback_url: str) -> dict:
     return {"ref": session.ref, "redirect_url": session.redirect_url, "provider": provider.name}
 
 
-def finalize_checkout(db, ref: str, params: dict, *, user_id: int | None = None) -> dict:
+def finalize_checkout(db, ref: str, params: dict, *, user_id: int) -> dict:
     """Confirm a checkout by ref; on success upgrade the user's tier.
 
     Idempotent: a checkout already marked paid returns its state unchanged.
-    When ``user_id`` is given, the checkout must belong to that user (the
-    browser hitting the return page is authenticated as its owner).
+    The checkout MUST belong to ``user_id`` (the browser hitting the return page
+    is authenticated as its owner) — ``user_id`` is required so a leaked/guessed
+    ``ref`` can never finalize someone else's checkout.
     """
     row = (
         db.query(BillingCheckout)
@@ -80,7 +81,7 @@ def finalize_checkout(db, ref: str, params: dict, *, user_id: int | None = None)
     )
     if row is None:
         return {"status": "not_found"}
-    if user_id is not None and row.user_id != user_id:
+    if row.user_id != user_id:
         return {"status": "forbidden"}
     if row.status == "paid":
         return {"status": "paid", "tier": "pro", "already": True}

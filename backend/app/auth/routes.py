@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.deps import get_current_user
 from app.auth.firebase_verify import decode_firebase_token
+from app.auth.ratelimit import rate_limit
 from app.auth.security import create_token, hash_password, verify_password
 from app.db.models import Account, Goal, Holding, Subscription, Transaction, User
 from app.db.session import SessionLocal
@@ -51,7 +52,7 @@ def _user_dict(u: User) -> dict:
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest):
+def register(payload: RegisterRequest, _rl: None = Depends(rate_limit("register", limit=5))):
     username = payload.username.strip().lower()
     if not USERNAME_RE.match(username):
         raise HTTPException(400, "username may only contain letters, digits, _ . -")
@@ -78,7 +79,7 @@ def register(payload: RegisterRequest):
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: Credentials):
+def login(payload: Credentials, _rl: None = Depends(rate_limit("login", limit=10))):
     username = payload.username.strip().lower()
     with SessionLocal() as db:
         user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
@@ -94,7 +95,7 @@ def me(user: User = Depends(get_current_user)):
 
 
 @router.post("/demo", response_model=AuthResponse)
-def demo_login():
+def demo_login(_rl: None = Depends(rate_limit("demo", limit=30))):
     """Return (or create) the demo user for hackathon jurors.
 
     Idempotent — safe to call many times. Seeds realistic data on first call.

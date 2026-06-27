@@ -63,6 +63,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 
 _GOOGLE_API_KEY_RE = re.compile(r"AIza[0-9A-Za-z_-]{20,}")
 
+# Secondary redaction sweep so a provider SDK that echoes a credential in its
+# exception message can't leak it to the client. Each entry is (pattern, label).
+# Conservative, high-signal shapes only — no generic "any long token" rule that
+# would scrub harmless ids.
+_SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"AIza[0-9A-Za-z_-]{20,}"), "GOOGLE_API_KEY"),
+    (re.compile(r"sk-[A-Za-z0-9]{20,}"), "API_KEY"),
+    (re.compile(r"\bBearer\s+[A-Za-z0-9._-]{20,}", re.IGNORECASE), "Bearer [REDACTED_TOKEN]"),
+    (re.compile(r"\beyJ[A-Za-z0-9._-]{20,}"), "JWT"),  # JWT/Firebase ID tokens
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+                re.DOTALL), "PRIVATE_KEY"),
+]
+
 # Scrub Alpha Vantage rate-limit / premium-upsell notices out of tool output
 # before it reaches the UI (used by _summarize_tool_output for non-JSON output).
 _AV_RATELIMIT_RE = re.compile(
@@ -74,8 +87,11 @@ _AV_RATELIMIT_RE = re.compile(
 
 
 def _safe_error_message(exc: Exception) -> str:
-    """Return a client-safe error without leaking provider API keys."""
-    message = _GOOGLE_API_KEY_RE.sub("[REDACTED_GOOGLE_API_KEY]", str(exc))
+    """Return a client-safe error without leaking provider API keys / tokens."""
+    message = str(exc)
+    for pattern, label in _SECRET_PATTERNS:
+        repl = label if label.startswith("Bearer") else f"[REDACTED_{label}]"
+        message = pattern.sub(repl, message)
     if "CONSUMER_SUSPENDED" in message or "has been suspended" in message:
         return (
             "Gemini API key is suspended. Create or rotate to a restricted Gemini API key "
@@ -165,6 +181,25 @@ async def strip_api_prefix(request, call_next):
         if isinstance(raw_path, bytes) and raw_path.startswith(b"/api/"):
             scope["raw_path"] = raw_path[len(b"/api"):]
     return await call_next(request)
+
+
+# Security headers on every API response. This service returns JSON (and the
+# occasional HTML error page), so a maximally-strict CSP is safe here and just
+# hardens any HTML the API ever emits. The frontend SPA gets its own, looser CSP
+# via firebase.json. HSTS is only meaningful over real HTTPS (Cloud Run), so it's
+# gated to avoid pinning HTTPS on plain-HTTP local dev.
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+    if settings.is_cloud_run:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 
 # Local Tauri WebView2 + dev need a wildcard, but the same code runs on the public
@@ -702,7 +737,7 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                 upsert_chat_turn(user_message, full_response, final_agent)
             # Update conversation updated_at + auto-title on first message
             if conv_id:
-                _touch_conversation(conv_id, user_message)
+                _touch_conversation(conv_id, user_id, user_message)
             yield _evt("done", {})
 
     # ping=20: sse_starlette sends a ": ping" comment every 20 s to keep
@@ -710,10 +745,18 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
     return EventSourceResponse(event_stream(), ping=20)
 
 
-def _touch_conversation(conv_id: str, first_message: str) -> None:
-    """Update updated_at and auto-generate title from first message if missing."""
+def _touch_conversation(conv_id: str, user_id: int, first_message: str) -> None:
+    """Update updated_at and auto-generate title from first message if missing.
+
+    Scoped to the owning user so the row can only ever be touched by its owner
+    (defense-in-depth — the only caller already authenticates the user).
+    """
     with SessionLocal() as db:
-        conv = db.execute(select(Conversation).where(Conversation.id == conv_id)).scalar_one_or_none()
+        conv = db.execute(
+            select(Conversation).where(
+                Conversation.id == conv_id, Conversation.user_id == user_id
+            )
+        ).scalar_one_or_none()
         if conv is None:
             return
         conv.updated_at = datetime.utcnow()
