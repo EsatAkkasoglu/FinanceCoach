@@ -11,6 +11,7 @@ on:
       - "tailwind.config.*"
       - "package.json"
       - "pnpm-lock.yaml"
+      - "firebase.json"
       - ".github/workflows/deploy-frontend.yml"
 
   # Run after backend deploys (so URL is always fresh)
