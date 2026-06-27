@@ -17,6 +17,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 from fastapi import APIRouter, Query
@@ -40,6 +41,33 @@ log = logging.getLogger("fincoach.insights")
 router = APIRouter(prefix="/insights", tags=["insights"])
 
 
+def _json_safe(obj: Any) -> Any:
+    """Coerce tool output into something Starlette's JSONResponse can render.
+
+    yfinance-derived metrics can be NaN/Infinity (e.g. RSI with no downward
+    movement, or a 0-division) or numpy scalars. Starlette serializes with
+    ``json.dumps(..., allow_nan=False)`` and can't encode numpy types — either
+    raises a 500 at *render* time, AFTER the route returns, where ``_safe_tool``
+    can't catch it. Normalize here: non-finite floats → None, numpy scalars →
+    native Python, recursively.
+    """
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, float):
+        return float(obj) if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        return [_json_safe(v) for v in obj]
+    item = getattr(obj, "item", None)  # numpy scalar → python scalar
+    if callable(item) and not isinstance(obj, str | bytes):
+        try:
+            return _json_safe(obj.item())
+        except Exception:  # noqa: BLE001
+            return obj
+    return obj
+
+
 def _safe_tool(ticker: str, label: str, run):
     """Invoke a tool, degrading ANY failure to a 200 with an ``error`` field.
 
@@ -51,7 +79,7 @@ def _safe_tool(ticker: str, label: str, run):
     hands the UI a usable message; the full traceback is logged for diagnosis.
     """
     try:
-        return run()
+        return _json_safe(run())
     except Exception as exc:  # noqa: BLE001
         log.warning("insights %s failed for %r: %s", label, ticker, exc, exc_info=True)
         out: dict[str, Any] = {"error": str(exc)}
