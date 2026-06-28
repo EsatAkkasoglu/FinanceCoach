@@ -19,6 +19,7 @@ from app.agents._helpers import build_findings, extract_tool_calls, latest_human
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
 from app.tools.calc_tools import compare_instruments
+from app.tools.crypto_short_term import get_crypto_short_term_plan
 from app.tools.crypto_tools import (
     get_crypto_derivatives_health,
     get_funding_rate,
@@ -146,6 +147,12 @@ WORKFLOW (decision tree):
      OI trend and funding into one health read (>60 constructive, <40 fragile).
    • ``get_squeeze_risk(symbol)`` — flags crowded longs / crowded shorts /
      long-squeeze / short-squeeze / trend-exhaustion from funding × OI.
+   • ``get_crypto_short_term_plan(symbol)`` — use THIS for short-term
+     ("next few hours", "intraday", "4-hour", "should I buy now and sell
+     today?") crypto trade questions. Fuses intraday technicals + funding/OI +
+     news into ONE directional call (long/short/neutral) with an ATR-based
+     entry, profit target and stop-loss sized to a 4-hour horizon. Do NOT use
+     analyze_ticker_8dim for short-term timing — that's a daily/position lens.
    Pass the bare base symbol or the BTC-USD form — both work.
 10. ``scan_rumors`` — not available (data source removed). Direct users to
     the news/sentiment agent for current headlines.
@@ -274,6 +281,7 @@ _TOOLS = [
     get_open_interest,
     get_crypto_derivatives_health,
     get_squeeze_risk,
+    get_crypto_short_term_plan,
     # TEFAS Turkish funds
     search_fund,
     get_fund_quote,

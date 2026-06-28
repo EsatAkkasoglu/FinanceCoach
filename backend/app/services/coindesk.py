@@ -45,8 +45,10 @@ _DEFAULT_TIMEOUT = 10
 # Spot trades on real exchanges. Index = CoinDesk aggregate reference rates.
 _EP_INDEX_TICK = "/index/cc/v1/latest/tick"
 _EP_INDEX_HISTORY_DAYS = "/index/cc/v1/historical/days"
+_EP_INDEX_HISTORY_HOURS = "/index/cc/v1/historical/hours"
 _EP_SPOT_TICK = "/spot/v1/latest/tick"
 _EP_SPOT_HISTORY_DAYS = "/spot/v1/historical/days"
+_EP_SPOT_HISTORY_HOURS = "/spot/v1/historical/hours"
 _EP_ASSET_TOP_LIST = "/asset/v1/top/list"
 _EP_ASSET_SEARCH = "/asset/v1/search"
 # Derivatives (futures). Latest tick bundles funding rate + open interest.
@@ -70,6 +72,10 @@ _TTL: dict[str, int] = {
     _EP_ASSET_SEARCH: 24 * 3600,
     _EP_INDEX_HISTORY_DAYS: 10 * 60,
     _EP_SPOT_HISTORY_DAYS: 10 * 60,
+    # Intraday bars refresh fast — keep them short so a 4h-horizon signal sees
+    # the latest closed hourly candle rather than a stale cache.
+    _EP_INDEX_HISTORY_HOURS: 3 * 60,
+    _EP_SPOT_HISTORY_HOURS: 3 * 60,
     _EP_FUT_TICK: 60,
     _EP_FUT_FUNDING_TICK: 60,
     _EP_FUT_OI_TICK: 60,
@@ -544,6 +550,52 @@ def ohlcv(symbol: str, vs_currency: str = "usd", days: int = 7) -> list[dict[str
             "close": _to_float(item.get("CLOSE")),
         })
     rows.sort(key=lambda r: r["timestamp"], reverse=True)
+    return rows
+
+
+def coin_history_hourly(
+    symbol: str, hours: int = 120, vs_currency: str = "usd"
+) -> list[dict[str, Any]]:
+    """Hourly OHLC candles for intraday analysis. Newest-first rows.
+
+    Powers short-horizon (e.g. 4-hour) technicals — EMA crossovers, intraday
+    RSI, ATR-based targets — that the daily ``coin_history``/``ohlcv`` series
+    are too coarse to support. Tries the CADLI index hours endpoint, falls back
+    to the spot exchange. Each row: ``{ts, date, open, high, low, close}`` where
+    ``ts`` is an epoch-second integer and ``date`` is a UTC ``YYYY-MM-DD HH:00``
+    label.
+    """
+    instrument = _instrument(symbol, vs_currency.upper())
+    limit = max(2, min(int(hours), 2000))
+    try:
+        payload = _request(
+            _EP_INDEX_HISTORY_HOURS,
+            {"market": _INDEX_MARKET, "instrument": instrument, "limit": limit},
+        )
+    except CoinDeskError:
+        payload = _request(
+            _EP_SPOT_HISTORY_HOURS,
+            {"market": _SPOT_MARKET, "instrument": instrument, "limit": limit},
+        )
+    rows: list[dict[str, Any]] = []
+    for item in _history_rows(payload):
+        ts = item.get("TIMESTAMP") or item.get("timestamp")
+        close = _to_float(item.get("CLOSE") or item.get("close"))
+        if ts is None or close is None:
+            continue
+        try:
+            dt = datetime.fromtimestamp(int(ts), tz=UTC)
+        except (TypeError, ValueError, OSError):
+            continue
+        rows.append({
+            "ts": int(ts),
+            "date": dt.strftime("%Y-%m-%d %H:00"),
+            "open": _to_float(item.get("OPEN")),
+            "high": _to_float(item.get("HIGH")),
+            "low": _to_float(item.get("LOW")),
+            "close": close,
+        })
+    rows.sort(key=lambda r: r["ts"], reverse=True)
     return rows
 
 

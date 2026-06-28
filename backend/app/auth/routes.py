@@ -1,6 +1,7 @@
 """/auth/register, /auth/login, /auth/me, /auth/firebase, /auth/demo."""
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime, timedelta
 
@@ -18,6 +19,7 @@ from app.db.models import Account, Goal, Holding, Subscription, Transaction, Use
 from app.db.session import SessionLocal
 from app.services.consent import CURRENT_CONSENT_VERSION, consent_state
 
+log = logging.getLogger("fincoach.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 _bearer = HTTPBearer(auto_error=False)
 
@@ -92,6 +94,54 @@ def login(payload: Credentials, _rl: None = Depends(rate_limit("login", limit=10
 @router.get("/me")
 def me(user: User = Depends(get_current_user)):
     return _user_dict(user)
+
+
+def _seed_crypto_basket(db, user_id: int) -> None:
+    """Best-effort: seed the curated crypto basket + 4-hour targets for a user.
+
+    Runs on demo login (idempotent — skipped once the user has any target). Each
+    basket coin gets a ~$1.5k notional holding entered at the live signal price
+    and an ACTIVE 4-hour ``TradeTarget`` so the demo account shows concrete,
+    risk-defined trades a juror can score. Network-driven, so wholly wrapped:
+    a data-source outage must never break demo login.
+    """
+    from app.db.models import Holding, TradeTarget
+    from app.routers.crypto import upsert_target_from_plan
+    from app.settings import settings
+    from app.tools.crypto_short_term import analyze_short_term
+
+    try:
+        has_targets = db.execute(
+            select(TradeTarget.id).where(TradeTarget.user_id == user_id).limit(1)
+        ).first()
+        if has_targets:
+            return  # already seeded — don't re-scan on every login
+
+        existing_tickers = {
+            t for (t,) in db.execute(
+                select(Holding.ticker).where(Holding.user_id == user_id)
+            ).all()
+        }
+        for sym in settings.crypto_basket:
+            result = analyze_short_term(sym)
+            target = upsert_target_from_plan(db, user_id, result)
+            ticker = f"{sym}-USD"
+            entry = (result.get("data") or {}).get("entry")
+            if entry and ticker not in existing_tickers:
+                db.add(Holding(
+                    user_id=user_id,
+                    ticker=ticker,
+                    asset_class="crypto",
+                    quantity=round(1500.0 / entry, 6),
+                    cost_basis=entry,
+                    currency="USD",
+                ))
+                existing_tickers.add(ticker)
+            _ = target
+        db.commit()
+    except Exception:  # noqa: BLE001 — seeding is best-effort, never block login
+        db.rollback()
+        log.warning("demo crypto-basket seeding failed", exc_info=True)
 
 
 @router.post("/demo", response_model=AuthResponse)
@@ -170,6 +220,10 @@ def demo_login(_rl: None = Depends(rate_limit("demo", limit=30))):
 
             db.commit()
             db.refresh(user)
+
+        # Idempotent crypto-basket + 4h-target seeding (every login; skipped once
+        # seeded). Best-effort so a data-source outage never blocks demo access.
+        _seed_crypto_basket(db, user.id)
 
         token = create_token(user.id, user.username)
         return AuthResponse(token=token, user=_user_dict(user))

@@ -1409,6 +1409,117 @@ export async function getRumors(): Promise<RumorItem[]> {
   return data.rumors;
 }
 
+// ── Short-term crypto signals (4-hour horizon) ──────────────────────────────
+
+export type TradeDirection = "long" | "short" | "neutral";
+
+export interface ShortTermPlan {
+  ok: boolean;
+  symbol?: string;
+  ticker?: string;
+  direction?: TradeDirection;
+  score?: number;
+  confidence?: number;
+  confidence_label?: "low" | "medium" | "high";
+  horizon_hours?: number;
+  entry?: number;
+  target?: number | null;
+  stop?: number | null;
+  target_pct?: number | null;
+  stop_pct?: number | null;
+  rr?: number | null;
+  atr_4h_pct?: number | null;
+  grain?: "1h" | "1d";
+  components?: { technical: number; derivatives: number; sentiment: number };
+  technical_detail?: Record<string, number | null>;
+  derivatives_detail?: Record<string, number | string | null>;
+  news?: { title: string; source: string; sentiment?: string | null; url?: string }[];
+  as_of?: string;
+  error?: string;
+}
+
+/** Envelope returned by /crypto/short-term/{ticker} — the plan lives in `data`. */
+export interface ShortTermSignalResponse {
+  ok: boolean;
+  formatted_value?: string;
+  explanation?: string;
+  rationale?: string;
+  data?: ShortTermPlan;
+  error?: string;
+}
+
+export interface CryptoBasketItem {
+  symbol: string;
+  ticker: string;
+  name: string;
+}
+
+export async function getCryptoBasket(): Promise<CryptoBasketItem[]> {
+  const r = await apiFetch(`/crypto/basket`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { basket: CryptoBasketItem[] };
+  return data.basket ?? [];
+}
+
+export async function getShortTermSignal(ticker: string): Promise<ShortTermSignalResponse> {
+  const r = await apiFetch(`/crypto/short-term/${encodeURIComponent(ticker)}`);
+  return r.json();
+}
+
+export interface TradeTarget {
+  id: number;
+  ticker: string;
+  asset_class: string;
+  direction: TradeDirection;
+  entry_price: number;
+  target_price: number | null;
+  stop_price: number | null;
+  current_price: number | null;
+  pnl_pct: number | null;
+  progress: number | null;
+  horizon_hours: number;
+  confidence: number;
+  score: number;
+  thesis: string | null;
+  status: "active" | "hit" | "stopped" | "expired";
+  created_at: string | null;
+  expires_at: string | null;
+  minutes_left: number | null;
+  resolved_at: string | null;
+  resolved_price: number | null;
+}
+
+export interface TradeTargetsResponse {
+  targets: TradeTarget[];
+  summary: {
+    total: number;
+    active: number;
+    hit: number;
+    stopped: number;
+    avg_pnl_pct: number | null;
+  };
+}
+
+export async function listCryptoTargets(activeOnly = false): Promise<TradeTargetsResponse> {
+  const r = await apiFetch(`/crypto/targets${activeOnly ? "?active_only=true" : ""}`);
+  if (!r.ok) return { targets: [], summary: { total: 0, active: 0, hit: 0, stopped: 0, avg_pnl_pct: null } };
+  return r.json() as Promise<TradeTargetsResponse>;
+}
+
+export interface ScanTargetsResponse {
+  ok: boolean;
+  created: number;
+  scanned: number;
+  plans: { symbol: string; ok: boolean; formatted_value?: string; plan?: ShortTermPlan; error?: string }[];
+}
+
+/** Re-score the whole basket and (re)create a 4-hour target for each tradable coin. */
+export async function scanCryptoTargets(): Promise<ScanTargetsResponse> {
+  const r = await apiFetch(`/crypto/targets/scan`, { method: "POST" });
+  if (!r.ok) return { ok: false, created: 0, scanned: 0, plans: [] };
+  return r.json() as Promise<ScanTargetsResponse>;
+}
+
 // ── Memory / conversation search ────────────────────────────────────────────
 
 export interface MemoryHit {

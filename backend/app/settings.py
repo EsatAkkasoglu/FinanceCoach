@@ -31,6 +31,22 @@ class Settings(BaseSettings):
     coindesk_api_key: str = Field(default="", alias="COINDESK_API_KEY")
     # Default derivatives venue for funding-rate / open-interest lookups.
     coindesk_futures_market: str = Field(default="binance", alias="COINDESK_FUTURES_MARKET")
+    # Curated short-term crypto basket — chosen so BOTH news analysis (heavy,
+    # continuous coverage) and technical/derivatives analysis (deep perpetual
+    # markets: funding + open interest) are available. Drives the 4-hour signal
+    # scan and the demo account's seeded targets.
+    crypto_short_term_basket: str = Field(default="BTC,ETH,SOL", alias="FINCOACH_CRYPTO_BASKET")
+
+    @property
+    def crypto_basket(self) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for raw in self.crypto_short_term_basket.split(","):
+            sym = raw.strip().upper()
+            if sym and sym not in seen:
+                seen.add(sym)
+                out.append(sym)
+        return out
     # Server
     port: int = Field(default=8765, alias="FINCOACH_PORT")
 
