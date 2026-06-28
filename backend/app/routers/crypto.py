@@ -55,6 +55,17 @@ def short_term(ticker: str, news: bool = True) -> dict[str, Any]:
         return {"ok": False, "error": str(exc), "symbol": ticker}
 
 
+@router.get("/signal/{ticker}")
+def signal(ticker: str, horizon: str = "swing", asset_class: str = "", news: bool = True) -> dict[str, Any]:
+    """Compute (without persisting) a horizon-aware signal for ANY asset class."""
+    try:
+        from app.services.signal_engine import build_signal
+        return build_signal(ticker, asset_class=asset_class or None, bucket=horizon, with_news=news)
+    except Exception as exc:  # noqa: BLE001 — never surface a raw 500 (bypasses CORS)
+        log.warning("signal failed for %r: %s", ticker, exc, exc_info=True)
+        return {"ok": False, "error": str(exc), "symbol": ticker}
+
+
 def _live_price(ticker: str, asset_class: str | None = None) -> float | None:
     """Live price for any asset class. Funds re-price off TEFAS NAV (daily),
     everything else off the multi-asset yfinance/CoinDesk quote."""

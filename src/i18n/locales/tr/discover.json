@@ -2,11 +2,11 @@
   "title": "Piyasalar",
   "subtitle": "Günün hareketleri, trend kriptolar ve kişiselleştirilmiş piyasa görünümü.",
   "shortTerm": {
-    "title": "4 Saatlik Sinyaller",
-    "subtitle": "Gün içi teknik + perpetual türev + haber verisi, önümüzdeki 4 saat için riski tanımlı işlemlere dönüştürülür.",
+    "title": "İşlem Sinyalleri",
+    "subtitle": "Teknik + varlığa uygun teyit katmanı + haber verisi; kripto, hisse ve fonlar için seçtiğin vadede riski tanımlı işlemlere dönüştürülür.",
     "rescan": "Yeniden tara",
     "scanning": "Taranıyor…",
-    "empty": "Henüz sinyal yok — 4 saatlik hedefler için bir tarama çalıştırın.",
+    "empty": "Henüz sinyal yok — bir tarama çalıştır veya koça bir işlem önermesini söyle.",
     "confidence": "güven",
     "entry": "Giriş",
     "now": "Şimdi",
@@ -20,8 +20,12 @@
     "activeCount": "{{n}} aktif",
     "notAdvice": "Hackathon için demo sinyalleri — yatırım tavsiyesi değildir.",
     "thesisLine": "{{dir}} · güven %{{conf}} · skor {{score}} — giriş {{entry}}, hedef {{target}} (%{{targetPct}}), stop {{stop}}, R:R {{rr}}:1",
+    "pendingTitle": "{{n}} öneri onayını bekliyor",
+    "approve": "Onayla",
+    "reject": "Vazgeç",
+    "horizon": { "intraday": "Gün içi", "swing": "Swing", "position": "Pozisyon", "long": "Uzun vade" },
     "dir": { "long": "Long", "short": "Short", "neutral": "Nötr" },
-    "status": { "active": "Aktif", "hit": "Hedef tuttu", "stopped": "Stop oldu", "expired": "Süresi doldu" }
+    "status": { "active": "Aktif", "hit": "Hedef tuttu", "stopped": "Stop oldu", "expired": "Süresi doldu", "pending": "Önerildi", "rejected": "Vazgeçildi" }
   },
   "personalizedFor": "{{name}} için piyasalar",
   "hotToday": "Bugün popüler",
