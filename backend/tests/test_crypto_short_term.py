@@ -178,3 +178,68 @@ def test_short_pnl_is_inverted():
     # Short from 100 now at 95 → +5% in the trade's favour.
     assert view["pnl_pct"] == 5.0
     assert t.status == TradeStatus.ACTIVE.value
+
+
+# ── upsert_target_from_plan (chat → panel persistence) ───────────────────────
+
+
+def _mem_session():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.models import Base
+
+    eng = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(eng)
+    return sessionmaker(bind=eng)
+
+
+def _plan_result(direction="long", target=103.0):
+    return {
+        "ok": True,
+        "rationale": "test thesis",
+        "data": {
+            "ticker": "BTC-USD", "symbol": "BTC", "direction": direction,
+            "entry": 100.0, "target": target, "stop": 98.0,
+            "target_pct": 3.0, "stop_pct": -2.0, "rr": 1.5,
+            "confidence": 0.5, "score": 0.4, "horizon_hours": 4,
+        },
+    }
+
+
+def test_upsert_persists_a_directional_target():
+    from app.services.trade_targets import upsert_target_from_plan
+
+    with _mem_session()() as db:
+        t = upsert_target_from_plan(db, 1, _plan_result())
+        db.commit()
+        assert t is not None
+        assert t.direction == "long" and t.entry_price == 100.0 and t.target_price == 103.0
+        assert t.status == TradeStatus.ACTIVE.value
+        assert t.expires_at is not None and t.thesis == "test thesis"
+
+
+def test_upsert_skips_neutral_and_failed_signals():
+    from app.services.trade_targets import upsert_target_from_plan
+
+    with _mem_session()() as db:
+        assert upsert_target_from_plan(db, 1, {"ok": False, "error": "x"}) is None
+        assert upsert_target_from_plan(db, 1, {"ok": True, "data": {"direction": "neutral", "target": None}}) is None
+
+
+def test_upsert_replaces_prior_active_target_for_same_ticker():
+    from app.db.models import TradeTarget
+    from app.services.trade_targets import upsert_target_from_plan
+
+    sl = _mem_session()
+    with sl() as db:
+        upsert_target_from_plan(db, 1, _plan_result(target=103.0))
+        db.commit()
+        upsert_target_from_plan(db, 1, _plan_result(target=109.0))  # new scan replaces
+        db.commit()
+        active = db.query(TradeTarget).filter_by(
+            user_id=1, ticker="BTC-USD", status=TradeStatus.ACTIVE.value
+        ).all()
+        # Only ONE active target remains — the prior was deleted, not ghosted.
+        assert len(active) == 1
+        assert active[0].target_price == 109.0

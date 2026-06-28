@@ -32,7 +32,11 @@ from typing import Any
 from langchain_core.tools import tool
 
 import app.services.coindesk as cd
+from app.auth import get_current_user_id_or_none
+from app.db.session import SessionLocal
 from app.services.coindesk import CoinDeskError
+from app.services.trade_targets import upsert_target_from_plan
+from app.settings import settings
 from app.tools._cache import cache_get, cache_set
 from app.tools._calc_result import err, ok
 
@@ -461,3 +465,144 @@ def get_crypto_short_term_plan(symbol: str) -> dict[str, Any]:
         symbol: e.g. "BTC", "ETH", "SOL" (or "BTC-USD" — the base is used).
     """
     return analyze_short_term(symbol)
+
+
+def _plan_summary(p: dict[str, Any]) -> dict[str, Any]:
+    """Compact, JSON-safe view of a plan for tool returns."""
+    return {
+        "ticker": p.get("ticker"),
+        "direction": p.get("direction"),
+        "entry": p.get("entry"),
+        "target": p.get("target"),
+        "target_pct": p.get("target_pct"),
+        "stop": p.get("stop"),
+        "stop_pct": p.get("stop_pct"),
+        "rr": p.get("rr"),
+        "confidence": p.get("confidence"),
+        "score": p.get("score"),
+        "horizon_hours": p.get("horizon_hours"),
+        "components": p.get("components"),
+    }
+
+
+@tool
+def set_crypto_trade_target(symbol: str) -> dict[str, Any]:
+    """Analyze a crypto's 4-hour outlook AND OPEN a trade target (order) for the user.
+
+    The target is persisted and appears LIVE on the Markets "4-Hour Signals"
+    panel (entry, profit target, stop, countdown, live P&L). Use this whenever
+    the user wants to ACT on a named coin short-term — "open a trade / take a
+    position / al / pozisyon aç / bunu izlemeye al / 4 saatlik işlem aç" on BTC,
+    ETH, SOL, or any coin. For analysis WITHOUT placing an order, use
+    get_crypto_short_term_plan instead.
+
+    If the signal is neutral (no clear 4-hour edge), NO order is placed and the
+    tool says so — never force a trade.
+
+    Args:
+        symbol: e.g. "BTC", "ETH", "SOL" (or "BTC-USD" — the base is used).
+    """
+    user_id = get_current_user_id_or_none()
+    if user_id is None:
+        return {"ok": False, "error": "no user in context"}
+    result = analyze_short_term(symbol)
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error", "signal failed"), "symbol": symbol}
+    plan = result.get("data") or {}
+    if plan.get("direction") == "neutral" or plan.get("target") is None:
+        return {
+            "ok": True,
+            "placed": False,
+            "direction": "neutral",
+            "message": (
+                f"{plan.get('symbol', symbol)} has no clear 4-hour edge right now "
+                "(neutral) — no order placed. Standing aside is the correct call."
+            ),
+            "plan": _plan_summary(plan),
+        }
+    with SessionLocal() as db:
+        tgt = upsert_target_from_plan(db, user_id, result)
+        db.commit()
+        tid = tgt.id if tgt is not None else None
+    return {
+        "ok": True,
+        "placed": True,
+        "target_id": tid,
+        "message": (
+            f"Opened a {plan['direction'].upper()} on {plan['ticker']}: "
+            f"entry {plan['entry']}, target {plan['target']} ({plan['target_pct']:+.2f}%), "
+            f"stop {plan['stop']} ({plan['stop_pct']:+.2f}%), R:R {plan['rr']}:1, "
+            f"{plan['horizon_hours']}h horizon. It's now live on the 4-Hour Signals panel."
+        ),
+        "plan": _plan_summary(plan),
+    }
+
+
+@tool
+def open_best_crypto_trade(symbols: list[str] | None = None) -> dict[str, Any]:
+    """Scan several cryptos, pick the single HIGHEST-CONVICTION 4-hour setup, and OPEN it.
+
+    Use when the user asks you to choose — "pick the best crypto to trade right
+    now", "find me the best short-term setup", "en iyi kriptoyu seç ve işlem aç".
+    Ranks each candidate's 4-hour signal by confidence, opens a trade target for
+    the strongest DIRECTIONAL one (long or short), and it appears live on the
+    Markets "4-Hour Signals" panel. If every candidate is neutral, no order is
+    placed and the tool says the market is balanced.
+
+    Args:
+        symbols: optional list like ["BTC","ETH","SOL","DOGE"]. Defaults to the
+            curated basket (BTC/ETH/SOL — deep news + derivatives coverage).
+    """
+    user_id = get_current_user_id_or_none()
+    if user_id is None:
+        return {"ok": False, "error": "no user in context"}
+    syms = [s.strip().upper() for s in (symbols or settings.crypto_basket) if s and s.strip()]
+    ranking: list[dict[str, Any]] = []
+    best: tuple[dict[str, Any], dict[str, Any]] | None = None  # (plan, full result)
+    for s in syms:
+        res = analyze_short_term(s)
+        if not res.get("ok"):
+            ranking.append({"symbol": s, "ok": False, "error": res.get("error")})
+            continue
+        p = res.get("data") or {}
+        ranking.append({
+            "symbol": s,
+            "direction": p.get("direction"),
+            "score": p.get("score"),
+            "confidence": p.get("confidence"),
+            "target_pct": p.get("target_pct"),
+        })
+        tradeable = p.get("direction") != "neutral" and p.get("target") is not None
+        if tradeable and (best is None or (p.get("confidence") or 0) > (best[0].get("confidence") or 0)):
+            best = (p, res)
+    ranking.sort(key=lambda r: (r.get("confidence") if r.get("confidence") is not None else -1), reverse=True)
+
+    if best is None:
+        return {
+            "ok": True,
+            "placed": False,
+            "message": (
+                "No clear 4-hour trade across the scanned coins right now — the "
+                "market is balanced, so standing aside is the right move."
+            ),
+            "ranking": ranking,
+        }
+    plan, result = best
+    with SessionLocal() as db:
+        tgt = upsert_target_from_plan(db, user_id, result)
+        db.commit()
+        tid = tgt.id if tgt is not None else None
+    return {
+        "ok": True,
+        "placed": True,
+        "chosen": plan["ticker"],
+        "target_id": tid,
+        "message": (
+            f"Best 4-hour setup: {plan['direction'].upper()} on {plan['ticker']} "
+            f"(confidence {plan['confidence']:.0%}). Entry {plan['entry']}, target "
+            f"{plan['target']} ({plan['target_pct']:+.2f}%), stop {plan['stop']}, "
+            f"R:R {plan['rr']}:1. Opened and live on the 4-Hour Signals panel."
+        ),
+        "plan": _plan_summary(plan),
+        "ranking": ranking,
+    }

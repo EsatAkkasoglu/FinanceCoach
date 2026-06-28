@@ -106,7 +106,7 @@ def _seed_crypto_basket(db, user_id: int) -> None:
     a data-source outage must never break demo login.
     """
     from app.db.models import Holding, TradeTarget
-    from app.routers.crypto import upsert_target_from_plan
+    from app.services.trade_targets import upsert_target_from_plan
     from app.settings import settings
     from app.tools.crypto_short_term import analyze_short_term
 

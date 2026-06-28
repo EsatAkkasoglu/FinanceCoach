@@ -16,7 +16,7 @@ unhandled exception would bypass CORS/security middleware, see insights.py).
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -25,17 +25,14 @@ import app.services.coindesk as cd
 from app.auth import get_current_user_id
 from app.db.models import TradeStatus, TradeTarget
 from app.db.session import SessionLocal
+from app.services.trade_targets import naive_utc as _naive_utc
+from app.services.trade_targets import upsert_target_from_plan
 from app.settings import settings
 from app.tools.crypto_short_term import HORIZON_HOURS, analyze_short_term
 from app.tools.market_tools import get_quote
 
 log = logging.getLogger("fincoach.crypto")
 router = APIRouter(prefix="/crypto", tags=["crypto"])
-
-
-def _naive_utc() -> datetime:
-    """utcnow() as a naive datetime, matching the model column defaults."""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @router.get("/basket")
@@ -131,58 +128,6 @@ def _evaluate(t: TradeTarget, price: float | None, now: datetime) -> dict[str, A
         "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None,
         "resolved_price": t.resolved_price,
     }
-
-
-def upsert_target_from_plan(db, user_id: int, result: dict[str, Any]) -> TradeTarget | None:
-    """Create/replace the ACTIVE target for (user, ticker) from a signal result.
-
-    Shared by the scan endpoint and the demo seeder. ``result`` is the
-    ``analyze_short_term`` envelope; returns None if the signal failed or is a
-    no-trade (neutral with no target). Supersedes the prior active row.
-    """
-    if not result.get("ok"):
-        return None
-    plan = result.get("data") or {}
-    if plan.get("direction") == "neutral" or plan.get("target") is None:
-        return None
-    ticker = plan.get("ticker") or f"{plan.get('symbol', '')}-USD"
-    now = _naive_utc()
-
-    from sqlalchemy import select
-
-    existing = db.execute(
-        select(TradeTarget).where(
-            TradeTarget.user_id == user_id,
-            TradeTarget.ticker == ticker,
-            TradeTarget.status == TradeStatus.ACTIVE.value,
-        )
-    ).scalars().all()
-    # A re-scan REPLACES the prior plan — it was never market-resolved, so drop
-    # it rather than leaving a price-less "expired" ghost cluttering the desk.
-    # Genuine resolutions (hit/stopped/expired-by-time) happen in _evaluate and
-    # persist as history.
-    for row in existing:
-        db.delete(row)
-
-    horizon = int(plan.get("horizon_hours", HORIZON_HOURS))
-    target = TradeTarget(
-        user_id=user_id,
-        ticker=ticker,
-        asset_class="crypto",
-        direction=plan["direction"],
-        entry_price=plan["entry"],
-        target_price=plan["target"],
-        stop_price=plan["stop"],
-        horizon_hours=horizon,
-        confidence=plan.get("confidence", 0.0),
-        score=plan.get("score", 0.0),
-        thesis=result.get("rationale") or result.get("explanation"),
-        status=TradeStatus.ACTIVE.value,
-        created_at=now,
-        expires_at=now + timedelta(hours=horizon),
-    )
-    db.add(target)
-    return target
 
 
 @router.post("/targets/scan")

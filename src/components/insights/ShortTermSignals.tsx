@@ -173,7 +173,13 @@ export function ShortTermSignals() {
         if (!cancelled) setScanning(false);
       }
     })();
-    return () => { cancelled = true; };
+    // Light auto-refresh so a trade opened from the chat coach (or a target
+    // hitting/expiring) shows up here without a manual reload. Paused when the
+    // tab is hidden to avoid needless polling.
+    const id = setInterval(() => {
+      if (!document.hidden) load();
+    }, 25000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [load]);
 
   const targets = data?.targets ?? [];
