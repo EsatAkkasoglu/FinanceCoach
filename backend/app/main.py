@@ -43,6 +43,7 @@ from app.routers.audio import router as audio_router
 from app.routers.billing import router as billing_router
 from app.routers.budget import router as budget_router
 from app.routers.crypto import router as crypto_router
+from app.routers.evaluation import router as evaluation_router
 from app.routers.funds import router as funds_router
 from app.routers.fx import router as fx_router
 from app.routers.insights import router as insights_router
@@ -230,6 +231,7 @@ app.include_router(funds_router)
 app.include_router(symbols_router)
 app.include_router(insights_router)
 app.include_router(crypto_router)
+app.include_router(evaluation_router)
 app.include_router(memory_router)
 app.include_router(networth_router)
 app.include_router(admin_router)
