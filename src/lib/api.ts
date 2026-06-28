@@ -1554,6 +1554,47 @@ export async function rejectTarget(id: number): Promise<{ ok: boolean; error?: s
   return r.json();
 }
 
+/** One (horizon × asset-class) cell of the evaluation scorecard. */
+export interface ScorecardCell {
+  horizon: string;
+  asset_class: string;
+  n_resolved: number;
+  n_returns: number;
+  avg_return_pct: number | null;
+  total_return_pct: number | null;
+  hit_rate: number | null;
+  profit_factor: number | null;
+  sharpe: number | null;
+  sharpe_annualized: number | null;
+  sortino: number | null;
+  calmar: number | null;
+  max_drawdown_pct: number | null;
+  brier: number | null;
+  ece: number | null;
+  psr: number | null;
+  dsr: number | null;
+  purged_kfold: { folds: number; mean: number; std: number } | null;
+  avg_confidence: number | null;
+}
+
+export interface ScorecardResponse {
+  ok: boolean;
+  n_total: number;
+  n_resolved: number;
+  n_cells: number;
+  overall: ScorecardCell;
+  by_cell: ScorecardCell[];
+  notes: string;
+  error?: string;
+}
+
+/** Research-grounded "jury" scorecard over the user's resolved trade targets. */
+export async function getScorecard(): Promise<ScorecardResponse | null> {
+  const r = await apiFetch(`/eval/scorecard`);
+  if (!r.ok) return null;
+  return r.json() as Promise<ScorecardResponse>;
+}
+
 /** Read-only multi-asset, horizon-aware trade signal (no order placed). */
 export async function getTradeSignal(
   symbol: string, horizon: HorizonBucket = "swing", assetClass = "",

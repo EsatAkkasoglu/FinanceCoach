@@ -27,6 +27,20 @@
     "dir": { "long": "Long", "short": "Short", "neutral": "Nötr" },
     "status": { "active": "Aktif", "hit": "Hedef tuttu", "stopped": "Stop oldu", "expired": "Süresi doldu", "pending": "Önerildi", "rejected": "Vazgeçildi" }
   },
+  "scorecard": {
+    "title": "Performans Karnesi",
+    "subtitle": "Sinyaller gerçekte nasıl performans gösterdi — {{n}} çözülmüş işlem, vade ve varlık sınıfına göre puanlandı. Başlık kazanma oranı değil; kalibrasyon ve riske göre getiridir.",
+    "avgReturn": "Ort. getiri",
+    "sortino": "Sortino",
+    "dsr": "Defl. Sharpe",
+    "maxDd": "Maks. DD",
+    "brier": "Brier",
+    "ece": "ECE",
+    "cell": "Vade · Varlık",
+    "n": "İşlem",
+    "hit": "İsabet",
+    "notes": "Deflated Sharpe, test edilen strateji hücresi sayısını düzeltir; Brier/ECE belirtilen güvenin gerçeğe ne kadar uyduğunu ölçer (düşük daha iyi). İnce bir örneklem istatistiksel olarak kesin değildir."
+  },
   "personalizedFor": "{{name}} için piyasalar",
   "hotToday": "Bugün popüler",
   "topGainers": "En çok kazananlar",

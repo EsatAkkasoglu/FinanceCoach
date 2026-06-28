@@ -28,6 +28,7 @@ import { cn } from "@/lib/cn";
 import { DivergingBar, RsiGauge, ProgressTrack } from "@/components/ui/dataviz";
 import { TickerDrawer } from "./TickerDrawer";
 import { ShortTermSignals } from "./ShortTermSignals";
+import { Scorecard } from "./Scorecard";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -144,8 +145,11 @@ export function Discover() {
         ? <CardSkeleton rows={1} />
         : <MarketPulse trends={trends} asOf={asOf} />}
 
-      {/* 4-hour crypto signal desk — news + technicals + derivatives fusion */}
+      {/* Multi-horizon, multi-asset signal desk — fusion + chat-proposed orders */}
       <ShortTermSignals />
+
+      {/* The "jury" — how resolved signals actually performed (hidden until any resolve) */}
+      <Scorecard />
 
       {/* Watchlist + Movers — side by side on large screens */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">

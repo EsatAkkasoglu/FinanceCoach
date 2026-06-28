@@ -27,6 +27,20 @@
     "dir": { "long": "Long", "short": "Short", "neutral": "Neutral" },
     "status": { "active": "Active", "hit": "Target hit", "stopped": "Stopped", "expired": "Expired", "pending": "Proposed", "rejected": "Dismissed" }
   },
+  "scorecard": {
+    "title": "Performance Scorecard",
+    "subtitle": "How the signals actually did — {{n}} resolved trades, scored by horizon and asset class. Win-rate isn't the headline; calibration and risk-adjusted return are.",
+    "avgReturn": "Avg return",
+    "sortino": "Sortino",
+    "dsr": "Defl. Sharpe",
+    "maxDd": "Max DD",
+    "brier": "Brier",
+    "ece": "ECE",
+    "cell": "Horizon · Asset",
+    "n": "Trades",
+    "hit": "Hit rate",
+    "notes": "Deflated Sharpe corrects for the number of strategy cells tested; Brier/ECE measure how well the stated confidence matched reality (lower is better). A thin sample is not statistically conclusive."
+  },
   "personalizedFor": "Markets for {{name}}",
   "hotToday": "Hot today",
   "topGainers": "Top gainers",
