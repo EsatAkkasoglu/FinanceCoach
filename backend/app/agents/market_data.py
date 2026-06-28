@@ -32,6 +32,7 @@ from app.tools.fund_tools import (
     list_top_funds,
     search_fund,
 )
+from app.tools.macro_tools import get_finnhub_quote, get_macro_snapshot
 from app.tools.market_tools import (
     analyze_ticker_8dim,
     get_bist_dividend_leaders,
@@ -173,6 +174,12 @@ MULTI-ASSET, HORIZON-AWARE TRADE SIGNALS & ORDERS (crypto + stock/ETF + fund):
      "find the best trade now"). Scans the candidates (default crypto basket),
      proposes the highest-conviction directional one (awaiting approval).
    Pass the bare symbol / fund code / BTC-USD form — all work.
+   • ``get_macro_snapshot()`` — the broad market REGIME (VIX + crypto Fear &
+     Greed + 10y-2y yield curve → one risk-on/risk-off read). Use for "piyasa
+     nasıl? / risk iştahı / is the market risk-on?" and to frame a trade in the
+     prevailing regime.
+   • ``get_finnhub_quote(symbol)`` — real-time US equity quote backstop when a
+     yfinance quote looks stale/missing (needs FINNHUB_API_KEY).
 10. ``scan_rumors`` — not available (data source removed). Direct users to
     the news/sentiment agent for current headlines.
 11. ``list_top_funds`` — Turkish fund leaderboard by category rank.
@@ -310,6 +317,9 @@ _TOOLS = [
     get_fund_quote,
     get_fund_history,
     list_top_funds,
+    # Macro / regime context + Finnhub equity backstop
+    get_macro_snapshot,
+    get_finnhub_quote,
     # Deterministic cross-instrument comparison
     compare_instruments,
 ]

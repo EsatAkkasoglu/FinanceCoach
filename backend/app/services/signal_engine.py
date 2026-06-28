@@ -106,20 +106,36 @@ def _news_sentiment(query: str, asset_class: str) -> tuple[float, int, list[dict
     return mean, len(vals), headlines
 
 
-def _vix_regime_score() -> tuple[float, dict[str, Any]]:
-    """Macro regime from the VIX: calm → risk-on (+), fear → risk-off (-)."""
+def _macro_regime_score() -> tuple[float, dict[str, Any]]:
+    """Blended macro regime: VIX + Fear & Greed + the 10y-2y yield curve.
+
+    Each component is in [-1, 1] (risk-on positive). All best-effort — a missing
+    VIX/key just drops that component. Deepens the equity confirmation slot beyond
+    price-action (StockBench: regime separates bull-market passes from bear fails)."""
+    vix_score = 0.0
+    detail: dict[str, Any] = {"vix": None}
     try:
         from app.tools.market_tools import get_quote
         q = get_quote.invoke({"ticker": "^VIX"})
         vix = q.get("price") if isinstance(q, dict) else None
+        if vix is not None:
+            vix_score = _clamp((20.0 - float(vix)) / 10.0)  # <15 calm … >30 fear
+            detail["vix"] = round(float(vix), 2)
     except Exception as exc:  # noqa: BLE001
         log.info("VIX regime unavailable: %s", exc)
-        return 0.0, {"vix": None}
-    if vix is None:
-        return 0.0, {"vix": None}
-    # <15 calm (+0.5) … 20 neutral (0) … >30 fear (-1). Linear, clamped.
-    score = _clamp((20.0 - float(vix)) / 10.0)
-    return score, {"vix": round(float(vix), 2)}
+
+    # Fear & Greed (keyless) + yield curve (FRED, optional key), best-effort.
+    try:
+        from app.services.macro import macro_regime
+        reg = macro_regime()
+    except Exception as exc:  # noqa: BLE001
+        log.info("macro regime unavailable: %s", exc)
+        reg = {"score": 0.0}
+    detail.update({k: v for k, v in reg.items() if k != "score"})
+
+    # VIX and the broader regime each weigh half; both already in [-1, 1].
+    score = _clamp(0.5 * vix_score + 0.5 * float(reg.get("score", 0.0)))
+    return score, detail
 
 
 def _fundamental_score(symbol: str, price: float) -> tuple[float, dict[str, Any]]:
@@ -263,7 +279,7 @@ def _equity_signal(symbol: str, asset_class: str, bucket: str, with_news: bool) 
     price = ts["price"]
 
     fund_score, fund_detail = _fundamental_score(sym, price)
-    macro_score, macro_detail = _vix_regime_score()
+    macro_score, macro_detail = _macro_regime_score()
     # Confirmation slot = fundamentals (0.6) + macro regime (0.4).
     confirmation = _clamp(0.6 * fund_score + 0.4 * macro_score)
     fund_detail.update(macro_detail, fundamental_score=round(fund_score, 3), macro_score=round(macro_score, 3))
