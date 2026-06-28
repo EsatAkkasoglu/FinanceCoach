@@ -16,7 +16,7 @@ unhandled exception would bypass CORS/security middleware, see insights.py).
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -55,8 +55,14 @@ def short_term(ticker: str, news: bool = True) -> dict[str, Any]:
         return {"ok": False, "error": str(exc), "symbol": ticker}
 
 
-def _live_price(ticker: str) -> float | None:
+def _live_price(ticker: str, asset_class: str | None = None) -> float | None:
+    """Live price for any asset class. Funds re-price off TEFAS NAV (daily),
+    everything else off the multi-asset yfinance/CoinDesk quote."""
     try:
+        if asset_class == "fund":
+            from app.tools.fund_tools import get_fund_quote
+            q = get_fund_quote.invoke({"code": ticker})
+            return q.get("price") if isinstance(q, dict) and "error" not in q else None
         q = get_quote.invoke({"ticker": ticker})
         if isinstance(q, dict) and "error" not in q:
             return q.get("price")
@@ -73,18 +79,20 @@ def _evaluate(t: TradeTarget, price: float | None, now: datetime) -> dict[str, A
     """
     long = t.direction == "long"
     newly_resolved = False
-    if t.status == TradeStatus.ACTIVE.value and price is not None:
-        if t.target_price is not None and (
+    if t.status == TradeStatus.ACTIVE.value:
+        if price is not None and t.target_price is not None and (
             (long and price >= t.target_price) or (not long and price <= t.target_price)
         ):
             t.status = TradeStatus.HIT.value
             newly_resolved = True
-        elif t.stop_price is not None and (
+        elif price is not None and t.stop_price is not None and (
             (long and price <= t.stop_price) or (not long and price >= t.stop_price)
         ):
             t.status = TradeStatus.STOPPED.value
             newly_resolved = True
         elif t.expires_at is not None and now >= t.expires_at:
+            # Horizon elapsed — expire even when the price feed is dead, so a
+            # stuck ACTIVE row can never live past its window.
             t.status = TradeStatus.EXPIRED.value
             newly_resolved = True
     if newly_resolved:
@@ -172,15 +180,20 @@ def list_targets(
         price_cache: dict[str, float | None] = {}
         out: list[dict[str, Any]] = []
         for t in rows:
+            # PENDING proposals (awaiting approval) and REJECTED ones are not live
+            # targets — they belong to the chat/proposal surface, not the panel.
+            if t.status in (TradeStatus.PENDING.value, TradeStatus.REJECTED.value):
+                continue
             # Skip superseded "ghost" rows from older supersede-by-expire logic:
             # expired with no resolution price = replaced, not market-resolved.
             if t.status == TradeStatus.EXPIRED.value and t.resolved_price is None:
                 continue
             price = None
             if t.status == TradeStatus.ACTIVE.value:
-                if t.ticker not in price_cache:
-                    price_cache[t.ticker] = _live_price(t.ticker)
-                price = price_cache[t.ticker]
+                key = f"{t.asset_class}:{t.ticker}"
+                if key not in price_cache:
+                    price_cache[key] = _live_price(t.ticker, t.asset_class)
+                price = price_cache[key]
             out.append(_evaluate(t, price, now))
         db.commit()
 
@@ -201,3 +214,70 @@ def list_targets(
             else None,
         },
     }
+
+
+@router.get("/targets/pending")
+def list_pending_targets(user_id: int = Depends(get_current_user_id)) -> dict[str, Any]:
+    """Proposed-but-unapproved targets — the chat's order proposals awaiting Approve."""
+    from sqlalchemy import select
+
+    now = _naive_utc()
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(TradeTarget)
+            .where(
+                TradeTarget.user_id == user_id,
+                TradeTarget.status == TradeStatus.PENDING.value,
+            )
+            .order_by(TradeTarget.created_at.desc())
+        ).scalars().all()
+        out = [_evaluate(t, None, now) for t in rows]
+    return {"pending": out, "count": len(out)}
+
+
+@router.post("/targets/{target_id}/confirm")
+def confirm_target(target_id: int, user_id: int = Depends(get_current_user_id)) -> dict[str, Any]:
+    """Approve a PENDING proposal → flip it ACTIVE and start live scoring."""
+    from sqlalchemy import select
+
+    now = _naive_utc()
+    with SessionLocal() as db:
+        t = db.get(TradeTarget, target_id)
+        if t is None or t.user_id != user_id:
+            return {"ok": False, "error": "target not found"}
+        if t.status != TradeStatus.PENDING.value:
+            return {"ok": False, "error": f"target is {t.status}, not pending"}
+        # Drop any other live plan for the same (ticker, horizon) so the panel
+        # never shows two ACTIVE targets for one asset at one horizon.
+        dupes = db.execute(
+            select(TradeTarget).where(
+                TradeTarget.user_id == user_id,
+                TradeTarget.ticker == t.ticker,
+                TradeTarget.horizon_hours == t.horizon_hours,
+                TradeTarget.status == TradeStatus.ACTIVE.value,
+                TradeTarget.id != t.id,
+            )
+        ).scalars().all()
+        for d in dupes:
+            db.delete(d)
+        # The horizon countdown starts at approval, not at proposal time.
+        t.status = TradeStatus.ACTIVE.value
+        t.created_at = now
+        t.expires_at = now + timedelta(hours=t.horizon_hours or 4)
+        view = _evaluate(t, _live_price(t.ticker, t.asset_class), now)
+        db.commit()
+    return {"ok": True, "confirmed": True, "target": view}
+
+
+@router.post("/targets/{target_id}/reject")
+def reject_target(target_id: int, user_id: int = Depends(get_current_user_id)) -> dict[str, Any]:
+    """Decline a PENDING proposal (kept REJECTED for audit, never re-priced)."""
+    with SessionLocal() as db:
+        t = db.get(TradeTarget, target_id)
+        if t is None or t.user_id != user_id:
+            return {"ok": False, "error": "target not found"}
+        if t.status != TradeStatus.PENDING.value:
+            return {"ok": False, "error": f"target is {t.status}, not pending"}
+        t.status = TradeStatus.REJECTED.value
+        db.commit()
+    return {"ok": True, "rejected": True, "target_id": target_id}
