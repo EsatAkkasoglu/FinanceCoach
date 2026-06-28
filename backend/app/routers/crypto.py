@@ -157,9 +157,12 @@ def upsert_target_from_plan(db, user_id: int, result: dict[str, Any]) -> TradeTa
             TradeTarget.status == TradeStatus.ACTIVE.value,
         )
     ).scalars().all()
+    # A re-scan REPLACES the prior plan — it was never market-resolved, so drop
+    # it rather than leaving a price-less "expired" ghost cluttering the desk.
+    # Genuine resolutions (hit/stopped/expired-by-time) happen in _evaluate and
+    # persist as history.
     for row in existing:
-        row.status = TradeStatus.EXPIRED.value
-        row.resolved_at = now
+        db.delete(row)
 
     horizon = int(plan.get("horizon_hours", HORIZON_HOURS))
     target = TradeTarget(
@@ -224,6 +227,10 @@ def list_targets(
         price_cache: dict[str, float | None] = {}
         out: list[dict[str, Any]] = []
         for t in rows:
+            # Skip superseded "ghost" rows from older supersede-by-expire logic:
+            # expired with no resolution price = replaced, not market-resolved.
+            if t.status == TradeStatus.EXPIRED.value and t.resolved_price is None:
+                continue
             price = None
             if t.status == TradeStatus.ACTIVE.value:
                 if t.ticker not in price_cache:

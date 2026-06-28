@@ -86,7 +86,7 @@ function SignalCard({ t: target }: { t: TradeTarget }) {
       <div className="grid grid-cols-4 gap-1 text-center">
         {([
           { k: "entry", v: fmtPrice(target.entry_price), sub: null, cls: "text-content" },
-          { k: "now", v: fmtPrice(target.current_price), sub: fmtPct(target.pnl_pct), cls: pnlPositive ? "text-emerald-400" : "text-red-400" },
+          { k: "now", v: fmtPrice(target.current_price ?? target.resolved_price), sub: fmtPct(target.pnl_pct), cls: pnlPositive ? "text-emerald-400" : "text-red-400" },
           { k: "target", v: fmtPrice(target.target_price), sub: null, cls: "text-emerald-400" },
           { k: "stop", v: fmtPrice(target.stop_price), sub: null, cls: "text-red-400" },
         ] as const).map((c) => (
