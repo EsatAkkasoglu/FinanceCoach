@@ -25,7 +25,6 @@ juror is the realised move between entry and target inside the horizon.
 from __future__ import annotations
 
 import logging
-import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -34,6 +33,7 @@ from langchain_core.tools import tool
 import app.services.coindesk as cd
 from app.auth import get_current_user_id_or_none
 from app.db.session import SessionLocal
+from app.services import horizon as hz
 from app.services.coindesk import CoinDeskError
 from app.services.trade_targets import upsert_target_from_plan
 from app.settings import settings
@@ -42,10 +42,7 @@ from app.tools._calc_result import err, ok
 
 log = logging.getLogger("fincoach.tools.crypto_short_term")
 
-HORIZON_HOURS = 4
-# Reward : risk geometry on the 4-hour ATR. 1.5 up / 1.0 down → R:R = 1.5.
-_TARGET_ATR_MULT = 1.5
-_STOP_ATR_MULT = 1.0
+HORIZON_HOURS = 4  # canonical intraday horizon (the original engine); see app.services.horizon
 # Bands on the blended directional score (∈ [-1, 1]) → long / short / neutral.
 _DIRECTION_BAND = 0.15
 # Component blend weights. Technicals lead; derivatives temper crowded leverage;
@@ -168,20 +165,25 @@ def _confidence_label(c: float) -> str:
 def compute_short_term_signal(
     candles: list[dict[str, float]],
     *,
+    bucket: str = "intraday",
     funding_bps_8h: float | None = None,
     oi_change_24h_pct: float | None = None,
     sentiment_score: float | None = None,
     sentiment_n: int = 0,
 ) -> dict[str, Any]:
-    """Fuse intraday technicals + derivatives + sentiment into a 4-hour plan.
+    """Fuse technicals + derivatives + sentiment into a horizon-sized plan.
 
-    ``candles`` is oldest-first ``[{open,high,low,close}, ...]`` (hourly).
+    ``candles`` is oldest-first ``[{open,high,low,close}, ...]`` at the bucket's
+    bar granularity (1h for intraday/swing, 1d for position/long — the caller
+    fetches the right grain). ``bucket`` is a :mod:`app.services.horizon` name
+    (default ``intraday`` = the original 4-hour engine, byte-for-byte).
     ``funding_bps_8h`` is the perpetual funding rate in basis points / 8h.
     ``oi_change_24h_pct`` is open-interest 24h % change. ``sentiment_score`` is
     the mean news sentiment in [-1, 1] over ``sentiment_n`` articles.
 
     Returns a JSON-safe dict: direction, score, confidence, the per-component
-    sub-scores, and ATR-derived entry/target/stop. Raises nothing.
+    sub-scores, and ATR-derived entry/target/stop scaled to the horizon. Raises
+    nothing.
     """
     closes = [float(c["close"]) for c in candles if c.get("close") is not None]
     highs = [float(c.get("high", c["close"])) for c in candles if c.get("close") is not None]
@@ -255,38 +257,35 @@ def compute_short_term_signal(
     agree = sum(1 for s in (technical, derivatives, sentiment) if s * sign > 0)
     confidence = round(_clamp(abs(score) * (0.55 + 0.15 * agree), 0.0, 1.0), 3)
 
-    # ── ATR-based 4-hour targets ──────────────────────────────────────────
-    atr_1h = atr(highs, lows, closes, 14)
-    atr_4h = atr_1h * math.sqrt(HORIZON_HOURS) if atr_1h else None
+    # ── ATR-based, horizon-scaled targets ─────────────────────────────────
+    # ``atr_bar`` is the per-bar ATR at the bucket's grain (1h candles for
+    # intraday/swing). ``horizon.atr_targets`` scales it to the horizon (√bars)
+    # and applies the per-bucket multiplier (fat-tail premium grows with hold).
+    atr_bar = atr(highs, lows, closes, 14)
+    geom = hz.atr_targets(price, atr_bar, bucket, direction)
+    spec = hz.resolve(bucket)
+    h_atr = geom["horizon_atr"]
 
     entry = round(price, 6)
-    target = stop = rr = target_pct = stop_pct = None
-    if atr_4h and direction != "neutral":
-        if direction == "long":
-            target = round(price + _TARGET_ATR_MULT * atr_4h, 6)
-            stop = round(price - _STOP_ATR_MULT * atr_4h, 6)
-        else:
-            target = round(price - _TARGET_ATR_MULT * atr_4h, 6)
-            stop = round(price + _STOP_ATR_MULT * atr_4h, 6)
-        rr = round(_TARGET_ATR_MULT / _STOP_ATR_MULT, 2)
-        target_pct = round((target / entry - 1.0) * 100.0, 2)
-        stop_pct = round((stop / entry - 1.0) * 100.0, 2)
-
     return {
         "ok": True,
         "direction": direction,
         "score": round(score, 3),
         "confidence": confidence,
         "confidence_label": _confidence_label(confidence),
-        "horizon_hours": HORIZON_HOURS,
+        "horizon": spec["name"],
+        "horizon_hours": spec["hours"],
         "entry": entry,
-        "target": target,
-        "stop": stop,
-        "target_pct": target_pct,
-        "stop_pct": stop_pct,
-        "rr": rr,
-        "atr_4h": round(atr_4h, 6) if atr_4h else None,
-        "atr_4h_pct": round(atr_4h / price * 100.0, 2) if atr_4h else None,
+        "target": geom["target"],
+        "stop": geom["stop"],
+        "target_pct": geom["target_pct"],
+        "stop_pct": geom["stop_pct"],
+        "rr": geom["rr"],
+        "horizon_atr": h_atr,
+        "horizon_atr_pct": geom["horizon_atr_pct"],
+        # Back-compat aliases for the existing 4-Hour Signals frontend.
+        "atr_4h": h_atr,
+        "atr_4h_pct": geom["horizon_atr_pct"],
         "components": {
             "technical": round(technical, 3),
             "derivatives": round(derivatives, 3),
@@ -318,16 +317,23 @@ def compute_short_term_signal(
 # ---------------------------------------------------------------------------
 
 
-def _fetch_candles(symbol: str) -> tuple[list[dict[str, float]], str]:
-    """Oldest-first OHLC candles. Hourly preferred; daily fallback. (rows, grain)."""
-    try:
-        rows = cd.coin_history_hourly(symbol, hours=160)
-        if len(rows) >= 30:
-            return list(reversed(rows)), "1h"
-    except CoinDeskError as exc:
-        log.info("hourly candles unavailable for %s, falling back to daily: %s", symbol, exc)
-    # Daily fallback (coarser ATR, but the signal still computes).
-    daily = cd.ohlcv(symbol, days=90)
+def _fetch_candles(symbol: str, bucket: str = "intraday") -> tuple[list[dict[str, float]], str]:
+    """Oldest-first OHLC candles at the bucket's grain. Returns (rows, grain).
+
+    Intraday/swing want hourly bars (daily fallback); position/long want daily
+    bars natively, so the per-bar ATR matches the horizon's bar length.
+    """
+    spec = hz.resolve(bucket)
+    if spec["bars"] == "1h":
+        try:
+            rows = cd.coin_history_hourly(symbol, hours=200)
+            if len(rows) >= 30:
+                return list(reversed(rows)), "1h"
+        except CoinDeskError as exc:
+            log.info("hourly candles unavailable for %s, falling back to daily: %s", symbol, exc)
+    # Daily — native for position/long, and the hourly fallback. ~180d gives the
+    # EMA-21 / MACD(26,9) / ATR-14 stack ample history.
+    daily = cd.ohlcv(symbol, days=180)
     return list(reversed(daily)), "1d"
 
 
@@ -392,30 +398,35 @@ def _rationale(symbol: str, plan: dict[str, Any]) -> str:
     return " ".join(bits)
 
 
-def analyze_short_term(symbol: str, *, with_news: bool = True) -> dict[str, Any]:
-    """Full live 4-hour plan for a crypto symbol. Returns the calc envelope.
+def analyze_short_term(
+    symbol: str, *, bucket: str = "intraday", with_news: bool = True
+) -> dict[str, Any]:
+    """Full live, horizon-sized plan for a crypto symbol. Returns the calc envelope.
 
+    ``bucket`` is an :mod:`app.services.horizon` name (default ``intraday`` = 4h).
     Degrades gracefully: derivatives and news are best-effort, so a signal is
     still produced from technicals alone if the futures/news feeds are down.
     """
     base = cd._symbol(symbol)
-    cache_key = f"short_term:{base}:{int(with_news)}"
+    spec = hz.resolve(bucket)
+    cache_key = f"short_term:{base}:{spec['name']}:{int(with_news)}"
     cached = cache_get(cache_key)
     if isinstance(cached, dict):
         return cached
 
     try:
-        candles, grain = _fetch_candles(base)
+        candles, grain = _fetch_candles(base, spec["name"])
     except CoinDeskError as exc:
         return err(str(exc), symbol=symbol)
     if len(candles) < 26:
-        return err(f"Not enough price history to build a {HORIZON_HOURS}h signal for {base}", symbol=symbol)
+        return err(f"Not enough price history to build a {spec['hours']}h signal for {base}", symbol=symbol)
 
     funding_bps, oi_change = _fetch_derivatives(base)
     sent_score, sent_n, headlines = _fetch_sentiment(base) if with_news else (0.0, 0, [])
 
     plan = compute_short_term_signal(
         candles,
+        bucket=spec["name"],
         funding_bps_8h=funding_bps,
         oi_change_24h_pct=oi_change,
         sentiment_score=sent_score,
@@ -426,6 +437,7 @@ def analyze_short_term(symbol: str, *, with_news: bool = True) -> dict[str, Any]
 
     plan["symbol"] = base
     plan["ticker"] = f"{base}-USD"
+    plan["asset_class"] = "crypto"
     plan["grain"] = grain
     plan["news"] = headlines
     plan["as_of"] = datetime.now(UTC).isoformat()
@@ -439,7 +451,7 @@ def analyze_short_term(symbol: str, *, with_news: bool = True) -> dict[str, Any]
             f"({plan['confidence']:.0%})"
             + (f" · target {plan['target_pct']:+.2f}%" if plan.get("target_pct") is not None else "")
         ),
-        formula="0.50·technical + 0.30·derivatives + 0.20·sentiment → ATR-based 4h target",
+        formula="0.50·technical + 0.30·derivatives + 0.20·sentiment → ATR-based horizon target",
         explanation=rationale,
         ui_type="metric",
         data=plan,

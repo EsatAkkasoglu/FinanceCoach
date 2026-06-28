@@ -29,12 +29,23 @@ def naive_utc() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def upsert_target_from_plan(db, user_id: int, result: dict[str, Any]) -> TradeTarget | None:
-    """Create/replace the ACTIVE target for (user, ticker) from a signal result.
+def upsert_target_from_plan(
+    db,
+    user_id: int,
+    result: dict[str, Any],
+    *,
+    status: str = TradeStatus.ACTIVE.value,
+) -> TradeTarget | None:
+    """Create/replace a target for (user, ticker, horizon) from a signal result.
 
-    ``result`` is the ``analyze_short_term`` envelope. Returns None if the signal
-    failed or is a no-trade (neutral / no target). Supersedes (deletes) the prior
-    active row for that ticker. Caller commits.
+    ``result`` is the ``analyze_short_term`` / ``build_signal`` envelope. Returns
+    None if the signal failed or is a no-trade (neutral / no target). Asset class
+    and horizon are read from the plan (default crypto / 4h). Supersede is keyed
+    on (user, ticker, horizon) so a fresh re-scan replaces only the *same-horizon*
+    open plan — a 2-week position is NOT wiped by a 4-hour scan.
+
+    ``status`` is the lifecycle the new row enters: ACTIVE (auto-placed / seeded)
+    or PENDING (proposed in chat, awaiting the user's Approve). Caller commits.
     """
     if not result.get("ok"):
         return None
@@ -42,13 +53,17 @@ def upsert_target_from_plan(db, user_id: int, result: dict[str, Any]) -> TradeTa
     if plan.get("direction") == "neutral" or plan.get("target") is None:
         return None
     ticker = plan.get("ticker") or f"{plan.get('symbol', '')}-USD"
+    asset_class = plan.get("asset_class") or "crypto"
+    horizon = int(plan.get("horizon_hours", DEFAULT_HORIZON_HOURS))
     now = naive_utc()
 
+    # Supersede only the same-horizon open/pending plan for this ticker.
     existing = db.execute(
         select(TradeTarget).where(
             TradeTarget.user_id == user_id,
             TradeTarget.ticker == ticker,
-            TradeTarget.status == TradeStatus.ACTIVE.value,
+            TradeTarget.horizon_hours == horizon,
+            TradeTarget.status.in_((TradeStatus.ACTIVE.value, TradeStatus.PENDING.value)),
         )
     ).scalars().all()
     # A re-scan REPLACES the prior plan — it was never market-resolved, so drop
@@ -56,11 +71,10 @@ def upsert_target_from_plan(db, user_id: int, result: dict[str, Any]) -> TradeTa
     for row in existing:
         db.delete(row)
 
-    horizon = int(plan.get("horizon_hours", DEFAULT_HORIZON_HOURS))
     target = TradeTarget(
         user_id=user_id,
         ticker=ticker,
-        asset_class="crypto",
+        asset_class=asset_class,
         direction=plan["direction"],
         entry_price=plan["entry"],
         target_price=plan["target"],
@@ -69,7 +83,7 @@ def upsert_target_from_plan(db, user_id: int, result: dict[str, Any]) -> TradeTa
         confidence=plan.get("confidence", 0.0),
         score=plan.get("score", 0.0),
         thesis=result.get("rationale") or result.get("explanation"),
-        status=TradeStatus.ACTIVE.value,
+        status=status,
         created_at=now,
         expires_at=now + timedelta(hours=horizon),
     )
