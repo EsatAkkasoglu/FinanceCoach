@@ -57,6 +57,25 @@ function SignalCard({ t: target }: { t: TradeTarget }) {
   const progressPct = target.progress != null ? Math.max(0, Math.min(100, target.progress * 100)) : 0;
   const pnlPositive = (target.pnl_pct ?? 0) >= 0;
 
+  // Rationale is built HERE from structured fields + i18n (not the backend's
+  // English prose) so it localises to any language, not just en/tr.
+  const tPct = target.target_price != null && target.entry_price
+    ? (target.target_price / target.entry_price - 1) * 100 : null;
+  const rr = target.target_price != null && target.stop_price != null && target.entry_price
+    && target.entry_price !== target.stop_price
+    ? Math.abs(target.target_price - target.entry_price) / Math.abs(target.entry_price - target.stop_price)
+    : null;
+  const thesisLine = t("shortTerm.thesisLine", {
+    dir: t(`shortTerm.dir.${target.direction}`),
+    conf: Math.round(target.confidence * 100),
+    score: target.score.toFixed(2),
+    entry: fmtPrice(target.entry_price),
+    target: fmtPrice(target.target_price),
+    targetPct: tPct != null ? tPct.toFixed(2) : "—",
+    stop: fmtPrice(target.stop_price),
+    rr: rr != null ? rr.toFixed(1) : "—",
+  });
+
   return (
     <div className={cn("card flex flex-col gap-3 border", dir.ring)}>
       {/* Header */}
@@ -125,14 +144,14 @@ function SignalCard({ t: target }: { t: TradeTarget }) {
         <span className="underline-offset-2 hover:underline">{open ? t("shortTerm.less") : t("shortTerm.why")}</span>
       </button>
       <AnimatePresence initial={false}>
-        {open && target.thesis && (
+        {open && (
           <motion.p
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden text-[11px] leading-relaxed text-content-muted"
           >
-            {target.thesis}
+            {thesisLine}
           </motion.p>
         )}
       </AnimatePresence>

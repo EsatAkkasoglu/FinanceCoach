@@ -33,7 +33,7 @@ import trDocuments from "./locales/tr/documents.json";
 import trLanding from "./locales/tr/landing.json";
 import trNotifications from "./locales/tr/notifications.json";
 import trBilling from "./locales/tr/billing.json";
-import { getLanguageFromPath } from "@/lib/routing";
+import { getLanguageFromPath, supportedLanguages } from "@/lib/routing";
 
 export const defaultNS = "common";
 export const resources = {
@@ -83,7 +83,7 @@ i18n
     defaultNS,
     lng: initialLanguage ?? undefined,
     fallbackLng: "en",
-    supportedLngs: ["en", "tr"],
+    supportedLngs: [...supportedLanguages],
     detection: {
       order: ["localStorage", "navigator"],
       caches: ["localStorage"],

@@ -19,6 +19,7 @@
     "less": "Hide",
     "activeCount": "{{n}} active",
     "notAdvice": "Demo signals for the hackathon — not financial advice.",
+    "thesisLine": "{{dir}} · confidence {{conf}}% · score {{score}} — entry {{entry}}, target {{target}} ({{targetPct}}%), stop {{stop}}, R:R {{rr}}:1",
     "dir": { "long": "Long", "short": "Short", "neutral": "Neutral" },
     "status": { "active": "Active", "hit": "Target hit", "stopped": "Stopped", "expired": "Expired" }
   },

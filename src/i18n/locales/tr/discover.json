@@ -19,6 +19,7 @@
     "less": "Gizle",
     "activeCount": "{{n}} aktif",
     "notAdvice": "Hackathon için demo sinyalleri — yatırım tavsiyesi değildir.",
+    "thesisLine": "{{dir}} · güven %{{conf}} · skor {{score}} — giriş {{entry}}, hedef {{target}} (%{{targetPct}}), stop {{stop}}, R:R {{rr}}:1",
     "dir": { "long": "Long", "short": "Short", "neutral": "Nötr" },
     "status": { "active": "Aktif", "hit": "Hedef tuttu", "stopped": "Stop oldu", "expired": "Süresi doldu" }
   },
