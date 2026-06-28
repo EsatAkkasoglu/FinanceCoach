@@ -162,6 +162,51 @@ def _confidence_label(c: float) -> str:
     return "low"
 
 
+def technical_signal(
+    closes: list[float], highs: list[float], lows: list[float]
+) -> dict[str, Any]:
+    """Pure technical sub-score ∈ [-1, 1] from an oldest-first OHLC series.
+
+    Shared by the crypto engine and the multi-asset :mod:`app.services.signal_engine`
+    so equities/funds read price-action exactly the way crypto does. Returns the
+    blended ``technical`` score, the per-bar ``atr`` (for horizon target geometry),
+    the latest ``price`` and a ``detail`` dict for the UI.
+    """
+    price = closes[-1]
+    ema_fast = ema_last(closes, 9) or price
+    ema_slow = ema_last(closes, 21) or price
+    # EMA-9/21 separation as a fraction of price; 0.6% gap = full conviction.
+    trend_score = _clamp((ema_fast - ema_slow) / price / 0.006)
+
+    rsi_val = rsi(closes, 14)
+    # RSI 50 → 0, 70 → +1, 30 → -1 (momentum read; capped at the extremes).
+    rsi_score = _clamp((rsi_val - 50.0) / 20.0) if rsi_val is not None else 0.0
+
+    macd_out = macd(closes)
+    macd_score = _clamp(macd_out[2] / price / 0.003) if macd_out else 0.0
+
+    # 4-bar price momentum.
+    ret_4 = (price / closes[-5] - 1.0) if len(closes) >= 5 and closes[-5] else 0.0
+    mom_score = _clamp(ret_4 / 0.02)
+
+    technical = _clamp(0.40 * trend_score + 0.25 * rsi_score + 0.20 * macd_score + 0.15 * mom_score)
+    return {
+        "technical": technical,
+        "atr": atr(highs, lows, closes, 14),
+        "price": price,
+        "detail": {
+            "ema_fast": round(ema_fast, 6),
+            "ema_slow": round(ema_slow, 6),
+            "trend": round(trend_score, 3),
+            "rsi": round(rsi_val, 2) if rsi_val is not None else None,
+            "rsi_score": round(rsi_score, 3),
+            "macd_hist": round(macd_out[2], 6) if macd_out else None,
+            "macd_score": round(macd_score, 3),
+            "momentum_4bar_pct": round(ret_4 * 100.0, 2),
+        },
+    }
+
+
 def compute_short_term_signal(
     candles: list[dict[str, float]],
     *,
@@ -191,26 +236,11 @@ def compute_short_term_signal(
     if len(closes) < 26:
         return {"ok": False, "error": "insufficient candles", "n": len(closes)}
 
-    price = closes[-1]
-
-    # ── Technical sub-scores, each ∈ [-1, 1] ──────────────────────────────
-    ema_fast = ema_last(closes, 9) or price
-    ema_slow = ema_last(closes, 21) or price
-    # EMA-9/21 separation as a fraction of price; 0.6% gap = full conviction.
-    trend_score = _clamp((ema_fast - ema_slow) / price / 0.006)
-
-    rsi_val = rsi(closes, 14)
-    # RSI 50 → 0, 70 → +1, 30 → -1 (momentum read; capped at the extremes).
-    rsi_score = _clamp((rsi_val - 50.0) / 20.0) if rsi_val is not None else 0.0
-
-    macd_out = macd(closes)
-    macd_score = _clamp(macd_out[2] / price / 0.003) if macd_out else 0.0
-
-    # 4-bar price momentum.
-    ret_4 = (price / closes[-5] - 1.0) if len(closes) >= 5 and closes[-5] else 0.0
-    mom_score = _clamp(ret_4 / 0.02)
-
-    technical = _clamp(0.40 * trend_score + 0.25 * rsi_score + 0.20 * macd_score + 0.15 * mom_score)
+    # ── Technical sub-score ∈ [-1, 1] (shared with the multi-asset engine) ─
+    ts = technical_signal(closes, highs, lows)
+    price = ts["price"]
+    technical = ts["technical"]
+    tech_detail = ts["detail"]
 
     # ── Derivatives sub-score ─────────────────────────────────────────────
     # Funding: a moderately positive rate confirms bullish demand, but an
@@ -261,7 +291,7 @@ def compute_short_term_signal(
     # ``atr_bar`` is the per-bar ATR at the bucket's grain (1h candles for
     # intraday/swing). ``horizon.atr_targets`` scales it to the horizon (√bars)
     # and applies the per-bucket multiplier (fat-tail premium grows with hold).
-    atr_bar = atr(highs, lows, closes, 14)
+    atr_bar = ts["atr"]
     geom = hz.atr_targets(price, atr_bar, bucket, direction)
     spec = hz.resolve(bucket)
     h_atr = geom["horizon_atr"]
@@ -291,16 +321,7 @@ def compute_short_term_signal(
             "derivatives": round(derivatives, 3),
             "sentiment": round(sentiment, 3),
         },
-        "technical_detail": {
-            "ema_fast": round(ema_fast, 6),
-            "ema_slow": round(ema_slow, 6),
-            "trend": round(trend_score, 3),
-            "rsi": round(rsi_val, 2) if rsi_val is not None else None,
-            "rsi_score": round(rsi_score, 3),
-            "macd_hist": round(macd_out[2], 6) if macd_out else None,
-            "macd_score": round(macd_score, 3),
-            "momentum_4bar_pct": round(ret_4 * 100.0, 2),
-        },
+        "technical_detail": tech_detail,
         "derivatives_detail": {
             "funding_bps_8h": funding_bps_8h,
             "funding_score": round(funding_score, 3),
