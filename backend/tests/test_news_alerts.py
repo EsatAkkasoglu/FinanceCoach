@@ -5,6 +5,8 @@ and end-to-end alert generation run against the temp-SQLite ``client`` fixture.
 """
 from __future__ import annotations
 
+from sqlalchemy import select
+
 from app.services.news_alerts import (
     PRIORITY_IMPORTANCE,
     PRIORITY_WATCHLIST,
@@ -127,3 +129,56 @@ def test_end_to_end_alert_generation(client):
     marked = client.post("/news/alerts/read", json={"ids": [alert_id]}).json()
     assert marked["updated"] == 1
     assert client.get("/news/alerts").json()["unread_count"] == 0
+
+
+def test_fan_out_alerts_each_watchlist_user(client):
+    """The background poll has no request context, so generate_alerts_for_all
+    must raise alerts for *every* user with a watchlist, not just user 1."""
+    from app.db.models import NewsArticle, User, Watchlist
+    from app.db.session import SessionLocal
+    from app.services.news_alerts import generate_alerts_for_all
+
+    # User 1 (the registered client) watches AAPL; create a second user
+    # watching THYAO.IS, plus a third user with no watchlist at all.
+    client.post("/news/watchlist", json={"kind": "symbol", "value": "AAPL"})
+
+    with SessionLocal() as db:
+        u2 = User(username="second", password_hash=None, name="Second")
+        u3 = User(username="third", password_hash=None, name="Third")
+        db.add_all([u2, u3])
+        db.flush()
+        db.add(Watchlist(user_id=u2.id, kind="symbol", value="THYAO.IS"))
+        # Dull category + weak sentiment so each article matches ONLY via its
+        # watchlist symbol (no importance-threshold alert muddying the count).
+        art_aapl = NewsArticle(
+            canonical_url="https://x.com/a", url="https://x.com/a",
+            title="AAPL ships new chips", source="X", tickers="AAPL",
+            category="market", sentiment="neutral", sentiment_score=0.2,
+            content_hash="fa", enriched=1,
+        )
+        art_thy = NewsArticle(
+            canonical_url="https://x.com/t", url="https://x.com/t",
+            title="THYAO.IS adds new route", source="X", tickers="THYAO.IS",
+            category="market", sentiment="neutral", sentiment_score=0.3,
+            content_hash="ft", enriched=1,
+        )
+        db.add_all([art_aapl, art_thy])
+        db.commit()
+        u2_id, u3_id = u2.id, u3.id
+        a_id, t_id = art_aapl.id, art_thy.id
+
+        created = generate_alerts_for_all(db, [art_aapl, art_thy])
+        # Re-running is idempotent across all users.
+        again = generate_alerts_for_all(db, [art_aapl, art_thy])
+
+        from app.db.models import NewsAlert
+
+        rows = db.execute(select(NewsAlert)).scalars().all()
+        by_user = {(r.user_id, r.article_id) for r in rows}
+
+    # User 1 alerted on AAPL; user 2 on THYAO.IS; user 3 (no watchlist) on neither.
+    assert created == 2
+    assert again == 0
+    assert (1, a_id) in by_user
+    assert (u2_id, t_id) in by_user
+    assert not any(uid == u3_id for uid, _ in by_user)

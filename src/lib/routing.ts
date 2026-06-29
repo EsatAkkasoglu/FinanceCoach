@@ -3,7 +3,9 @@ export const supportedLanguages = ["en", "tr"] as const;
 export type SupportedLanguage = (typeof supportedLanguages)[number];
 
 export function isSupportedLanguage(value: string | undefined | null): value is SupportedLanguage {
-  return value === "en" || value === "tr";
+  // Derive from the single source of truth so adding a locale to
+  // `supportedLanguages` is all that's needed — no per-language literal to miss.
+  return value != null && (supportedLanguages as readonly string[]).includes(value);
 }
 
 export function getLanguageFromPath(pathname: string): SupportedLanguage | null {

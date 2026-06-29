@@ -1,0 +1,43 @@
+{
+  "planLabel": "Plan",
+  "free": "Ücretsiz",
+  "pro": "Pro",
+  "currentFree": "Ücretsiz plandasın.",
+  "currentPro": "Pro'dasın — teşekkürler!",
+  "upgrade": "Pro'ya geç",
+  "upgradeDesc": "Sınırsız koçluk, gelişmiş ajanlar ve akıllı uyarılar.",
+  "perMonth": "/ay",
+  "starting": "Ödeme sayfasına yönlendiriliyorsun…",
+  "return": {
+    "verifying": "Ödemen doğrulanıyor…",
+    "success": "Artık Pro'dasın — aramıza hoş geldin!",
+    "failed": "Ödeme tamamlanamadı. Tekrar deneyebilirsin.",
+    "back": "Uygulamaya dön"
+  },
+  "oops": {
+    "title": {
+      "coming_soon": "Pro çok yakında",
+      "checkout_error": "Ödeme başlatılamadı",
+      "payment_failed": "Ödeme tamamlanamadı",
+      "generic": "Bir şeyler ters gitti"
+    },
+    "body": {
+      "coming_soon": "Ödeme altyapımız son onay aşamasında — Pro birkaç gün içinde açılıyor. O zamana dek ücretsiz planın çalışmaya devam ediyor, Pro açıldığında ilk sen haberdar olacaksın.",
+      "checkout_error": "Ödeme servisine şu an ulaşamadık. Lütfen birazdan tekrar dene.",
+      "payment_failed": "Ödemen tamamlanmadı ve kartından çekim yapılmadı. İstediğin an tekrar deneyebilirsin.",
+      "generic": "Beklenmedik bir durum oluştu. Lütfen birazdan tekrar dene."
+    },
+    "back": "Uygulamaya dön",
+    "backPricing": "Planları gör"
+  },
+  "game": {
+    "title": "Jeton yakala",
+    "subtitle": "Hazır buradayken — solmadan jetonlara dokun. Saatte 20 saniye var.",
+    "start": "Oyna",
+    "restart": "Tekrar oyna",
+    "score": "Skor",
+    "best": "Rekor",
+    "gameOver": "Süre doldu!",
+    "newBest": "Yeni rekor!"
+  }
+}

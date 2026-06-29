@@ -31,6 +31,22 @@ class Settings(BaseSettings):
     coindesk_api_key: str = Field(default="", alias="COINDESK_API_KEY")
     # Default derivatives venue for funding-rate / open-interest lookups.
     coindesk_futures_market: str = Field(default="binance", alias="COINDESK_FUTURES_MARKET")
+    # Curated short-term crypto basket — chosen so BOTH news analysis (heavy,
+    # continuous coverage) and technical/derivatives analysis (deep perpetual
+    # markets: funding + open interest) are available. Drives the 4-hour signal
+    # scan and the demo account's seeded targets.
+    crypto_short_term_basket: str = Field(default="BTC,ETH,SOL", alias="FINCOACH_CRYPTO_BASKET")
+
+    @property
+    def crypto_basket(self) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for raw in self.crypto_short_term_basket.split(","):
+            sym = raw.strip().upper()
+            if sym and sym not in seen:
+                seen.add(sym)
+                out.append(sym)
+        return out
     # Server
     port: int = Field(default=8765, alias="FINCOACH_PORT")
 
@@ -98,10 +114,38 @@ class Settings(BaseSettings):
     def news_alert_category_set(self) -> set[str]:
         return {c.strip().lower() for c in self.news_alert_categories.split(",") if c.strip()}
 
+    # Plan limits — free tier monthly chat-turn cap (cost control). Pro is
+    # uncapped. 0 disables the gate entirely (treat everyone as unlimited).
+    free_monthly_chat_turns: int = Field(
+        default=15, alias="FINCOACH_FREE_MONTHLY_CHAT_TURNS"
+    )
+
+    # Billing — Pro plan price + iyzico credentials. When the iyzico keys are
+    # unset the billing layer falls back to the in-process "mock" provider
+    # (local dev / tests). Set all three to activate real iyzico checkout.
+    pro_plan_price: float = Field(default=199.0, alias="FINCOACH_PRO_PLAN_PRICE")
+    pro_plan_currency: str = Field(default="TRY", alias="FINCOACH_PRO_PLAN_CURRENCY")
+    iyzico_api_key: str = Field(default="", alias="IYZICO_API_KEY")
+    iyzico_secret_key: str = Field(default="", alias="IYZICO_SECRET_KEY")
+    iyzico_base_url: str = Field(
+        default="https://sandbox-api.iyzipay.com", alias="IYZICO_BASE_URL"
+    )
+
+    @property
+    def iyzico_configured(self) -> bool:
+        return bool(self.iyzico_api_key and self.iyzico_secret_key)
+
     # Auth
     jwt_secret: str = Field(default=DEFAULT_JWT_SECRET, alias="FINCOACH_JWT_SECRET")
     jwt_algorithm: str = "HS256"
-    jwt_ttl_seconds: int = Field(default=60 * 60 * 24 * 30, alias="FINCOACH_JWT_TTL_SECONDS")  # 30 days
+    # 7 days: long enough that demo jurors/local sidecar users aren't re-prompted
+    # constantly, short enough that a leaked token's blast-radius window is bounded
+    # (Firebase ID tokens, the primary path in cloud, rotate ~hourly regardless).
+    jwt_ttl_seconds: int = Field(default=60 * 60 * 24 * 7, alias="FINCOACH_JWT_TTL_SECONDS")  # 7 days
+    # Brute-force / signup-spam guard on /auth/*. Enforced automatically on Cloud
+    # Run; set this to force it on locally (off by default so dev/tests aren't
+    # throttled). See app/auth/ratelimit.py.
+    auth_rate_limit_force: bool = Field(default=False, alias="FINCOACH_AUTH_RATELIMIT_FORCE")
 
     # LLM
     # Locked to Gemini 3.1 Flash-Lite for cheapest multimodal inference ($0.25 / 1M input).

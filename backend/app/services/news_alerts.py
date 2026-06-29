@@ -9,7 +9,8 @@ Split in two so the decision logic is unit-testable without a DB:
   • ``match_article`` — pure: (article fields, watchlist, thresholds) → reason/priority.
   • ``generate_alerts`` — loads the watchlist, loops, persists, dedups per (user, article).
 
-Single-user prototype: watchlist + alerts are scoped to ``user_id`` (default 1).
+Multi-tenant: ``generate_alerts`` scopes to one ``user_id``; the poll cycle
+calls ``generate_alerts_for_all`` to fan out across every user with a watchlist.
 """
 from __future__ import annotations
 
@@ -139,6 +140,28 @@ def generate_alerts(db, articles: list[NewsArticle], *, user_id: int = 1) -> int
     except Exception:  # noqa: BLE001 — alert generation must not break the poll
         log.exception("news alert generation failed")
         return 0
+
+
+def generate_alerts_for_all(db, articles: list[NewsArticle]) -> int:
+    """Fan ``generate_alerts`` out across every user who has a watchlist.
+
+    The background poll cycle has no request context, so it can't lean on the
+    current-user ContextVar. We only raise alerts for users who've expressed
+    interest (≥1 watchlist row) — that scopes the importance-threshold alerts
+    too, so users who never opted in don't get spammed with global news.
+    Returns the total number of alerts created across all users.
+    """
+    if not settings.news_alert_enabled or not articles:
+        return 0
+    try:
+        user_ids = db.execute(select(Watchlist.user_id).distinct()).scalars().all()
+    except Exception:  # noqa: BLE001 — never break the poll cycle
+        log.exception("failed to load watchlist users for alert fan-out")
+        return 0
+    total = 0
+    for uid in user_ids:
+        total += generate_alerts(db, articles, user_id=uid)
+    return total
 
 
 def alert_payload(alert: NewsAlert, article: NewsArticle | None = None) -> dict[str, Any]:

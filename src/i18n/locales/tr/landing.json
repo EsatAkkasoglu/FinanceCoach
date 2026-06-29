@@ -135,7 +135,7 @@
   "pricing": {
     "eyebrow": "Fiyatlandırma",
     "title": "Ücretsiz başla. Hazır olunca yükselt.",
-    "subtitle": "FinCoach beta süresince tamamen ücretsiz. Kart yok, gizli madde yok.",
+    "subtitle": "Ücretsiz başla, sınırsız koçluk gerekince Pro'ya geç. İstediğin an iptal et.",
     "tiers": [
       {
         "name": "Ücretsiz",
@@ -149,11 +149,11 @@
       },
       {
         "name": "Pro",
-        "price": "Yakında",
-        "period": "",
+        "price": "₺199",
+        "period": "/ay · KDV dahil",
         "desc": "Daha derin analiz ve otomasyon isteyen ileri kullanıcılar için.",
-        "features": ["Gelişmiş uzman ajanlar", "Sınırsız belge içe aktarma", "Öncelikli canlı veri", "Akıllı uyarılar"],
-        "cta": "Yakında",
+        "features": ["Sınırsız yapay zekâ koçluğu", "Gelişmiş uzman ajanlar", "Sınırsız belge içe aktarma", "Öncelikli canlı veri", "Akıllı uyarılar"],
+        "cta": "Pro'ya geç",
         "featured": false,
         "badge": ""
       },
@@ -167,7 +167,18 @@
         "featured": false,
         "badge": ""
       }
-    ]
+    ],
+    "waitlist": {
+      "title": "Pro çıkınca haberin olsun mu?",
+      "subtitle": "E-postanı bırak; gelişmiş ajanlar, sınırsız içe aktarma ve akıllı uyarılar yayına girdiği an sana haber verelim.",
+      "placeholder": "sen@eposta.com",
+      "button": "Haber ver",
+      "success": "Listedesin — en kısa sürede ulaşacağız.",
+      "error": "Bir şeyler ters gitti. Lütfen tekrar dene.",
+      "invalid": "Lütfen geçerli bir e-posta adresi gir.",
+      "count_one": "{{count}} kişi şimdiden listede",
+      "count_other": "{{count}} kişi şimdiden listede"
+    }
   },
   "cta": {
     "title": "Paranın kontrolünü almaya hazır mısın?",

@@ -69,6 +69,46 @@ function noscriptBlock(lang) {
   );
 }
 
+// Pricing page: a no-JS fallback that exposes product + price in raw HTML
+// (useful for the payment-provider review and crawlers).
+const PRICING_SEO = {
+  en: {
+    title: "FinCoach Pricing — Free and Pro plans",
+    description: "FinCoach pricing: start free, go Pro for ₺199/mo (VAT incl.) for unlimited AI coaching, advanced agents, and smart alerts.",
+  },
+  tr: {
+    title: "FinCoach Fiyatlandırma — Ücretsiz ve Pro planlar",
+    description: "FinCoach fiyatlandırma: ücretsiz başla, ₺199/ay (KDV dahil) Pro ile sınırsız yapay zekâ koçluğu, gelişmiş ajanlar ve akıllı uyarılar.",
+  },
+};
+
+function pricingNoscript(lang) {
+  const L = loadLanding(lang);
+  const p = L.pricing || {};
+  const tiers = (p.tiers || [])
+    .map((tr) => `<li><strong>${esc(tr.name)}</strong>: ${esc(tr.price)}${esc(tr.period || "")} — ${esc(tr.desc)}</li>`)
+    .join("");
+  return (
+    `<noscript><main>` +
+    `<h1>${esc(p.title || "Pricing")}</h1>` +
+    (p.subtitle ? `<p>${esc(p.subtitle)}</p>` : "") +
+    `<ul>${tiers}</ul>` +
+    `</main></noscript>`
+  );
+}
+
+function renderPricing(baseHtml, lang) {
+  const s = PRICING_SEO[lang];
+  const canonical = `${ORIGIN}/${lang}/pricing`;
+  let h = baseHtml;
+  h = sub(h, /<html lang="[^"]*"/, `<html lang="${lang}"`, "html lang");
+  h = sub(h, /<title>[\s\S]*?<\/title>/, `<title>${esc(s.title)}</title>`, "title");
+  h = sub(h, /<meta\s+name="description"[\s\S]*?\/>/, `<meta name="description" content="${esc(s.description)}" />`, "description");
+  h = sub(h, /<link\s+rel="canonical"[\s\S]*?\/>/, `<link rel="canonical" href="${canonical}" />`, "canonical");
+  h = h.replace(/<\/body>/, `    ${pricingNoscript(lang)}\n  </body>`);
+  return h;
+}
+
 function sub(html, re, replacement, label) {
   if (!re.test(html)) {
     console.warn(`[prerender] pattern not found (${label})`);
@@ -104,5 +144,9 @@ for (const lang of ["en", "tr"]) {
   mkdirSync(join(dist, lang), { recursive: true });
   writeFileSync(join(dist, lang, "index.html"), render(base, lang, `/${lang}`));
   console.log(`[prerender] wrote dist/${lang}/index.html`);
+
+  mkdirSync(join(dist, lang, "pricing"), { recursive: true });
+  writeFileSync(join(dist, lang, "pricing", "index.html"), renderPricing(base, lang));
+  console.log(`[prerender] wrote dist/${lang}/pricing/index.html`);
 }
-console.log("[prerender] done - /, /en, /tr");
+console.log("[prerender] done - /, /en, /tr, /{en,tr}/pricing");

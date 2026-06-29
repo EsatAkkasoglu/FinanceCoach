@@ -84,6 +84,11 @@ class User(Base):
     risk_score = Column(Integer, default=50)              # 0-125
     risk_profile = Column(String(32), default=RiskProfile.BALANCED.value)
     roast_mode = Column(Integer, default=0)               # 0/1 bool flag
+    tier = Column(String(16), nullable=False, default="free")  # "free" | "pro"
+    # KVKK/GDPR provable consent: when the user accepted, and which policy
+    # version (so a policy update can prompt re-consent).
+    consented_at = Column(DateTime, nullable=True)
+    consent_version = Column(String(32), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     holdings = relationship("Holding", back_populates="user", cascade="all, delete-orphan")
@@ -366,3 +371,110 @@ class NewsAlert(Base):
     read_at = Column(DateTime, nullable=True)               # NULL = unread
 
     article = relationship("NewsArticle")
+
+
+class TradeDirection(str, Enum):
+    LONG = "long"
+    SHORT = "short"
+    NEUTRAL = "neutral"
+
+
+class TradeStatus(str, Enum):
+    ACTIVE = "active"      # within horizon, neither target nor stop hit
+    HIT = "hit"            # price reached the profit target
+    STOPPED = "stopped"    # price reached the stop-loss
+    EXPIRED = "expired"    # horizon elapsed without a resolution
+
+
+class TradeTarget(Base):
+    """A short-horizon (e.g. 4-hour) crypto trade plan persisted for a user.
+
+    Produced by ``tools.crypto_short_term.analyze_short_term`` and stored so the
+    demo account shows concrete, risk-defined targets a juror can score: each row
+    is a directional call with an ATR-based entry / target / stop and an expiry.
+    ``GET /crypto/targets`` re-prices it live and marks it hit/stopped/expired.
+    One ACTIVE target per (user, ticker); a new scan supersedes the old one.
+    """
+
+    __tablename__ = "trade_target"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    ticker = Column(String(32), nullable=False)               # e.g. "BTC-USD"
+    asset_class = Column(String(16), default=AssetClass.CRYPTO.value)
+    direction = Column(String(8), nullable=False, default=TradeDirection.NEUTRAL.value)
+    entry_price = Column(Float, nullable=False)
+    target_price = Column(Float, nullable=True)
+    stop_price = Column(Float, nullable=True)
+    horizon_hours = Column(Integer, nullable=False, default=4)
+    confidence = Column(Float, nullable=False, default=0.0)    # 0..1
+    score = Column(Float, nullable=False, default=0.0)         # -1..1 blended signal
+    thesis = Column(Text, nullable=True)                       # one-paragraph rationale
+    status = Column(String(8), nullable=False, default=TradeStatus.ACTIVE.value)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    expires_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_price = Column(Float, nullable=True)
+
+    user = relationship("User")
+
+
+class Waitlist(Base):
+    """Landing-page early-access signups — Phase 0 demand validation.
+
+    Public (no auth): the marketing landing posts here when a visitor asks for
+    early access to a paid tier. One row per email; ``tier`` captures which plan
+    they wanted (the willingness-to-pay signal), ``source`` where they signed up.
+    """
+
+    __tablename__ = "waitlist"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(254), unique=True, nullable=False, index=True)
+    tier = Column(String(32), nullable=True)        # "pro" | "team" | None
+    source = Column(String(64), nullable=True)      # "pricing" | "cta" | …
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class UsageCounter(Base):
+    """Per-user monthly metered-action counter (chat turns) for plan limits.
+
+    One row per ``(user_id, period)`` where ``period`` is the UTC calendar
+    month ``"YYYY-MM"``. The chat endpoint increments ``chat_turns`` on each
+    accepted turn; free-tier users are gated when they exceed the configured
+    monthly cap. Pro users are never gated (no row pressure either way).
+    """
+
+    __tablename__ = "usage_counter"
+    __table_args__ = (
+        UniqueConstraint("user_id", "period", name="uq_usage_user_period"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    period = Column(String(7), nullable=False, index=True)   # "YYYY-MM" (UTC)
+    chat_turns = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class BillingCheckout(Base):
+    """A single checkout/payment attempt for a paid plan.
+
+    Provider-agnostic: ``provider`` names the gateway ("mock" | "iyzico" | …)
+    and ``provider_ref`` is its opaque handle (iyzico checkout-form token,
+    etc.). On a successful ``finalize`` the user's tier is upgraded and
+    ``paid_at`` stamped. One row per attempt — history is kept for audit.
+    """
+
+    __tablename__ = "billing_checkout"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    provider = Column(String(32), nullable=False)            # "mock" | "iyzico"
+    plan = Column(String(32), nullable=False)                # "pro"
+    amount = Column(Float, nullable=False)
+    currency = Column(String(8), nullable=False, default="TRY")
+    provider_ref = Column(String(255), nullable=True, index=True)  # token / conversationId
+    status = Column(String(16), nullable=False, default="pending")  # pending|paid|failed|canceled
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    paid_at = Column(DateTime, nullable=True)

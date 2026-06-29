@@ -40,7 +40,9 @@ from app.db.models import Conversation, Goal, Holding, MessageFeedback, User
 from app.db.session import SessionLocal, init_db
 from app.routers.admin import router as admin_router
 from app.routers.audio import router as audio_router
+from app.routers.billing import router as billing_router
 from app.routers.budget import router as budget_router
+from app.routers.crypto import router as crypto_router
 from app.routers.funds import router as funds_router
 from app.routers.fx import router as fx_router
 from app.routers.insights import router as insights_router
@@ -48,8 +50,12 @@ from app.routers.memory import router as memory_router
 from app.routers.networth import router as networth_router
 from app.routers.news import router as news_router
 from app.routers.symbols import router as symbols_router
+from app.routers.waitlist import router as waitlist_router
+from app.services.account_deletion import delete_user_account
+from app.services.consent import record_consent
 from app.services.document_processor.router import router as documents_router
 from app.services.news_collector import shutdown_news_scheduler, start_news_scheduler
+from app.services.usage import check_and_increment, get_usage
 from app.settings import DEFAULT_JWT_SECRET, configure_langsmith, settings
 from app.tools._cache import cache_reset
 
@@ -57,6 +63,19 @@ log = logging.getLogger("fincoach")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 _GOOGLE_API_KEY_RE = re.compile(r"AIza[0-9A-Za-z_-]{20,}")
+
+# Secondary redaction sweep so a provider SDK that echoes a credential in its
+# exception message can't leak it to the client. Each entry is (pattern, label).
+# Conservative, high-signal shapes only — no generic "any long token" rule that
+# would scrub harmless ids.
+_SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"AIza[0-9A-Za-z_-]{20,}"), "GOOGLE_API_KEY"),
+    (re.compile(r"sk-[A-Za-z0-9]{20,}"), "API_KEY"),
+    (re.compile(r"\bBearer\s+[A-Za-z0-9._-]{20,}", re.IGNORECASE), "Bearer [REDACTED_TOKEN]"),
+    (re.compile(r"\beyJ[A-Za-z0-9._-]{20,}"), "JWT"),  # JWT/Firebase ID tokens
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+                re.DOTALL), "PRIVATE_KEY"),
+]
 
 # Scrub Alpha Vantage rate-limit / premium-upsell notices out of tool output
 # before it reaches the UI (used by _summarize_tool_output for non-JSON output).
@@ -69,8 +88,11 @@ _AV_RATELIMIT_RE = re.compile(
 
 
 def _safe_error_message(exc: Exception) -> str:
-    """Return a client-safe error without leaking provider API keys."""
-    message = _GOOGLE_API_KEY_RE.sub("[REDACTED_GOOGLE_API_KEY]", str(exc))
+    """Return a client-safe error without leaking provider API keys / tokens."""
+    message = str(exc)
+    for pattern, label in _SECRET_PATTERNS:
+        repl = label if label.startswith("Bearer") else f"[REDACTED_{label}]"
+        message = pattern.sub(repl, message)
     if "CONSUMER_SUSPENDED" in message or "has been suspended" in message:
         return (
             "Gemini API key is suspended. Create or rotate to a restricted Gemini API key "
@@ -162,6 +184,25 @@ async def strip_api_prefix(request, call_next):
     return await call_next(request)
 
 
+# Security headers on every API response. This service returns JSON (and the
+# occasional HTML error page), so a maximally-strict CSP is safe here and just
+# hardens any HTML the API ever emits. The frontend SPA gets its own, looser CSP
+# via firebase.json. HSTS is only meaningful over real HTTPS (Cloud Run), so it's
+# gated to avoid pinning HTTPS on plain-HTTP local dev.
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+    if settings.is_cloud_run:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
 # Local Tauri WebView2 + dev need a wildcard, but the same code runs on the public
 # Cloud Run service — there, lock CORS to the Firebase Hosting origins so a third
 # party can't make authenticated cross-origin calls for a logged-in user. (Prod is
@@ -188,10 +229,13 @@ app.include_router(fx_router)
 app.include_router(funds_router)
 app.include_router(symbols_router)
 app.include_router(insights_router)
+app.include_router(crypto_router)
 app.include_router(memory_router)
 app.include_router(networth_router)
 app.include_router(admin_router)
 app.include_router(news_router)
+app.include_router(waitlist_router)
+app.include_router(billing_router)
 
 
 @app.get("/health")
@@ -378,6 +422,42 @@ async def delete_conversation(conv_id: str, user_id: int = Depends(get_current_u
     return {"ok": True}
 
 
+# ── Usage / plan limits ──────────────────────────────────────────────────────
+
+@app.get("/usage")
+async def read_usage(user_id: int = Depends(get_current_user_id)):
+    """Current month's metered usage for the authenticated user (UI meter)."""
+    with SessionLocal() as db:
+        tier = db.execute(select(User.tier).where(User.id == user_id)).scalar_one_or_none()
+        return get_usage(db, user_id, tier)
+
+
+# ── Account / KVKK data rights ────────────────────────────────────────────────
+
+@app.post("/account/consent", status_code=200)
+async def post_consent(user_id: int = Depends(get_current_user_id)):
+    """Record KVKK/Terms consent for the signed-in user (current policy version).
+
+    Used by sign-up paths that can't stamp consent inline (e.g. Google/Firebase)
+    and to re-consent after a policy update. Idempotent.
+    """
+    with SessionLocal() as db:
+        return record_consent(db, user_id)
+
+
+@app.delete("/account", status_code=200)
+async def delete_account(user_id: int = Depends(get_current_user_id)):
+    """KVKK/GDPR right to erasure: delete the user and all their data.
+
+    Irreversible. Purges every user-scoped store (relational rows, ChromaDB
+    document + memory vectors, chat-transcript checkpoints). The client must
+    drop its session afterwards (the bearer token now points at a gone user).
+    """
+    with SessionLocal() as db:
+        summary = delete_user_account(db, user_id)
+    return {"ok": True, "deleted": summary["rows"]}
+
+
 # ── Chat ─────────────────────────────────────────────────────────────────────
 
 @app.post("/chat")
@@ -419,6 +499,21 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
             ).scalar_one_or_none()
             if owns is None or owns != thread_id:
                 raise HTTPException(403, "conversation not found")
+
+    # Plan gate: count this metered (LLM-spending) turn and refuse free-tier
+    # users who've hit the monthly cap — before we start any Gemini work.
+    with SessionLocal() as db:
+        tier = db.execute(select(User.tier).where(User.id == user_id)).scalar_one_or_none()
+        allowed, usage = check_and_increment(db, user_id, tier)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "monthly_limit_reached",
+                "message": "Aylık mesaj limitine ulaştın. Pro'ya geçince sınırsız.",
+                "usage": usage,
+            },
+        )
 
     # Make user_id + UI display currency visible to deeply-nested LangGraph
     # tools / synthesizer via ContextVars.
@@ -644,7 +739,7 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
                 upsert_chat_turn(user_message, full_response, final_agent)
             # Update conversation updated_at + auto-title on first message
             if conv_id:
-                _touch_conversation(conv_id, user_message)
+                _touch_conversation(conv_id, user_id, user_message)
             yield _evt("done", {})
 
     # ping=20: sse_starlette sends a ": ping" comment every 20 s to keep
@@ -652,10 +747,18 @@ async def chat(payload: dict, user_id: int = Depends(get_current_user_id)):
     return EventSourceResponse(event_stream(), ping=20)
 
 
-def _touch_conversation(conv_id: str, first_message: str) -> None:
-    """Update updated_at and auto-generate title from first message if missing."""
+def _touch_conversation(conv_id: str, user_id: int, first_message: str) -> None:
+    """Update updated_at and auto-generate title from first message if missing.
+
+    Scoped to the owning user so the row can only ever be touched by its owner
+    (defense-in-depth — the only caller already authenticates the user).
+    """
     with SessionLocal() as db:
-        conv = db.execute(select(Conversation).where(Conversation.id == conv_id)).scalar_one_or_none()
+        conv = db.execute(
+            select(Conversation).where(
+                Conversation.id == conv_id, Conversation.user_id == user_id
+            )
+        ).scalar_one_or_none()
         if conv is None:
             return
         conv.updated_at = datetime.utcnow()
@@ -857,7 +960,11 @@ def _quote_or_none(ticker: str, asset_class: str | None = None) -> dict | None:
         if asset_class == "fund":
             from app.tools.fund_tools import get_fund_quote
             result = get_fund_quote.invoke({"code": ticker})
-            if not isinstance(result, dict) or not result.get("ok") or not result.get("price"):
+            # get_fund_quote returns {code, title, price, currency, …} on success
+            # or {code, error} on failure — there is NO "ok" key. The old check
+            # required result["ok"], so it ALWAYS fell through to None and the
+            # portfolio showed cost basis as the live price (0 % gain for funds).
+            if not isinstance(result, dict) or result.get("error") or not result.get("price"):
                 return None
             return {"price": result["price"], "currency": result.get("currency", "TRY")}
         from app.tools.market_tools import get_quote

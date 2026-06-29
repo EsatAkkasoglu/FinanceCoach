@@ -16,6 +16,7 @@ import enOnboarding from "./locales/en/onboarding.json";
 import enDocuments from "./locales/en/documents.json";
 import enLanding from "./locales/en/landing.json";
 import enNotifications from "./locales/en/notifications.json";
+import enBilling from "./locales/en/billing.json";
 
 import trCommon from "./locales/tr/common.json";
 import trAuth from "./locales/tr/auth.json";
@@ -31,7 +32,8 @@ import trOnboarding from "./locales/tr/onboarding.json";
 import trDocuments from "./locales/tr/documents.json";
 import trLanding from "./locales/tr/landing.json";
 import trNotifications from "./locales/tr/notifications.json";
-import { getLanguageFromPath } from "@/lib/routing";
+import trBilling from "./locales/tr/billing.json";
+import { getLanguageFromPath, supportedLanguages } from "@/lib/routing";
 
 export const defaultNS = "common";
 export const resources = {
@@ -50,6 +52,7 @@ export const resources = {
     documents: enDocuments,
     landing: enLanding,
     notifications: enNotifications,
+    billing: enBilling,
   },
   tr: {
     common: trCommon,
@@ -66,6 +69,7 @@ export const resources = {
     documents: trDocuments,
     landing: trLanding,
     notifications: trNotifications,
+    billing: trBilling,
   },
 } as const;
 
@@ -79,7 +83,7 @@ i18n
     defaultNS,
     lng: initialLanguage ?? undefined,
     fallbackLng: "en",
-    supportedLngs: ["en", "tr"],
+    supportedLngs: [...supportedLanguages],
     detection: {
       order: ["localStorage", "navigator"],
       caches: ["localStorage"],

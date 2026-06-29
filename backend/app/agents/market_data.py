@@ -19,6 +19,11 @@ from app.agents._helpers import build_findings, extract_tool_calls, latest_human
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
 from app.tools.calc_tools import compare_instruments
+from app.tools.crypto_short_term import (
+    get_crypto_short_term_plan,
+    open_best_crypto_trade,
+    set_crypto_trade_target,
+)
 from app.tools.crypto_tools import (
     get_crypto_derivatives_health,
     get_funding_rate,
@@ -146,6 +151,24 @@ WORKFLOW (decision tree):
      OI trend and funding into one health read (>60 constructive, <40 fragile).
    • ``get_squeeze_risk(symbol)`` — flags crowded longs / crowded shorts /
      long-squeeze / short-squeeze / trend-exhaustion from funding × OI.
+   • ``get_crypto_short_term_plan(symbol)`` — use THIS for short-term
+     ("next few hours", "intraday", "4-hour", "should I buy now and sell
+     today?") crypto trade questions when the user just wants the READ. Fuses
+     intraday technicals + funding/OI + news into ONE directional call
+     (long/short/neutral) with an ATR-based entry, profit target and stop-loss
+     sized to a 4-hour horizon. Do NOT use analyze_ticker_8dim for short-term
+     timing — that's a daily/position lens.
+   • ``set_crypto_trade_target(symbol)`` — use THIS when the user wants to ACT /
+     OPEN a trade on a NAMED coin ("pozisyon aç", "al", "open a 4h trade on
+     SOL", "bunu izlemeye al", "şu kripto için işlem oluştur"). It analyses AND
+     places the order; the trade then shows LIVE on the Markets "4-Hour Signals"
+     panel. If the signal is neutral it places nothing and says so.
+   • ``open_best_crypto_trade(symbols?)`` — use THIS when the user asks YOU to
+     CHOOSE ("en iyi kriptoyu seç ve işlem aç", "pick the best crypto to trade
+     now", "find the best short-term setup"). Scans the basket (or given
+     symbols), picks the highest-conviction setup, opens it, and it appears on
+     the panel. After placing, tell the user the entry/target/stop and that it's
+     on the 4-Hour Signals panel.
    Pass the bare base symbol or the BTC-USD form — both work.
 10. ``scan_rumors`` — not available (data source removed). Direct users to
     the news/sentiment agent for current headlines.
@@ -274,6 +297,9 @@ _TOOLS = [
     get_open_interest,
     get_crypto_derivatives_health,
     get_squeeze_risk,
+    get_crypto_short_term_plan,
+    set_crypto_trade_target,
+    open_best_crypto_trade,
     # TEFAS Turkish funds
     search_fund,
     get_fund_quote,

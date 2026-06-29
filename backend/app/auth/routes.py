@@ -1,8 +1,9 @@
 """/auth/register, /auth/login, /auth/me, /auth/firebase, /auth/demo."""
 from __future__ import annotations
 
+import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,10 +13,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.deps import get_current_user
 from app.auth.firebase_verify import decode_firebase_token
+from app.auth.ratelimit import rate_limit
 from app.auth.security import create_token, hash_password, verify_password
 from app.db.models import Account, Goal, Holding, Subscription, Transaction, User
 from app.db.session import SessionLocal
+from app.services.consent import CURRENT_CONSENT_VERSION, consent_state
 
+log = logging.getLogger("fincoach.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 _bearer = HTTPBearer(auto_error=False)
 
@@ -25,6 +29,12 @@ USERNAME_RE = re.compile(r"^[a-zA-Z0-9_.-]{3,32}$")
 class Credentials(BaseModel):
     username: str = Field(min_length=3, max_length=32)
     password: str = Field(min_length=6, max_length=128)
+
+
+class RegisterRequest(Credentials):
+    # KVKK consent captured at sign-up. Optional for backward compat (demo/tests
+    # that predate consent); the UI always sends True and gates submission on it.
+    accept_terms: bool = Field(default=False)
 
 
 class AuthResponse(BaseModel):
@@ -39,11 +49,12 @@ def _user_dict(u: User) -> dict:
         "name": u.name,
         "avatar": u.avatar,
         "has_onboarded": bool(u.name),
+        **consent_state(u),
     }
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: Credentials):
+def register(payload: RegisterRequest, _rl: None = Depends(rate_limit("register", limit=5))):
     username = payload.username.strip().lower()
     if not USERNAME_RE.match(username):
         raise HTTPException(400, "username may only contain letters, digits, _ . -")
@@ -54,6 +65,10 @@ def register(payload: Credentials):
             password_hash=hash_password(payload.password),
             name="",
         )
+        # Stamp KVKK consent atomically with account creation when accepted.
+        if payload.accept_terms:
+            user.consented_at = datetime.utcnow()
+            user.consent_version = CURRENT_CONSENT_VERSION
         db.add(user)
         try:
             db.commit()
@@ -66,7 +81,7 @@ def register(payload: Credentials):
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: Credentials):
+def login(payload: Credentials, _rl: None = Depends(rate_limit("login", limit=10))):
     username = payload.username.strip().lower()
     with SessionLocal() as db:
         user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
@@ -81,8 +96,56 @@ def me(user: User = Depends(get_current_user)):
     return _user_dict(user)
 
 
+def _seed_crypto_basket(db, user_id: int) -> None:
+    """Best-effort: seed the curated crypto basket + 4-hour targets for a user.
+
+    Runs on demo login (idempotent — skipped once the user has any target). Each
+    basket coin gets a ~$1.5k notional holding entered at the live signal price
+    and an ACTIVE 4-hour ``TradeTarget`` so the demo account shows concrete,
+    risk-defined trades a juror can score. Network-driven, so wholly wrapped:
+    a data-source outage must never break demo login.
+    """
+    from app.db.models import Holding, TradeTarget
+    from app.services.trade_targets import upsert_target_from_plan
+    from app.settings import settings
+    from app.tools.crypto_short_term import analyze_short_term
+
+    try:
+        has_targets = db.execute(
+            select(TradeTarget.id).where(TradeTarget.user_id == user_id).limit(1)
+        ).first()
+        if has_targets:
+            return  # already seeded — don't re-scan on every login
+
+        existing_tickers = {
+            t for (t,) in db.execute(
+                select(Holding.ticker).where(Holding.user_id == user_id)
+            ).all()
+        }
+        for sym in settings.crypto_basket:
+            result = analyze_short_term(sym)
+            target = upsert_target_from_plan(db, user_id, result)
+            ticker = f"{sym}-USD"
+            entry = (result.get("data") or {}).get("entry")
+            if entry and ticker not in existing_tickers:
+                db.add(Holding(
+                    user_id=user_id,
+                    ticker=ticker,
+                    asset_class="crypto",
+                    quantity=round(1500.0 / entry, 6),
+                    cost_basis=entry,
+                    currency="USD",
+                ))
+                existing_tickers.add(ticker)
+            _ = target
+        db.commit()
+    except Exception:  # noqa: BLE001 — seeding is best-effort, never block login
+        db.rollback()
+        log.warning("demo crypto-basket seeding failed", exc_info=True)
+
+
 @router.post("/demo", response_model=AuthResponse)
-def demo_login():
+def demo_login(_rl: None = Depends(rate_limit("demo", limit=30))):
     """Return (or create) the demo user for hackathon jurors.
 
     Idempotent — safe to call many times. Seeds realistic data on first call.
@@ -100,6 +163,7 @@ def demo_login():
                 monthly_income=35000.0,
                 risk_score=72,
                 risk_profile="balanced",
+                tier="pro",  # jurors/demo never hit the free monthly cap
             )
             db.add(user)
             db.flush()
@@ -156,6 +220,10 @@ def demo_login():
 
             db.commit()
             db.refresh(user)
+
+        # Idempotent crypto-basket + 4h-target seeding (every login; skipped once
+        # seeded). Best-effort so a data-source outage never blocks demo access.
+        _seed_crypto_basket(db, user.id)
 
         token = create_token(user.id, user.username)
         return AuthResponse(token=token, user=_user_dict(user))

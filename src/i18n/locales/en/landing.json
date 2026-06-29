@@ -135,7 +135,7 @@
   "pricing": {
     "eyebrow": "Pricing",
     "title": "Start free. Upgrade when you're ready.",
-    "subtitle": "FinCoach is completely free while in beta. No card, no catch.",
+    "subtitle": "Start free and go Pro when you need unlimited coaching. Cancel anytime.",
     "tiers": [
       {
         "name": "Free",
@@ -149,11 +149,11 @@
       },
       {
         "name": "Pro",
-        "price": "Soon",
-        "period": "",
+        "price": "₺199",
+        "period": "/mo · VAT incl.",
         "desc": "For power users who want deeper analysis and automation.",
-        "features": ["Advanced specialist agents", "Unlimited document import", "Priority live data", "Smart alerts"],
-        "cta": "Coming soon",
+        "features": ["Unlimited AI coaching", "Advanced specialist agents", "Unlimited document import", "Priority live data", "Smart alerts"],
+        "cta": "Go Pro",
         "featured": false,
         "badge": ""
       },
@@ -167,7 +167,18 @@
         "featured": false,
         "badge": ""
       }
-    ]
+    ],
+    "waitlist": {
+      "title": "Want Pro when it lands?",
+      "subtitle": "Drop your email and we'll let you know the moment advanced agents, unlimited imports, and smart alerts go live.",
+      "placeholder": "you@email.com",
+      "button": "Notify me",
+      "success": "You're on the list — we'll be in touch.",
+      "error": "Something went wrong. Please try again.",
+      "invalid": "Please enter a valid email address.",
+      "count_one": "{{count}} person is already on the list",
+      "count_other": "{{count}} people are already on the list"
+    }
   },
   "cta": {
     "title": "Ready to take control of your money?",

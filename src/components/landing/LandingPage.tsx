@@ -44,7 +44,7 @@ import {
   Mail,
   type LucideIcon,
 } from "lucide-react";
-import { loginDemo } from "@/lib/api";
+import { loginDemo, joinWaitlist, getWaitlistCount } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { buildLocalizedPath, getLanguageFromPath, type SupportedLanguage } from "@/lib/routing";
 import { toast } from "sonner";
@@ -101,7 +101,7 @@ function BrandMark({ size = 18 }: { size?: number }) {
   );
 }
 
-function Wordmark() {
+export function Wordmark() {
   return (
     <span className="flex items-center gap-2">
       <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent shadow-glow">
@@ -1073,16 +1073,105 @@ function TestimonialsSection() {
   );
 }
 
+/* ─────────────── Early-access waitlist (Phase 0) ──────────── */
+function WaitlistForm() {
+  const { t } = useTranslation("landing");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void getWaitlistCount().then((n) => {
+      if (alive) setCount(n);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const v = email.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) {
+      toast.error(t("pricing.waitlist.invalid"));
+      return;
+    }
+    setStatus("loading");
+    const ok = await joinWaitlist(v, "pro", "pricing");
+    if (ok) {
+      setStatus("done");
+      setCount((c) => (c === null ? c : c + 1));
+      toast.success(t("pricing.waitlist.success"));
+    } else {
+      setStatus("idle");
+      toast.error(t("pricing.waitlist.error"));
+    }
+  }
+
+  return (
+    <div
+      id="waitlist"
+      className="mx-auto mt-12 max-w-xl scroll-mt-24 rounded-2xl border border-accent/30 bg-surface/70 p-6 text-center backdrop-blur-md sm:p-8"
+    >
+      <h3 className="text-h4 font-semibold">{t("pricing.waitlist.title")}</h3>
+      <p className="mx-auto mt-2 max-w-md text-body-sm text-content-muted">
+        {t("pricing.waitlist.subtitle")}
+      </p>
+      {status === "done" ? (
+        <p className="mt-5 inline-flex items-center gap-2 rounded-xl bg-accent/10 px-4 py-3 text-sm font-medium text-accent">
+          <Check className="h-4 w-4" />
+          {t("pricing.waitlist.success")}
+        </p>
+      ) : (
+        <form onSubmit={submit} className="mx-auto mt-5 flex max-w-md flex-col gap-2 sm:flex-row">
+          <div className="relative flex-1">
+            <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-content-muted" />
+            <input
+              id="waitlist-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={t("pricing.waitlist.placeholder")}
+              autoComplete="email"
+              className="w-full rounded-xl border border-line bg-bg py-3 pl-9 pr-3 text-sm outline-none transition focus:border-accent"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={status === "loading"}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white shadow-glow transition hover:opacity-90 disabled:opacity-60"
+          >
+            {status === "loading" ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <ArrowRight className="h-4 w-4" />
+            )}
+            {t("pricing.waitlist.button")}
+          </button>
+        </form>
+      )}
+      {count !== null && count > 0 && (
+        <p className="mt-4 inline-flex items-center gap-2 text-caption text-content-muted">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent/60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+          </span>
+          {t("pricing.waitlist.count", { count })}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ───────────────────────── Pricing ───────────────────────── */
-function PricingSection({
-  onRegister,
-  onContact,
-}: {
-  onRegister: () => void;
-  onContact: () => void;
-}) {
+export function PricingSection({ onRegister }: { onRegister: () => void }) {
   const { t } = useTranslation("landing");
   const tiers = t("pricing.tiers", { returnObjects: true }) as unknown as Tier[];
+  const focusWaitlist = () => {
+    document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => document.getElementById("waitlist-email")?.focus(), 400);
+  };
   return (
     <section id="pricing" className="scroll-mt-24 px-4 py-20 sm:px-6 lg:px-8">
       <SectionHeading
@@ -1127,7 +1216,7 @@ function PricingSection({
                 ))}
               </ul>
               <button
-                onClick={tier.featured ? onRegister : onContact}
+                onClick={tier.featured ? onRegister : focusWaitlist}
                 className={`mt-6 inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-sm font-semibold transition ${
                   tier.featured
                     ? "bg-accent text-white shadow-glow hover:opacity-90"
@@ -1142,6 +1231,9 @@ function PricingSection({
           </Reveal>
         ))}
       </div>
+      <Reveal>
+        <WaitlistForm />
+      </Reveal>
     </section>
   );
 }
@@ -1208,7 +1300,9 @@ function LandingFooter({
 }) {
   const { t } = useTranslation("landing");
   const { t: tc } = useTranslation("common");
+  const navigate = useNavigate();
   const L = (k: string) => t(`footer.links.${k}` as "footer.links.features");
+  const goLegal = (doc: string) => navigate(buildLocalizedPath(lang, `/legal/${doc}`));
 
   return (
     <footer id="contact" className="scroll-mt-24 border-t border-line bg-surface/40 px-4 pb-10 pt-16 sm:px-6 lg:px-8">
@@ -1255,9 +1349,9 @@ function LandingFooter({
           <div>
             <p className="text-overline uppercase text-content-muted">{t("footer.columns.legal")}</p>
             <ul className="mt-4 space-y-2.5 text-body-sm">
-              <li><span className="text-content-muted">{L("privacy")}</span></li>
-              <li><span className="text-content-muted">{L("terms")}</span></li>
-              <li><span className="text-content-muted">{L("disclaimer")}</span></li>
+              <li><button onClick={() => goLegal("privacy")} className="text-content-muted transition hover:text-content">{L("privacy")}</button></li>
+              <li><button onClick={() => goLegal("terms")} className="text-content-muted transition hover:text-content">{L("terms")}</button></li>
+              <li><button onClick={() => goLegal("disclaimer")} className="text-content-muted transition hover:text-content">{L("disclaimer")}</button></li>
             </ul>
           </div>
         </div>
@@ -1311,7 +1405,6 @@ export function LandingPage() {
 
   const goLogin = () => navigate(buildLocalizedPath(lang, "/login"));
   const goRegister = () => navigate(buildLocalizedPath(lang, "/register"));
-  const goContact = () => scrollToId("contact", !reduce);
 
   function handleLang(next: SupportedLanguage) {
     void i18n.changeLanguage(next);
@@ -1371,7 +1464,7 @@ export function LandingPage() {
         <HowSection />
         <ShowcaseSection />
         <TestimonialsSection />
-        <PricingSection onRegister={goRegister} onContact={goContact} />
+        <PricingSection onRegister={goRegister} />
         <FinalCTASection onRegister={goRegister} onDemo={handleDemo} demoLoading={demoLoading} />
       </main>
 

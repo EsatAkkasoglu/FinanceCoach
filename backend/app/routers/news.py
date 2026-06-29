@@ -47,7 +47,7 @@ def _article_dict(a: NewsArticle) -> dict:
 
 @router.get("/feed")
 def news_feed(
-    q: str | None = Query(default=None, description="Free-text match on title/snippet"),
+    q: str | None = Query(default=None, max_length=128, description="Free-text match on title/snippet"),
     category: str | None = None,
     lang: str | None = None,
     since: datetime | None = Query(default=None, description="ISO datetime lower bound"),

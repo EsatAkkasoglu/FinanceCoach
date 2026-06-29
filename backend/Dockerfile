@@ -12,6 +12,12 @@ RUN uv sync --no-dev
 # Copy application code
 COPY app/ app/
 
+# Drop root: run as an unprivileged user (defense-in-depth — a container escape
+# starts without root). appuser owns /app so the synced venv, joblib cache, and
+# any local Chroma/SQLite paths stay writable at runtime.
+RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Cloud Run sets PORT env var; fall back to 8765
 ENV FINCOACH_PORT=8080
 

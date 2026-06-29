@@ -21,6 +21,10 @@ import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { AuthPage } from "@/components/auth/AuthPage";
 import { LandingPage } from "@/components/landing/LandingPage";
+import { LegalPage } from "@/components/legal/LegalPage";
+import { PricingPage } from "@/components/landing/PricingPage";
+import { BillingReturn } from "@/components/billing/BillingReturn";
+import { OopsPage } from "@/components/billing/OopsPage";
 import { DemoTour, TourReplayButton } from "@/components/tour/DemoTour";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useAuthStore, useConversationStore, useUserStore, useTourStore } from "@/store";
@@ -30,6 +34,8 @@ import {
   createConversation,
   fetchMe,
   handleGoogleRedirectResult,
+  recordConsent,
+  PENDING_CONSENT_KEY,
   getProfile,
   onUnauthorized,
   DEMO_TOKEN_KEY,
@@ -181,7 +187,15 @@ export default function App() {
   useEffect(() => {
     // Handle Google redirect result first (prod sign-in flow)
     handleGoogleRedirectResult()
-      .then((u) => { if (u) setUser(u); })
+      .then((u) => {
+        if (!u) return;
+        setUser(u);
+        // A register-mode Google redirect left a flag — record KVKK consent now.
+        if (sessionStorage.getItem(PENDING_CONSENT_KEY)) {
+          sessionStorage.removeItem(PENDING_CONSENT_KEY);
+          void recordConsent().catch(() => undefined);
+        }
+      })
       .catch(() => {});
 
     // onIdTokenChanged fires on login, logout AND silent token refresh (~1 hr).
@@ -347,6 +361,23 @@ export default function App() {
     const appPathForAuth = stripLanguagePrefix(location.pathname);
     const isRegisterPath = appPathForAuth === "/register";
     const isAuthPath = appPathForAuth === "/login" || appPathForAuth === "/register";
+    // Legal pages are public — reachable from the marketing footer while logged out.
+    if (appPathForAuth.startsWith("/legal/") || appPathForAuth === "/legal") {
+      return (
+        <>
+          <LegalPage />
+          {languageSwitcher}
+        </>
+      );
+    }
+    // Public pricing page (deep-linkable for the payment-provider review).
+    if (appPathForAuth === "/pricing") {
+      return <PricingPage />;
+    }
+    // Shared status / "coming soon" page (also reachable while logged out).
+    if (appPathForAuth === "/oops") {
+      return <OopsPage />;
+    }
     if (isAuthPath) {
       return (
         <>
@@ -505,6 +536,10 @@ export default function App() {
               <Route path="/:lang/documents" element={<Documents />} />
               <Route path="/:lang/chat" element={<ChatRoute />} />
               <Route path="/:lang/chat/:convId" element={<ChatRoute />} />
+              <Route path="/:lang/legal/:doc" element={<LegalPage />} />
+              <Route path="/:lang/pricing" element={<PricingPage />} />
+              <Route path="/:lang/billing/return" element={<BillingReturn />} />
+              <Route path="/:lang/oops" element={<OopsPage />} />
               <Route path="/:lang" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="/:lang/*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />
               <Route path="*" element={<PrefixedDashboardRedirect language={activeLanguage} />} />

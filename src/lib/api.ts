@@ -94,6 +94,88 @@ export interface AuthUser {
   name: string;
   avatar: string;
   has_onboarded: boolean;
+  consented?: boolean;
+  consent_version?: string | null;
+  consent_current?: boolean;
+}
+
+// ── Billing ──────────────────────────────────────────────────────────────────
+
+export interface BillingPlan {
+  code: string;
+  price: number;
+  currency: string;
+  period: string;
+}
+
+export interface BillingPlansResponse {
+  provider: string;
+  tier: string;
+  plans: BillingPlan[];
+}
+
+export async function getBillingPlans(): Promise<BillingPlansResponse | null> {
+  try {
+    const r = await apiFetch("/billing/plans");
+    if (!r.ok) return null;
+    return (await r.json()) as BillingPlansResponse;
+  } catch {
+    return null;
+  }
+}
+
+export type CheckoutResult =
+  | { status: "ok"; redirectUrl: string }
+  | { status: "unavailable" }   // payments not wired in this deploy yet
+  | { status: "error" };        // network / unexpected
+
+/** Start a checkout. Discriminated result so the UI can route each case. */
+export async function startCheckout(plan: string, returnUrl: string): Promise<CheckoutResult> {
+  try {
+    const r = await apiFetch("/billing/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan, return_url: returnUrl }),
+    });
+    if (!r.ok) return { status: "error" };
+    const data = (await r.json()) as { redirect_url?: string; status?: string };
+    if (data.status === "unavailable") return { status: "unavailable" };
+    if (data.redirect_url) return { status: "ok", redirectUrl: data.redirect_url };
+    return { status: "error" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
+/** Confirm a checkout on the return page. Returns the resulting status. */
+export async function finalizeCheckout(
+  ref: string,
+  params: Record<string, string> = {},
+): Promise<{ status: string; tier?: string } | null> {
+  try {
+    const r = await apiFetch("/billing/finalize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref, params }),
+    });
+    if (!r.ok) return { status: "error" };
+    return (await r.json()) as { status: string; tier?: string };
+  } catch {
+    return null;
+  }
+}
+
+/** sessionStorage flag: a register-mode Google redirect needs consent recorded. */
+export const PENDING_CONSENT_KEY = "fincoach-pending-consent";
+
+/** Record KVKK/Terms consent for the signed-in user (current policy version). */
+export async function recordConsent(): Promise<boolean> {
+  try {
+    const r = await apiFetch("/account/consent", { method: "POST" });
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Sync the current Firebase user with the backend and return the local profile. */
@@ -795,6 +877,66 @@ export async function removeWatchlistItem(id: number): Promise<boolean> {
   return r.ok;
 }
 
+// ── Waitlist (landing early-access — Phase 0 demand validation) ───────────────
+
+/** Record an early-access signup. Public endpoint; resolves true on success. */
+export async function joinWaitlist(
+  email: string,
+  tier?: string,
+  source?: string,
+): Promise<boolean> {
+  try {
+    const r = await fetch(`${API_BASE}/waitlist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, tier, source }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ── Usage / plan limits ──────────────────────────────────────────────────────
+
+export interface UsageInfo {
+  period: string;
+  tier: string;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  unlimited: boolean;
+}
+
+/** Current month's metered usage for the signed-in user. Null on failure. */
+export async function getUsage(): Promise<UsageInfo | null> {
+  try {
+    const r = await apiFetch("/usage");
+    if (!r.ok) return null;
+    return (await r.json()) as UsageInfo;
+  } catch {
+    return null;
+  }
+}
+
+/** KVKK right to erasure: delete the signed-in user + all their data. */
+export async function deleteMyAccount(): Promise<boolean> {
+  const r = await apiFetch("/account", { method: "DELETE" });
+  return r.ok;
+}
+
+/** Total waitlist signups, for landing social proof. Resolves null on failure. */
+export async function getWaitlistCount(): Promise<number | null> {
+  try {
+    const r = await fetch(`${API_BASE}/waitlist/count`);
+    if (!r.ok) return null;
+    const data = (await r.json()) as { count?: number };
+    return typeof data.count === "number" ? data.count : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Documents ────────────────────────────────────────────────────────────────
 
 export interface DocumentEntry {
@@ -961,6 +1103,31 @@ export async function* streamChat(
     }),
     signal,
   });
+
+  // Plan gate (and any other non-stream error) returns a JSON body, not SSE.
+  // Surface the limit message as an error event so the chat UI can react.
+  if (!resp.ok) {
+    let message = "";
+    let limitReached = false;
+    try {
+      const body = (await resp.json()) as { detail?: unknown };
+      const detail = body?.detail;
+      if (detail && typeof detail === "object") {
+        const d = detail as { error?: string; message?: string };
+        limitReached = d.error === "monthly_limit_reached";
+        message = d.message ?? "";
+      } else if (typeof detail === "string") {
+        message = detail;
+      }
+    } catch {
+      /* non-JSON error body — fall through to a generic message */
+    }
+    yield {
+      type: "error",
+      payload: { status: resp.status, limitReached, message },
+    };
+    return;
+  }
   if (!resp.body) throw new Error("no stream body");
 
   const reader = resp.body.getReader();
@@ -1240,6 +1407,117 @@ export async function getRumors(): Promise<RumorItem[]> {
   if (!r.ok) return [];
   const data = (await r.json()) as { rumors: RumorItem[] };
   return data.rumors;
+}
+
+// ── Short-term crypto signals (4-hour horizon) ──────────────────────────────
+
+export type TradeDirection = "long" | "short" | "neutral";
+
+export interface ShortTermPlan {
+  ok: boolean;
+  symbol?: string;
+  ticker?: string;
+  direction?: TradeDirection;
+  score?: number;
+  confidence?: number;
+  confidence_label?: "low" | "medium" | "high";
+  horizon_hours?: number;
+  entry?: number;
+  target?: number | null;
+  stop?: number | null;
+  target_pct?: number | null;
+  stop_pct?: number | null;
+  rr?: number | null;
+  atr_4h_pct?: number | null;
+  grain?: "1h" | "1d";
+  components?: { technical: number; derivatives: number; sentiment: number };
+  technical_detail?: Record<string, number | null>;
+  derivatives_detail?: Record<string, number | string | null>;
+  news?: { title: string; source: string; sentiment?: string | null; url?: string }[];
+  as_of?: string;
+  error?: string;
+}
+
+/** Envelope returned by /crypto/short-term/{ticker} — the plan lives in `data`. */
+export interface ShortTermSignalResponse {
+  ok: boolean;
+  formatted_value?: string;
+  explanation?: string;
+  rationale?: string;
+  data?: ShortTermPlan;
+  error?: string;
+}
+
+export interface CryptoBasketItem {
+  symbol: string;
+  ticker: string;
+  name: string;
+}
+
+export async function getCryptoBasket(): Promise<CryptoBasketItem[]> {
+  const r = await apiFetch(`/crypto/basket`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { basket: CryptoBasketItem[] };
+  return data.basket ?? [];
+}
+
+export async function getShortTermSignal(ticker: string): Promise<ShortTermSignalResponse> {
+  const r = await apiFetch(`/crypto/short-term/${encodeURIComponent(ticker)}`);
+  return r.json();
+}
+
+export interface TradeTarget {
+  id: number;
+  ticker: string;
+  asset_class: string;
+  direction: TradeDirection;
+  entry_price: number;
+  target_price: number | null;
+  stop_price: number | null;
+  current_price: number | null;
+  pnl_pct: number | null;
+  progress: number | null;
+  horizon_hours: number;
+  confidence: number;
+  score: number;
+  thesis: string | null;
+  status: "active" | "hit" | "stopped" | "expired";
+  created_at: string | null;
+  expires_at: string | null;
+  minutes_left: number | null;
+  resolved_at: string | null;
+  resolved_price: number | null;
+}
+
+export interface TradeTargetsResponse {
+  targets: TradeTarget[];
+  summary: {
+    total: number;
+    active: number;
+    hit: number;
+    stopped: number;
+    avg_pnl_pct: number | null;
+  };
+}
+
+export async function listCryptoTargets(activeOnly = false): Promise<TradeTargetsResponse> {
+  const r = await apiFetch(`/crypto/targets${activeOnly ? "?active_only=true" : ""}`);
+  if (!r.ok) return { targets: [], summary: { total: 0, active: 0, hit: 0, stopped: 0, avg_pnl_pct: null } };
+  return r.json() as Promise<TradeTargetsResponse>;
+}
+
+export interface ScanTargetsResponse {
+  ok: boolean;
+  created: number;
+  scanned: number;
+  plans: { symbol: string; ok: boolean; formatted_value?: string; plan?: ShortTermPlan; error?: string }[];
+}
+
+/** Re-score the whole basket and (re)create a 4-hour target for each tradable coin. */
+export async function scanCryptoTargets(): Promise<ScanTargetsResponse> {
+  const r = await apiFetch(`/crypto/targets/scan`, { method: "POST" });
+  if (!r.ok) return { ok: false, created: 0, scanned: 0, plans: [] };
+  return r.json() as Promise<ScanTargetsResponse>;
 }
 
 // ── Memory / conversation search ────────────────────────────────────────────

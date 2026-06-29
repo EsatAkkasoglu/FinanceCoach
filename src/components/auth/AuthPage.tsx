@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useNavigate, useLocation } from "react-router-dom";
-import { login, register, loginWithGoogle, loginDemo } from "@/lib/api";
+import { login, register, loginWithGoogle, loginDemo, recordConsent, PENDING_CONSENT_KEY } from "@/lib/api";
 import { useAuthStore } from "@/store";
 import { toast } from "sonner";
 import { Sparkles, ArrowRight } from "lucide-react";
@@ -36,17 +36,25 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoStatusMsg, setDemoStatusMsg] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
   const setUser = useAuthStore((s) => s.setUser);
 
   const busy = submitting || googleLoading || demoLoading;
+  const lang = getLanguageFromPath(location.pathname) ?? "en";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (submitting) return;
+    if (mode === "register" && !consent) {
+      toast.error(t("consentRequired"));
+      return;
+    }
     setSubmitting(true);
     try {
       const fn = mode === "login" ? login : register;
       const user = await fn(email.trim(), password);
+      // Record KVKK/Terms consent server-side (the box is required to get here).
+      if (mode === "register") await recordConsent().catch(() => undefined);
       setUser(user);
       toast.success(mode === "login" ? `Welcome back, ${user.username}` : "Account created");
     } catch (err) {
@@ -59,12 +67,24 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
 
   async function handleGoogle() {
     if (googleLoading) return;
+    if (mode === "register" && !consent) {
+      toast.error(t("consentRequired"));
+      return;
+    }
     setGoogleLoading(true);
+    // In prod, loginWithGoogle redirects (page reload) and the lines below never
+    // run — leave a flag so App.tsx records consent when the redirect returns.
+    if (mode === "register") sessionStorage.setItem(PENDING_CONSENT_KEY, "1");
     try {
       const user = await loginWithGoogle();
+      if (mode === "register") {
+        await recordConsent().catch(() => undefined);
+        sessionStorage.removeItem(PENDING_CONSENT_KEY);
+      }
       setUser(user);
       toast.success(`Welcome, ${user.name || user.username}`);
     } catch (err) {
+      sessionStorage.removeItem(PENDING_CONSENT_KEY);  // attempt failed — don't carry it over
       const msg = err instanceof Error ? err.message : "Google sign-in failed";
       toast.error(msg);
     } finally {
@@ -205,9 +225,44 @@ export function AuthPage({ initialMode = "login" }: AuthPageProps) {
               />
             </label>
 
+            {isRegister && (
+              <label className="flex items-start gap-2.5 pt-1 text-caption text-content-muted">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-accent accent-accent focus:ring-1 focus:ring-accent/40"
+                />
+                <span>
+                  <Trans
+                    t={t}
+                    i18nKey="consent"
+                    components={{
+                      terms: (
+                        <a
+                          href={buildLocalizedPath(lang, "/legal/terms")}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-accent underline-offset-2 hover:underline"
+                        />
+                      ),
+                      privacy: (
+                        <a
+                          href={buildLocalizedPath(lang, "/legal/privacy")}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-accent underline-offset-2 hover:underline"
+                        />
+                      ),
+                    }}
+                  />
+                </span>
+              </label>
+            )}
+
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || (isRegister && !consent)}
               className="w-full rounded-lg border border-line bg-surface-raised px-4 py-2.5 text-sm font-medium transition hover:border-content-muted disabled:opacity-50"
             >
               {submitting ? t("pleaseWait") : isRegister ? t("createAccountBtn") : t("signIn")}

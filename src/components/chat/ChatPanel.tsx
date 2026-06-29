@@ -566,9 +566,17 @@ export function ChatPanel({ convId, threadId }: ChatPanelProps) {
             );
             break;
           }
-          case "error":
-            appendToken(convId, lastAsstId.current!, `\n\n_Error: ${String(event.payload.message ?? "unknown")}_`);
+          case "error": {
+            const limitReached = Boolean(event.payload.limitReached);
+            const msg = String(event.payload.message ?? "unknown");
+            if (limitReached) {
+              toast.error(msg);
+              appendToken(convId, lastAsstId.current!, `\n\n_${msg}_`);
+            } else {
+              appendToken(convId, lastAsstId.current!, `\n\n_Error: ${msg}_`);
+            }
             break;
+          }
           case "done":
             return;
         }

@@ -57,22 +57,49 @@ logluyor (`token_usage | ... | cost=$...`). Kesin birim maliyet için:
 2. Logları `cost=` üzerinden topla, sohbet sayısına böl → **gerçek $/tur**.
 3. Bu modeldeki tahminleri o sayıyla değiştir.
 
-## Fiyatlandırma — freemium
+## Fiyatlandırma — freemium (KARAR: ₺199/ay, 15 mesaj ücretsiz)
 
 | Katman | Ne içerir | Fiyat |
 |---|---|---|
-| **Ücretsiz** | Takip + dashboard + ayda 10 koç mesajı + manuel haber | ₺0 |
-| **Pro** | Sınırsız* koç + proaktif uyarılar + haftalık özet | **~₺149/ay** |
+| **Ücretsiz** | Takip + dashboard + **ayda 15 koç mesajı** + manuel haber | ₺0 |
+| **Pro** | Sınırsız* koç + proaktif uyarılar + haftalık özet | **₺199/ay** (KDV dahil) |
 
 \* "Sınırsız" = adil kullanım (ör. 200 tur/ay) — marjı korumak için **rate-limit
-şart** (1000 tur/ay yapan power-user maliyeti ₺400'e çıkar).
+şart** (kod: `free_monthly_chat_turns`, Pro uncapped). 1000 tur/ay power-user
+maliyeti ₺500'e çıkar → fair-use cap önerilir.
 
-### Brüt marj (Pro, ₺149/ay)
+> Uygulandı (kod): `pro_plan_price=199`, `pro_plan_currency=TRY`,
+> `free_monthly_chat_turns=15` (`backend/app/settings.py`).
 
-| Kullanıcı tipi | Gelir | LLM maliyeti | Brüt marj |
-|---|---|---|---|
-| Tipik (100 tur) | ₺149 | ~₺40 | **~₺109 (%73)** |
-| Ağır (300 tur) | ₺149 | ~₺120 | ~₺29 (%19) → **cap koy** |
+## Başa-baş — eski model 3 kalemi atlamıştı
+
+Eski tablo sadece LLM maliyetini sayıyordu. **Gerçek başa-baş** için 3 kalem şart:
+
+1. **KDV %20** — ₺199 etiket → net gelir ₺199 ÷ 1,20 = **₺166**.
+2. **iyzico komisyonu ~%3** — ₺166 × 0,97 ≈ **₺161 net/ay**.
+3. **Ücretsiz-kullanıcı yükü** — her ödeyen, dönüşüm oranına göre N bedava
+   kullanıcı taşır. 15-tur tavanla free maliyeti ≈ **₺3/ay** (ort. ~6 tur kullanım).
+
+**Varsayımlar:** 1 USD ≈ ₺42 (güncel kuru gir) → tipik tur ~₺0,50; Pro tipik
+120 tur ≈ ₺60 LLM + ₺10 altyapı = **₺70 doğrudan maliyet**.
+
+Net marj/ödeyen = (net gelir − ₺70 doğrudan) − (free yükü):
+
+| Dönüşüm | ₺149 (eski) | **₺199 (yeni)** |
+|---|---|---|
+| %3 | −₺46 ❌ | −₺5 ❌ |
+| %5 | −₺7 ❌ | **+₺34 ✅** |
+| %8 | +₺16 | +₺57 |
+| %10 | +₺23 | +₺64 |
+
+**Sonuç:** ₺149 ~%7-8 dönüşüm istiyordu (riskli); **₺199 ~%5 dönüşümden pozitif**.
+En büyük kaldıraç **ücretsiz tavan**: 50→15'e indirince free yükü ~3 kat azaldı.
+
+**Sıradaki kaldıraçlar:**
+- **Yıllık plan** (~₺1.990/yıl ≈ 2 ay bedava): nakit + retention + iyzico
+  komisyonunu yılda 1'e indirir.
+- **FX:** maliyet USD, gelir TL — çeyrekte bir fiyat gözden geçir.
+- Gerçek $/tur'u `TokenLogger`'dan ölç, bu tahminleri değiştir.
 
 ## Kritik uyarılar
 

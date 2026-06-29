@@ -17,6 +17,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 from fastapi import APIRouter, Query
@@ -40,9 +41,56 @@ log = logging.getLogger("fincoach.insights")
 router = APIRouter(prefix="/insights", tags=["insights"])
 
 
+def _json_safe(obj: Any) -> Any:
+    """Coerce tool output into something Starlette's JSONResponse can render.
+
+    yfinance-derived metrics can be NaN/Infinity (e.g. RSI with no downward
+    movement, or a 0-division) or numpy scalars. Starlette serializes with
+    ``json.dumps(..., allow_nan=False)`` and can't encode numpy types — either
+    raises a 500 at *render* time, AFTER the route returns, where ``_safe_tool``
+    can't catch it. Normalize here: non-finite floats → None, numpy scalars →
+    native Python, recursively.
+    """
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, float):
+        return float(obj) if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        return [_json_safe(v) for v in obj]
+    item = getattr(obj, "item", None)  # numpy scalar → python scalar
+    if callable(item) and not isinstance(obj, str | bytes):
+        try:
+            return _json_safe(obj.item())
+        except Exception:  # noqa: BLE001
+            return obj
+    return obj
+
+
+def _safe_tool(ticker: str, label: str, run):
+    """Invoke a tool, degrading ANY failure to a 200 with an ``error`` field.
+
+    These endpoints must never surface a raw 500. An unhandled exception is
+    returned by Starlette's outermost ``ServerErrorMiddleware`` — *outside* the
+    CORS + security-headers middleware — so the browser sees a misleading
+    "No 'Access-Control-Allow-Origin' header" CORS error instead of the real
+    failure. Catching here keeps the response inside the middleware stack and
+    hands the UI a usable message; the full traceback is logged for diagnosis.
+    """
+    try:
+        return _json_safe(run())
+    except Exception as exc:  # noqa: BLE001
+        log.warning("insights %s failed for %r: %s", label, ticker, exc, exc_info=True)
+        out: dict[str, Any] = {"error": str(exc)}
+        if ticker:
+            out["ticker"] = ticker.strip().upper()
+        return out
+
+
 @router.get("/8dim/{ticker}")
 def eight_dim(ticker: str, fast: bool = Query(False)):
-    return analyze_ticker_8dim.invoke({"ticker": ticker, "fast": fast})
+    return _safe_tool(ticker, "8dim", lambda: analyze_ticker_8dim.invoke({"ticker": ticker, "fast": fast}))
 
 
 @router.get("/technicals/{ticker}")
@@ -51,14 +99,18 @@ def technicals(
     sma: int = Query(50, ge=5, le=200),
     rsi: int = Query(14, ge=2, le=50),
 ):
-    return get_technical_indicators.invoke(
-        {"ticker": ticker, "sma_period": sma, "rsi_period": rsi}
+    return _safe_tool(
+        ticker,
+        "technicals",
+        lambda: get_technical_indicators.invoke(
+            {"ticker": ticker, "sma_period": sma, "rsi_period": rsi}
+        ),
     )
 
 
 @router.get("/dividend/{ticker}")
 def dividend(ticker: str):
-    res = get_dividend_metrics.invoke({"ticker": ticker})
+    res = _safe_tool(ticker, "dividend", lambda: get_dividend_metrics.invoke({"ticker": ticker}))
     return res or {"ticker": ticker.upper(), "error": "no dividend data"}
 
 
@@ -120,14 +172,17 @@ def price_history(
 
 @router.get("/news")
 def news(q: str = Query(..., min_length=1, max_length=80), limit: int = Query(5, ge=1, le=20)):
-    return {"articles": search_news.invoke({"query": q, "limit": limit})}
+    res = _safe_tool("", "news", lambda: search_news.invoke({"query": q, "limit": limit}))
+    if isinstance(res, dict) and "error" in res:
+        return {"articles": [], "error": res["error"]}
+    return {"articles": res}
 
 
 @router.get("/trends")
 def trends():
-    return scan_hot_trends.invoke({"no_social": False})
+    return _safe_tool("", "trends", lambda: scan_hot_trends.invoke({"no_social": False}))
 
 
 @router.get("/rumors")
 def rumors():
-    return scan_rumors.invoke({})
+    return _safe_tool("", "rumors", lambda: scan_rumors.invoke({}))

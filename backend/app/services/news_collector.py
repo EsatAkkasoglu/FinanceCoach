@@ -39,7 +39,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.models import FeedState, NewsArticle
 from app.db.session import SessionLocal
-from app.services.news_alerts import generate_alerts
+from app.services.news_alerts import generate_alerts_for_all
 from app.settings import settings
 
 log = logging.getLogger("fincoach.news_collector")
@@ -542,7 +542,7 @@ def _poll_all_feeds() -> dict[str, Any]:
                         .scalars()
                         .all()
                     )
-                    summary["alerts"] = generate_alerts(db, stored)
+                    summary["alerts"] = generate_alerts_for_all(db, stored)
 
             # Retention prune.
             cutoff = datetime.utcnow() - timedelta(days=max(1, settings.news_retention_days))

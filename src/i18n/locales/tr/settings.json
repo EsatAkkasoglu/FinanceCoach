@@ -69,7 +69,18 @@
     "title": "Tehlikeli Bölge",
     "subtitle": "Bu işlemler geri alınamaz.",
     "resetOnboarding": "Kurulumu sıfırla",
-    "resetOnboardingDesc": "Adınızı, gelirinizi ve risk profilinizi temizler. Sihirbazdan tekrar geçersiniz."
+    "resetOnboardingDesc": "Adınızı, gelirinizi ve risk profilinizi temizler. Sihirbazdan tekrar geçersiniz.",
+    "deleteAccount": "Hesabı sil",
+    "deleteAccountDesc": "Hesabını ve tüm verilerini — portföy, işlemler, belgeler, sohbetler, her şeyi — kalıcı olarak siler (KVKK silme hakkı). Bu işlem geri alınamaz.",
+    "deleteAccountButton": "Sil",
+    "deleteConfirmTitle": "Hesabını silmek istiyor musun?",
+    "deleteConfirmBody": "Bu işlem hesabını ve ona bağlı her veriyi kalıcı olarak siler. Geri dönüşü yoktur. Onaylamak için aşağıya SİL yaz.",
+    "deleteConfirmPlaceholder": "Onaylamak için SİL yaz",
+    "deleteConfirmWord": "SİL",
+    "deleteConfirmCta": "Kalıcı olarak sil",
+    "deleteCancel": "İptal",
+    "deleteSuccess": "Hesabın ve verilerin silindi.",
+    "deleteError": "Hesabın silinemedi. Lütfen tekrar dene."
   },
   "language": {
     "title": "Dil",
