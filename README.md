@@ -11,6 +11,14 @@ FinCoach is designed not only to display financial data, but also to interpret i
 > Hackathon prototype — AI-generated outputs are not financial advice.
 
 ---
+<img width="1880" height="961" alt="image" src="https://github.com/user-attachments/assets/4cadbb62-eab5-4048-92a8-5dcfb17edf47" />
+<img width="1880" height="950" alt="image" src="https://github.com/user-attachments/assets/9baeebd0-3a34-4abc-8730-3ebd06017bf5" />
+<img width="1876" height="951" alt="image" src="https://github.com/user-attachments/assets/883241cb-01b2-47a6-aa15-ad6aa5011e6c" />
+<img width="1875" height="955" alt="image" src="https://github.com/user-attachments/assets/2ce4bb4e-aeaa-4955-bb55-9663eba7a36d" />
+<img width="1868" height="950" alt="image" src="https://github.com/user-attachments/assets/79602329-f4aa-46ec-94dd-9989794632cd" />
+
+
+
 
 ## Overview
 
