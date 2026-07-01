@@ -174,11 +174,11 @@ export function HeroVisual() {
       )}
 
       <motion.div
-        className="relative aspect-[5/5] sm:aspect-[6/5]"
+        className="relative aspect-[4/5] sm:aspect-[6/5]"
         style={{ transformStyle: "preserve-3d", rotateX, rotateY }}
       >
         {/* ── Base panel: net worth + portfolio chart ── */}
-        <Layer z={0} className="inset-x-2 top-10 sm:inset-x-6" float={!reduce} delay={0}>
+        <Layer z={0} className="inset-x-2 top-32 sm:inset-x-6 sm:top-24" float={!reduce} delay={0}>
           <div className="rounded-2xl border border-line bg-surface/70 p-5 shadow-2xl backdrop-blur-xl">
             <div className="flex items-center justify-between">
               <div>
@@ -209,7 +209,7 @@ export function HeroVisual() {
         </Layer>
 
         {/* ── Coach chat card (front, top-left) ── */}
-        <Layer z={70} className="-left-2 top-0 w-[60%] sm:left-2" float={!reduce} delay={1.1}>
+        <Layer z={70} className="-left-2 -top-4 w-[60%] sm:left-2 sm:top-0 sm:w-[60%]" float={!reduce} delay={1.1}>
           <div className="rounded-2xl border border-line bg-surface/80 p-3.5 shadow-2xl backdrop-blur-xl">
             <div className="flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent">
@@ -234,7 +234,7 @@ export function HeroVisual() {
         </Layer>
 
         {/* ── Delta pill (front, top-right) ── */}
-        <Layer z={110} className="right-0 top-6 sm:-right-2" float={!reduce} delay={0.5}>
+        <Layer z={110} className="right-0 top-10 sm:-right-2 sm:top-6" float={!reduce} delay={0.5}>
           <div className="flex items-center gap-2 rounded-xl border border-line bg-surface/85 px-3 py-2 shadow-xl backdrop-blur-xl">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gain/15 text-gain">
               <ArrowUpRight className="h-4 w-4" />
@@ -248,7 +248,7 @@ export function HeroVisual() {
         </Layer>
 
         {/* ── Goal ring card (front, bottom-left) ── */}
-        <Layer z={95} className="bottom-1 left-0 sm:-left-3" float={!reduce} delay={1.7}>
+        <Layer z={95} className="bottom-2 left-2 sm:bottom-1 sm:left-0 sm:-left-3" float={!reduce} delay={1.7}>
           <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface/85 p-3 shadow-xl backdrop-blur-xl">
             <ProgressRing value={62} />
             <div className="pr-1">
