@@ -66,6 +66,7 @@ from app.agents import (
 from app.agents._helpers import normalize_content
 from app.agents.llm import get_llm
 from app.agents.state import RESET_SENTINEL, AgentState
+from app.services import horizon as hz
 from app.settings import settings
 from app.tools.goal_tools import list_user_goals
 from app.tools.portfolio_tools import list_holdings
@@ -107,6 +108,7 @@ SpecialistName = Literal[
 ]
 
 QuestionType = Literal["lookup", "client_state", "research", "advisory", "mixed", "follow_up"]
+HorizonBucket = Literal["intraday", "swing", "position", "long"]
 
 
 # ── Strategist ───────────────────────────────────────────────────────────────
@@ -140,6 +142,26 @@ class ExecutionPlan(BaseModel):
             "advisory   = wants a plan / recommendation\n"
             "mixed      = multiple of the above"
         )
+    )
+    time_horizon: HorizonBucket = Field(
+        default="swing",
+        description=(
+            "The user's intended HOLDING HORIZON for any trade/analysis this turn, "
+            "inferred from their words. intraday = 'next few hours / today / gün içi / "
+            "scalp'; swing = 'a day or two / few days / günlük' (DEFAULT when unstated); "
+            "position = 'this week / few weeks / hafta'; long = 'a month+ / months / "
+            "ay / uzun vade'. Drives indicator grain and target/stop sizing."
+        ),
+    )
+    requires_order: bool = Field(
+        default=False,
+        description=(
+            "True ONLY if the user wants to ACT on a specific trade — open / take / "
+            "propose a position, 'al', 'pozisyon aç', 'işlem aç', 'bunu izlemeye al', "
+            "'en iyi X'i seç ve aç'. Triggers the executor to PROPOSE an order "
+            "(entry/target/stop) the user then approves. False for pure analysis "
+            "('ne dersin?', 'almalı mıyım?' without 'aç') and lookups."
+        ),
     )
     rationale: str = Field(
         description="One short sentence (max 25 words) explaining the plan."
@@ -213,6 +235,17 @@ PLANNING RULES:
     technicals / derivatives) AND news_sentiment (catalysts). A directional
     call must be researched on price-action AND headlines, so the answer can
     say "technically X, and on the news side Y" — never one side alone.
+  • TIME HORIZON: always set `time_horizon` from the user's words — "next few
+    hours / gün içi" = intraday, "a day or two / günlük" = swing (DEFAULT when
+    they don't say), "this week / birkaç hafta" = position, "a month+ / aylık /
+    uzun vade" = long. It sizes the trade's targets, so infer it even for pure
+    analysis. For a trade across several assets (stocks/funds/crypto), also
+    dispatch market_data + news_sentiment so the call is researched both ways.
+  • ORDER INTENT: set `requires_order=True` ONLY when the user wants to ACT on a
+    concrete trade — "open/take/propose a position", "al", "pozisyon aç", "işlem
+    aç", "bunu izlemeye al", "en iyi X'i seç ve aç". The executor then PROPOSES
+    a risk-defined order the user approves. Pure "should I? / ne dersin?" without
+    an act verb stays requires_order=False (analysis only).
   • For questions that DO require a fresh allocation plan (see the
     requires_advisor test below), default to the full lineup:
       [budget_coach, risk_profiler, portfolio, market_data, news_sentiment].
@@ -480,8 +513,19 @@ def _keyword_fallback_plan(
     else:
         q_type = "lookup"
 
+    wants_order = any(
+        k in text
+        for k in (
+            "pozisyon aç", "pozisyon ac", "işlem aç", "islem ac", "trade aç",
+            "open a trade", "open a position", "take a position", "izlemeye al",
+            "al ve", "seç ve aç", "sec ve ac", "best crypto", "en iyi krip",
+        )
+    )
+
     return ExecutionPlan(
         specialists=chosen[:6],
+        time_horizon=hz.keyword_bucket(text) or hz.DEFAULT_BUCKET,
+        requires_order=wants_order,
         requires_advisor=advisory,
         question_type=q_type,
         rationale="keyword fallback (LLM unavailable)",
@@ -788,6 +832,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
                 question_type="lookup",
                 rationale="empty query fallback",
             ).model_dump(),
+            "time_horizon": hz.resolve(hz.DEFAULT_BUCKET),
             "risk_profile": risk_profile,
             "user_snapshot": user_snapshot,
             "memory_hints": memory_hints,
@@ -846,6 +891,7 @@ def _strategist_node(state: AgentState) -> dict[str, Any]:
 
     return {
         "plan": plan.model_dump(),
+        "time_horizon": hz.resolve(getattr(plan, "time_horizon", None)),
         "risk_profile": risk_profile,
         "user_snapshot": user_snapshot,
         "memory_hints": memory_hints,

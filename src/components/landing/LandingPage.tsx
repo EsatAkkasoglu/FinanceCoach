@@ -50,6 +50,7 @@ import { buildLocalizedPath, getLanguageFromPath, type SupportedLanguage } from 
 import { toast } from "sonner";
 import { HeroVisual } from "./HeroVisual";
 import { TiltCard } from "@/components/ui/TiltCard";
+import { PaymentBadges } from "@/components/billing/PaymentBadges";
 
 // WebGL constellation is code-split so it never blocks the hero's first paint.
 const LandingBackground3D = lazy(() => import("./LandingBackground3D"));
@@ -1232,6 +1233,9 @@ export function PricingSection({ onRegister }: { onRegister: () => void }) {
         ))}
       </div>
       <Reveal>
+        <PaymentBadges className="mt-12" />
+      </Reveal>
+      <Reveal>
         <WaitlistForm />
       </Reveal>
     </section>
@@ -1351,6 +1355,7 @@ function LandingFooter({
             <ul className="mt-4 space-y-2.5 text-body-sm">
               <li><button onClick={() => goLegal("privacy")} className="text-content-muted transition hover:text-content">{L("privacy")}</button></li>
               <li><button onClick={() => goLegal("terms")} className="text-content-muted transition hover:text-content">{L("terms")}</button></li>
+              <li><button onClick={() => goLegal("refund")} className="text-content-muted transition hover:text-content">{L("refund")}</button></li>
               <li><button onClick={() => goLegal("disclaimer")} className="text-content-muted transition hover:text-content">{L("disclaimer")}</button></li>
             </ul>
           </div>

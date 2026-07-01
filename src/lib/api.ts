@@ -1481,12 +1481,26 @@ export interface TradeTarget {
   confidence: number;
   score: number;
   thesis: string | null;
-  status: "active" | "hit" | "stopped" | "expired";
+  status: "active" | "hit" | "stopped" | "expired" | "pending" | "rejected";
   created_at: string | null;
   expires_at: string | null;
   minutes_left: number | null;
   resolved_at: string | null;
   resolved_price: number | null;
+}
+
+/** intraday ~4h · swing ~1d · position ~1wk · long ~1mo. */
+export type HorizonBucket = "intraday" | "swing" | "position" | "long";
+
+/** Map a stored horizon_hours back to its canonical bucket name (UI labelling). */
+export function horizonBucket(hours: number | null | undefined): HorizonBucket {
+  if (hours == null) return "swing";
+  const buckets: [HorizonBucket, number][] = [
+    ["intraday", 4], ["swing", 24], ["position", 168], ["long", 720],
+  ];
+  return buckets.reduce((best, b) =>
+    Math.abs(b[1] - hours) < Math.abs(best[1] - hours) ? b : best
+  )[0];
 }
 
 export interface TradeTargetsResponse {
@@ -1518,6 +1532,77 @@ export async function scanCryptoTargets(): Promise<ScanTargetsResponse> {
   const r = await apiFetch(`/crypto/targets/scan`, { method: "POST" });
   if (!r.ok) return { ok: false, created: 0, scanned: 0, plans: [] };
   return r.json() as Promise<ScanTargetsResponse>;
+}
+
+/** Proposed-but-unapproved orders the chat created — awaiting Approve/Reject. */
+export async function listPendingTargets(): Promise<TradeTarget[]> {
+  const r = await apiFetch(`/crypto/targets/pending`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as { pending: TradeTarget[] };
+  return data.pending ?? [];
+}
+
+/** Approve a PENDING proposal → it goes ACTIVE and live-scoring begins. */
+export async function confirmTarget(id: number): Promise<{ ok: boolean; target?: TradeTarget; error?: string }> {
+  const r = await apiFetch(`/crypto/targets/${id}/confirm`, { method: "POST" });
+  return r.json();
+}
+
+/** Decline a PENDING proposal. */
+export async function rejectTarget(id: number): Promise<{ ok: boolean; error?: string }> {
+  const r = await apiFetch(`/crypto/targets/${id}/reject`, { method: "POST" });
+  return r.json();
+}
+
+/** One (horizon × asset-class) cell of the evaluation scorecard. */
+export interface ScorecardCell {
+  horizon: string;
+  asset_class: string;
+  n_resolved: number;
+  n_returns: number;
+  avg_return_pct: number | null;
+  total_return_pct: number | null;
+  hit_rate: number | null;
+  profit_factor: number | null;
+  sharpe: number | null;
+  sharpe_annualized: number | null;
+  sortino: number | null;
+  calmar: number | null;
+  max_drawdown_pct: number | null;
+  brier: number | null;
+  ece: number | null;
+  psr: number | null;
+  dsr: number | null;
+  purged_kfold: { folds: number; mean: number; std: number } | null;
+  avg_confidence: number | null;
+}
+
+export interface ScorecardResponse {
+  ok: boolean;
+  n_total: number;
+  n_resolved: number;
+  n_cells: number;
+  overall: ScorecardCell;
+  by_cell: ScorecardCell[];
+  notes: string;
+  error?: string;
+}
+
+/** Research-grounded "jury" scorecard over the user's resolved trade targets. */
+export async function getScorecard(): Promise<ScorecardResponse | null> {
+  const r = await apiFetch(`/eval/scorecard`);
+  if (!r.ok) return null;
+  return r.json() as Promise<ScorecardResponse>;
+}
+
+/** Read-only multi-asset, horizon-aware trade signal (no order placed). */
+export async function getTradeSignal(
+  symbol: string, horizon: HorizonBucket = "swing", assetClass = "",
+): Promise<ShortTermSignalResponse> {
+  const params = new URLSearchParams({ horizon });
+  if (assetClass) params.set("asset_class", assetClass);
+  const r = await apiFetch(`/crypto/signal/${encodeURIComponent(symbol)}?${params}`);
+  return r.json();
 }
 
 // ── Memory / conversation search ────────────────────────────────────────────

@@ -65,6 +65,9 @@ class AgentState(TypedDict, total=False):
         user_snapshot    — compact who-is-this-user snapshot (summary holdings +
                            goal aggregates + risk) built once per turn by the
                            strategist; no live prices, no transaction history
+        time_horizon     — resolved trade-horizon spec for this turn (bucket name +
+                           canonical hours + bar grain + ATR geometry), extracted
+                           once by the strategist; drives the signal engine + order
         plan             — strategist's execution plan for this turn
         memory_hints     — top-k semantic snippets from past turns, fetched
                            BEFORE planning to enrich the strategist's context
@@ -81,6 +84,7 @@ class AgentState(TypedDict, total=False):
     user_id: int
     risk_profile: Annotated[str, last_write_wins]
     user_snapshot: Annotated[dict[str, Any], last_write_wins]
+    time_horizon: Annotated[dict[str, Any], last_write_wins]
     plan: Annotated[dict[str, Any], last_write_wins]
     memory_hints: Annotated[list[dict[str, Any]], last_write_wins]
     findings: Annotated[dict[str, Any], merge_findings]

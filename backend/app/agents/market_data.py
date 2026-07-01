@@ -19,11 +19,7 @@ from app.agents._helpers import build_findings, extract_tool_calls, latest_human
 from app.agents.llm import get_llm
 from app.agents.state import AgentState
 from app.tools.calc_tools import compare_instruments
-from app.tools.crypto_short_term import (
-    get_crypto_short_term_plan,
-    open_best_crypto_trade,
-    set_crypto_trade_target,
-)
+from app.tools.crypto_short_term import get_crypto_short_term_plan
 from app.tools.crypto_tools import (
     get_crypto_derivatives_health,
     get_funding_rate,
@@ -36,6 +32,7 @@ from app.tools.fund_tools import (
     list_top_funds,
     search_fund,
 )
+from app.tools.macro_tools import get_finnhub_quote, get_macro_snapshot
 from app.tools.market_tools import (
     analyze_ticker_8dim,
     get_bist_dividend_leaders,
@@ -49,6 +46,7 @@ from app.tools.market_tools import (
     scan_rumors,
 )
 from app.tools.symbol_resolver import list_supported_categories, resolve_symbol
+from app.tools.trade_tools import get_trade_signal, open_best_trade, propose_trade
 
 SYSTEM_PROMPT_BASE = """You are the Equity & Fund Research Analyst on the FinCoach Investment Committee.
 
@@ -151,25 +149,37 @@ WORKFLOW (decision tree):
      OI trend and funding into one health read (>60 constructive, <40 fragile).
    • ``get_squeeze_risk(symbol)`` — flags crowded longs / crowded shorts /
      long-squeeze / short-squeeze / trend-exhaustion from funding × OI.
-   • ``get_crypto_short_term_plan(symbol)`` — use THIS for short-term
-     ("next few hours", "intraday", "4-hour", "should I buy now and sell
-     today?") crypto trade questions when the user just wants the READ. Fuses
-     intraday technicals + funding/OI + news into ONE directional call
-     (long/short/neutral) with an ATR-based entry, profit target and stop-loss
-     sized to a 4-hour horizon. Do NOT use analyze_ticker_8dim for short-term
-     timing — that's a daily/position lens.
-   • ``set_crypto_trade_target(symbol)`` — use THIS when the user wants to ACT /
-     OPEN a trade on a NAMED coin ("pozisyon aç", "al", "open a 4h trade on
-     SOL", "bunu izlemeye al", "şu kripto için işlem oluştur"). It analyses AND
-     places the order; the trade then shows LIVE on the Markets "4-Hour Signals"
-     panel. If the signal is neutral it places nothing and says so.
-   • ``open_best_crypto_trade(symbols?)`` — use THIS when the user asks YOU to
-     CHOOSE ("en iyi kriptoyu seç ve işlem aç", "pick the best crypto to trade
-     now", "find the best short-term setup"). Scans the basket (or given
-     symbols), picks the highest-conviction setup, opens it, and it appears on
-     the panel. After placing, tell the user the entry/target/stop and that it's
-     on the 4-Hour Signals panel.
-   Pass the bare base symbol or the BTC-USD form — both work.
+   • ``get_crypto_short_term_plan(symbol)`` — crypto-specific 4-hour READ
+     (intraday technicals + funding/OI + news → one directional call). Use for
+     "next few hours / 4-hour" CRYPTO timing questions when the user just wants
+     the read. Do NOT use analyze_ticker_8dim for short-term timing.
+
+MULTI-ASSET, HORIZON-AWARE TRADE SIGNALS & ORDERS (crypto + stock/ETF + fund):
+   The CONTEXT block at the top of this turn states the user's inferred HORIZON
+   (intraday ~4h / swing ~1d / position ~1wk / long ~1mo). Pass that horizon to
+   these tools unless the user clearly says a different one.
+   • ``get_trade_signal(symbol, horizon, asset_class?)`` — READ-ONLY. Risk-defined
+     signal for ANY asset (crypto, US stock/ETF, TEFAS fund) at the given horizon:
+     technicals + class-appropriate confirmation (crypto funding/OI; stock
+     fundamentals + macro regime; fund NAV momentum) + news → long/short/neutral
+     with ATR entry/target/stop. Use for "ne dersin? / should I…?" analysis.
+   • ``propose_trade(symbol, horizon, asset_class?)`` — use when the user wants to
+     ACT / OPEN a trade on a NAMED asset ("al", "pozisyon aç", "işlem aç", "open
+     a swing trade on AAPL", "bunu izlemeye al"). It PROPOSES an order (entry/
+     target/stop) — it does NOT auto-place; the user APPROVES it and then it goes
+     live on the Signals panel. Neutral signal → nothing proposed. Tell the user
+     the proposed entry/target/stop and that it's awaiting their approval.
+   • ``open_best_trade(symbols?, horizon, asset_class?)`` — use when the user asks
+     YOU to CHOOSE ("en iyi kriptoyu seç ve işlem aç", "pick the best swing setup",
+     "find the best trade now"). Scans the candidates (default crypto basket),
+     proposes the highest-conviction directional one (awaiting approval).
+   Pass the bare symbol / fund code / BTC-USD form — all work.
+   • ``get_macro_snapshot()`` — the broad market REGIME (VIX + crypto Fear &
+     Greed + 10y-2y yield curve → one risk-on/risk-off read). Use for "piyasa
+     nasıl? / risk iştahı / is the market risk-on?" and to frame a trade in the
+     prevailing regime.
+   • ``get_finnhub_quote(symbol)`` — real-time US equity quote backstop when a
+     yfinance quote looks stale/missing (needs FINNHUB_API_KEY).
 10. ``scan_rumors`` — not available (data source removed). Direct users to
     the news/sentiment agent for current headlines.
 11. ``list_top_funds`` — Turkish fund leaderboard by category rank.
@@ -298,13 +308,18 @@ _TOOLS = [
     get_crypto_derivatives_health,
     get_squeeze_risk,
     get_crypto_short_term_plan,
-    set_crypto_trade_target,
-    open_best_crypto_trade,
+    # Multi-asset, horizon-aware signal (read) + propose/best (write, PENDING)
+    get_trade_signal,
+    propose_trade,
+    open_best_trade,
     # TEFAS Turkish funds
     search_fund,
     get_fund_quote,
     get_fund_history,
     list_top_funds,
+    # Macro / regime context + Finnhub equity backstop
+    get_macro_snapshot,
+    get_finnhub_quote,
     # Deterministic cross-instrument comparison
     compare_instruments,
 ]
@@ -424,7 +439,17 @@ async def run(state: AgentState) -> AgentState:
 
     risk_profile = state.get("risk_profile", "balanced")
     agent = _build_agent(risk_profile)
-    result = await agent.ainvoke({"messages": latest_human_turn(state.get("messages", []))})
+    # Thread the strategist's inferred trade horizon into the analyst's context so
+    # get_trade_signal / propose_trade / open_best_trade size targets correctly.
+    horizon = state.get("time_horizon") or {}
+    hz_ctx = HumanMessage(content=(
+        f"[CONTEXT] The user's inferred trade horizon for this turn is "
+        f"'{horizon.get('name', 'swing')}' (~{horizon.get('hours', 24)}h). Pass this "
+        "horizon to get_trade_signal / propose_trade / open_best_trade unless the "
+        "user clearly asks for a different one."
+    ))
+    turn = latest_human_turn(state.get("messages", []))
+    result = await agent.ainvoke({"messages": [hz_ctx, *turn]})
     msgs = result["messages"]
     return {
         "messages": msgs[-1:],

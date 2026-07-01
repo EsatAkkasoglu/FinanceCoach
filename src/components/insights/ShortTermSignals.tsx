@@ -16,11 +16,11 @@ import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Minus, RefreshCw, Loader2,
-  Target as TargetIcon, ShieldAlert, Clock, ExternalLink,
+  Target as TargetIcon, ShieldAlert, Clock, ExternalLink, Check, X,
 } from "lucide-react";
 import {
-  listCryptoTargets, scanCryptoTargets,
-  type TradeTarget, type TradeTargetsResponse,
+  listCryptoTargets, scanCryptoTargets, listPendingTargets, confirmTarget, rejectTarget,
+  horizonBucket, type TradeTarget, type TradeTargetsResponse,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
@@ -47,11 +47,28 @@ const STATUS_CLS: Record<string, string> = {
   hit: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
   stopped: "bg-red-500/15 text-red-300 border-red-500/40",
   expired: "bg-surface-raised text-content-muted border-border",
+  pending: "bg-amber-500/15 text-amber-300 border-amber-500/40",
+  rejected: "bg-surface-raised text-content-muted border-border",
 };
 
-function SignalCard({ t: target }: { t: TradeTarget }) {
+/** Asset-class i18n keys are a known closed set; fall back to "other". */
+function assetClassKey(c: string | null | undefined) {
+  return (["stock", "etf", "crypto", "fund"].includes(c ?? "") ? c : "other") as
+    "stock" | "etf" | "crypto" | "fund" | "other";
+}
+
+function SignalCard({
+  t: target, onApprove, onReject, busy,
+}: {
+  t: TradeTarget;
+  onApprove?: (id: number) => void;
+  onReject?: (id: number) => void;
+  busy?: boolean;
+}) {
   const { t } = useTranslation("discover");
   const [open, setOpen] = useState(false);
+  const isPending = target.status === "pending";
+  const bucket = horizonBucket(target.horizon_hours);
   const dir = DIR_META[target.direction] ?? DIR_META.neutral;
   const Icon = dir.icon;
   const progressPct = target.progress != null ? Math.max(0, Math.min(100, target.progress * 100)) : 0;
@@ -87,12 +104,18 @@ function SignalCard({ t: target }: { t: TradeTarget }) {
             </span>
             <span className="truncate text-base font-semibold">{target.ticker}</span>
           </div>
-          <div className="mt-1 flex items-center gap-1.5">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <span className={cn("text-xs font-bold uppercase tracking-wide", dir.cls)}>
               {t(`shortTerm.dir.${target.direction}`)}
             </span>
             <span className="text-[11px] text-content-muted">
               · {t("shortTerm.confidence")} {Math.round(target.confidence * 100)}%
+            </span>
+            <span className="rounded-full bg-surface-raised px-1.5 py-0.5 text-[10px] text-content-muted">
+              {t(`shortTerm.horizon.${bucket}`)}
+            </span>
+            <span className="rounded-full bg-surface-raised px-1.5 py-0.5 text-[10px] text-content-muted">
+              {t(`assetClass.${assetClassKey(target.asset_class)}`)}
             </span>
           </div>
         </div>
@@ -155,6 +178,27 @@ function SignalCard({ t: target }: { t: TradeTarget }) {
           </motion.p>
         )}
       </AnimatePresence>
+
+      {isPending && (
+        <div className="flex items-center gap-2 border-t border-border pt-2">
+          <button
+            onClick={() => onApprove?.(target.id)}
+            disabled={busy}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            {t("shortTerm.approve")}
+          </button>
+          <button
+            onClick={() => onReject?.(target.id)}
+            disabled={busy}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-content-muted hover:bg-surface disabled:opacity-60"
+          >
+            <X className="h-3.5 w-3.5" />
+            {t("shortTerm.reject")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -163,15 +207,35 @@ export function ShortTermSignals() {
   const { t } = useTranslation("discover");
   const reduce = useReducedMotion();
   const [data, setData] = useState<TradeTargetsResponse | null>(null);
+  const [pending, setPending] = useState<TradeTarget[]>([]);
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await listCryptoTargets().catch(() => null);
+    const [res, pend] = await Promise.all([
+      listCryptoTargets().catch(() => null),
+      listPendingTargets().catch(() => []),
+    ]);
     setData(res);
+    setPending(pend);
     setLoading(false);
     return res;
   }, []);
+
+  const approve = useCallback(async (id: number) => {
+    setBusyId(id);
+    await confirmTarget(id).catch(() => null);
+    await load();
+    setBusyId(null);
+  }, [load]);
+
+  const decline = useCallback(async (id: number) => {
+    setBusyId(id);
+    await rejectTarget(id).catch(() => null);
+    await load();
+    setBusyId(null);
+  }, [load]);
 
   const rescan = useCallback(async () => {
     setScanning(true);
@@ -241,13 +305,28 @@ export function ShortTermSignals() {
         </div>
       </div>
 
+      {pending.length > 0 && (
+        <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+          <p className="mb-2 text-xs font-semibold text-amber-300">
+            {t("shortTerm.pendingTitle", { n: pending.length })}
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {pending.map((p) => (
+              <SignalCard
+                key={p.id} t={p} onApprove={approve} onReject={decline} busy={busyId === p.id}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading || (scanning && targets.length === 0) ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="card h-44 animate-pulse bg-surface-raised" />
           ))}
         </div>
-      ) : targets.length === 0 ? (
+      ) : targets.length === 0 && pending.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-content-muted">
           <ShieldAlert className="h-6 w-6 opacity-50" />
           {t("shortTerm.empty")}

@@ -380,10 +380,12 @@ class TradeDirection(str, Enum):
 
 
 class TradeStatus(str, Enum):
+    PENDING = "pending"    # proposed in chat, awaiting the user's Approve (not yet live)
     ACTIVE = "active"      # within horizon, neither target nor stop hit
     HIT = "hit"            # price reached the profit target
     STOPPED = "stopped"    # price reached the stop-loss
     EXPIRED = "expired"    # horizon elapsed without a resolution
+    REJECTED = "rejected"  # user declined the proposal (kept for audit, never re-priced)
 
 
 class TradeTarget(Base):

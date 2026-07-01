@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     news_api_key: str = Field(default="", alias="NEWS_API_KEY")
     langsmith_api_key: str = Field(default="", alias="LANGSMITH_API_KEY")
+    # Macro / context feeds (all optional — the signal engine degrades to
+    # price-action when a feed/key is absent). FRED: free key for treasury yields,
+    # the 10y-2y curve, fed funds. Finnhub: free 60/min equity quotes + funda +
+    # per-ticker news. Crypto Fear & Greed (alternative.me) is keyless.
+    fred_api_key: str = Field(default="", alias="FRED_API_KEY")
+    finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
     # CoinDesk Data API (formerly CryptoCompare) — primary crypto data source:
     # spot/index prices, OHLCV history, top-by-market-cap, and derivatives
     # (funding rate, open interest). https://developers.coindesk.com
