@@ -8,6 +8,10 @@
   "upgradeDesc": "Sınırsız koçluk, gelişmiş ajanlar ve akıllı uyarılar.",
   "perMonth": "/ay",
   "starting": "Ödeme sayfasına yönlendiriliyorsun…",
+  "payments": {
+    "secure": "iyzico ile güvenli ödeme",
+    "cards": "Visa & Mastercard kabul edilir"
+  },
   "return": {
     "verifying": "Ödemen doğrulanıyor…",
     "success": "Artık Pro'dasın — aramıza hoş geldin!",

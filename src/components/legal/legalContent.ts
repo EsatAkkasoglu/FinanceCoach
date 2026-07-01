@@ -9,7 +9,7 @@
  */
 import type { SupportedLanguage } from "@/lib/routing";
 
-export type LegalSlug = "privacy" | "terms" | "disclaimer";
+export type LegalSlug = "privacy" | "terms" | "disclaimer" | "refund";
 
 export interface LegalSection {
   heading: string;
@@ -174,6 +174,54 @@ const EN: Bundle = {
       },
     ],
   },
+  refund: {
+    title: "Delivery & Refund Policy",
+    updated: `Last updated: ${EFFECTIVE}`,
+    draftNote:
+      "Draft template — a distance-sales / delivery & refund notice for the payment provider. Fill in the operator's legal details and have a lawyer review before launch.",
+    sections: [
+      {
+        heading: "What you're buying",
+        body: [
+          `${COMPANY} Pro is a digital subscription that unlocks advanced features of the ${COMPANY} software service (a "digital product / virtual service"). There is no physical product and nothing is shipped.`,
+          "The seller / service operator is [REGISTERED TRADE NAME / SOLE PROPRIETOR], [ADDRESS], [MERSIS / TAX NO]. Payments are collected through iyzico, an authorized payment institution; card data is handled by iyzico and is never stored on our servers.",
+        ],
+      },
+      {
+        heading: "Price & billing",
+        body: [
+          "The Pro plan is billed on a recurring monthly basis at the price shown on the pricing page (VAT included where applicable). We accept Visa and Mastercard credit/debit cards via iyzico.",
+          "Your subscription renews automatically each period until you cancel. The price in effect at the time of each renewal applies.",
+        ],
+      },
+      {
+        heading: "Delivery",
+        body: [
+          "Delivery is electronic and immediate: once your payment is approved, your account is upgraded to Pro right away and the features become usable within the app. There is no shipment and therefore no delivery fee or delivery time beyond this instant activation.",
+          `If your account is not upgraded within a few minutes of a successful payment, contact us at ${CONTACT_EMAIL} and we will resolve it or refund the charge.`,
+        ],
+      },
+      {
+        heading: "Right of withdrawal & refunds",
+        body: [
+          "Because Pro is digital content that starts being delivered electronically as soon as your payment is approved, the statutory right of withdrawal may not apply once you begin using it (Distance Contracts Regulation, Art. 15/1-ğ). Even so, we offer a goodwill refund: if you request a refund within 14 days of a charge and have not made substantial use of Pro features in that period, we will refund that payment.",
+          "Refunds are issued to the original card via iyzico and typically appear within 1–10 business days depending on your bank.",
+        ],
+      },
+      {
+        heading: "Cancellation",
+        body: [
+          "You can cancel at any time from Settings, or by emailing us. Cancellation stops future renewals; your Pro access continues until the end of the period you already paid for. We do not pro-rate partial periods except under the goodwill refund above.",
+        ],
+      },
+      {
+        heading: "How to reach us",
+        body: [
+          `For any delivery, cancellation, or refund request, contact ${CONTACT_EMAIL} with the email on your account and the approximate date of the charge.`,
+        ],
+      },
+    ],
+  },
 };
 
 const TR: Bundle = {
@@ -318,6 +366,54 @@ const TR: Bundle = {
       },
     ],
   },
+  refund: {
+    title: "Teslimat & İade Şartları",
+    updated: `Son güncelleme: ${EFFECTIVE}`,
+    draftNote:
+      "Taslak şablon — ödeme sağlayıcısı için mesafeli satış / teslimat ve iade bilgilendirmesi. İşletmecinin resmi bilgilerini doldur ve yayına almadan önce bir avukata inceletin.",
+    sections: [
+      {
+        heading: "Ne satın alıyorsun",
+        body: [
+          `${COMPANY} Pro, ${COMPANY} yazılım hizmetinin gelişmiş özelliklerini açan dijital bir aboneliktir ("dijital ürün / sanal hizmet"). Fiziksel bir ürün yoktur ve hiçbir kargo gönderimi yapılmaz.`,
+          "Satıcı / hizmet işletmecisi [RESMİ UNVAN / ŞAHIS ŞİRKETİ], [ADRES], [MERSİS / VERGİ NO]'dur. Ödemeler, yetkili ödeme kuruluşu iyzico üzerinden tahsil edilir; kart bilgilerin iyzico tarafından işlenir ve sunucularımızda saklanmaz.",
+        ],
+      },
+      {
+        heading: "Ücret & faturalandırma",
+        body: [
+          "Pro planı, fiyatlandırma sayfasında gösterilen bedel üzerinden aylık olarak tekrarlayan şekilde faturalandırılır (uygulanabilir olduğu yerde KDV dâhil). iyzico aracılığıyla Visa ve Mastercard kredi/banka kartlarını kabul ediyoruz.",
+          "Aboneliğin, sen iptal edene kadar her dönem otomatik olarak yenilenir. Her yenilemede o an geçerli olan fiyat uygulanır.",
+        ],
+      },
+      {
+        heading: "Teslimat",
+        body: [
+          "Teslimat elektroniktir ve anında yapılır: ödemen onaylandığı anda hesabın Pro'ya yükseltilir ve özellikler uygulama içinde hemen kullanılabilir hâle gelir. Fiziksel gönderim olmadığından bu anlık aktivasyon dışında bir teslimat ücreti veya süresi yoktur.",
+          `Başarılı bir ödemeden birkaç dakika sonra hesabın yükseltilmezse ${CONTACT_EMAIL} adresinden bize ulaş; sorunu çözer veya ücreti iade ederiz.`,
+        ],
+      },
+      {
+        heading: "Cayma hakkı & iade",
+        body: [
+          "Pro, ödemen onaylanır onaylanmaz elektronik olarak teslim edilmeye başlanan dijital içerik olduğundan, kullanmaya başladıktan sonra yasal cayma hakkı uygulanmayabilir (Mesafeli Sözleşmeler Yönetmeliği m.15/1-ğ). Buna rağmen bir iyi niyet iadesi sunuyoruz: bir tahsilattan itibaren 14 gün içinde iade talep edersen ve bu sürede Pro özelliklerini esaslı biçimde kullanmadıysan, o ödemeyi iade ederiz.",
+          "İadeler, iyzico üzerinden ödemenin yapıldığı karta yapılır ve bankana bağlı olarak genellikle 1–10 iş günü içinde hesabına yansır.",
+        ],
+      },
+      {
+        heading: "İptal",
+        body: [
+          "Ayarlar'dan ya da bize e-posta göndererek istediğin an iptal edebilirsin. İptal, gelecekteki yenilemeleri durdurur; zaten ödediğin dönemin sonuna kadar Pro erişimin devam eder. Yukarıdaki iyi niyet iadesi dışında, kısmi dönemler için orantılı geri ödeme yapılmaz.",
+        ],
+      },
+      {
+        heading: "Bize ulaş",
+        body: [
+          `Her türlü teslimat, iptal veya iade talebi için hesabındaki e-posta ve tahsilatın yaklaşık tarihiyle birlikte ${CONTACT_EMAIL} adresinden bize ulaş.`,
+        ],
+      },
+    ],
+  },
 };
 
 // Registry keyed by language. To add a language later, translate a Bundle and
@@ -329,4 +425,4 @@ export function getLegalDoc(lang: SupportedLanguage, slug: LegalSlug): LegalDoc 
   return bundle[slug];
 }
 
-export const LEGAL_SLUGS: LegalSlug[] = ["privacy", "terms", "disclaimer"];
+export const LEGAL_SLUGS: LegalSlug[] = ["privacy", "terms", "disclaimer", "refund"];

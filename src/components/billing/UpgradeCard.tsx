@@ -6,6 +6,7 @@ import { Sparkles, Loader2, Check } from "lucide-react";
 
 import { getBillingPlans, startCheckout, type BillingPlan } from "@/lib/api";
 import { getLanguageFromPath, buildLocalizedPath } from "@/lib/routing";
+import { PaymentBadges } from "./PaymentBadges";
 
 export function UpgradeCard() {
   const { t } = useTranslation("billing");
@@ -79,6 +80,7 @@ export function UpgradeCard() {
           </button>
         )}
       </div>
+      {!isPro && <PaymentBadges className="mt-4 border-t border-accent/15 pt-4" />}
     </div>
   );
 }

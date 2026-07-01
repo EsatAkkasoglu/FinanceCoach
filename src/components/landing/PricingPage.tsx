@@ -75,6 +75,9 @@ export function PricingPage() {
             <button onClick={() => go("/legal/terms")} className="transition hover:text-content">
               {lang === "tr" ? "Kullanım Koşulları" : "Terms"}
             </button>
+            <button onClick={() => go("/legal/refund")} className="transition hover:text-content">
+              {lang === "tr" ? "Teslimat & İade" : "Delivery & Refund"}
+            </button>
             <button onClick={() => go("/legal/disclaimer")} className="transition hover:text-content">
               {lang === "tr" ? "Sorumluluk Reddi" : "Disclaimer"}
             </button>

@@ -8,6 +8,10 @@
   "upgradeDesc": "Unlimited coaching, advanced agents, and smart alerts.",
   "perMonth": "/mo",
   "starting": "Redirecting to checkout…",
+  "payments": {
+    "secure": "Secure payment via iyzico",
+    "cards": "We accept Visa & Mastercard"
+  },
   "return": {
     "verifying": "Confirming your payment…",
     "success": "You're on Pro now — welcome aboard!",

@@ -21,12 +21,22 @@ const CHROME: Partial<Record<SupportedLanguage, Chrome>> = {
   en: {
     back: "Back",
     eyebrow: "Legal",
-    nav: { privacy: "Privacy & KVKK", terms: "Terms", disclaimer: "Disclaimer" },
+    nav: {
+      privacy: "Privacy & KVKK",
+      terms: "Terms",
+      disclaimer: "Disclaimer",
+      refund: "Delivery & Refund",
+    },
   },
   tr: {
     back: "Geri",
     eyebrow: "Yasal",
-    nav: { privacy: "Gizlilik & KVKK", terms: "Koşullar", disclaimer: "Sorumluluk Reddi" },
+    nav: {
+      privacy: "Gizlilik & KVKK",
+      terms: "Koşullar",
+      disclaimer: "Sorumluluk Reddi",
+      refund: "Teslimat & İade",
+    },
   },
 };
 
