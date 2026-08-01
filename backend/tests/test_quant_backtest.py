@@ -13,7 +13,6 @@ import numpy as np
 import pytest
 
 from app.quant.backtest import (
-    trial_variance,
     PARAM_GRIDS,
     Costs,
     align_positions,
@@ -23,6 +22,7 @@ from app.quant.backtest import (
     run_backtest,
     sma_series,
     summarize,
+    trial_variance,
     walk_forward,
 )
 from app.quant.data import to_returns

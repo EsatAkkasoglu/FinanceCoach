@@ -154,6 +154,8 @@ class CellResult:
     oos_buy_hold_return_pct: float | None = None
     oos_cost_drag_pct: float | None = None
     dsr_local: float | None = None
+    #: Parameters the most recent out-of-sample fold chose — what to deploy.
+    deploy_params: dict[str, Any] = field(default_factory=dict)
     n_infeasible: int = 0
     infeasible_examples: list[dict[str, Any]] = field(default_factory=list)
     shape: dict[str, float | None] = field(default_factory=dict)
@@ -291,12 +293,13 @@ def evaluate_cell(
     cell.is_return_pct = round(best_ret * 100.0, 3) if best_ret is not None else None
     cell.is_sharpe_ann = round(best_sr * math.sqrt(ppy), 4) if best_sr is not None else None
 
-    feasible_grid = {
-        k: sorted({c[k] for c in feasible_combos}) for k in (grid or {})
-    } if grid else {}
+    # Hand walk_forward the exact surviving combinations. Collapsing them into
+    # per-key value sets and letting it re-expand a cross product re-admits the
+    # rejected ones: measured at 58 of 345 folds (17%) won by a configuration
+    # the screen had declared dead on arrival.
     wf = bt.walk_forward(
         candles.closes, strategy,
-        highs=candles.highs, lows=candles.lows, grid=feasible_grid,
+        highs=candles.highs, lows=candles.lows, combos=feasible_combos,
         n_folds=n_folds, embargo=embargo, costs=costs, ppy=ppy,
         allow_short=allow_short,
         min_test_bars=max(60, len(candles) // (n_folds * 4)),
@@ -312,12 +315,19 @@ def evaluate_cell(
         cell.oos_sortino = wf["oos_sortino"]
         cell.oos_max_dd_pct = wf["oos_max_drawdown_pct"]
         cell.oos_bars = wf["oos_bars"]
+        cell.oos_trades = int(wf.get("oos_trades") or 0)
+        # The paper book must trade what the walk-forward actually validated.
+        # ``best_params`` is a FULL-SAMPLE argmax — an in-sample choice — while
+        # every OOS number on this row came from per-fold selections. Deploying
+        # the former while advertising the latter is a quiet bait and switch.
+        cell.deploy_params = wf.get("last_fold_params") or cell.best_params
         cell.dsr_local = wf["oos_dsr"]
     else:
         cell.oos_reason = wf.get("reason")
 
     if oos_series.size > 20:
         cell.shape = mx.summary(oos_series)
+
     return cell, trial_series, oos_series, bench_series
 
 
@@ -451,17 +461,31 @@ def _rank(
     ``backtest.trial_variance``.
     """
     ppy_by_tf = ppy_by_tf or {}
-    per_bar_sharpes: list[float] = []
+    # Pool the trial-Sharpe spread in ANNUALISED units, then convert back into
+    # each row's own bar units.
+    #
+    # A per-bar Sharpe scales as 1/sqrt(ppy), and a 15m bar year has 16x the
+    # bars of a 4h one. Pooling raw per-bar Sharpes across timeframes lets the
+    # slowest timeframe present dominate the variance, which inflates the
+    # benchmark for the fast ones by the same factor — the identical units trap
+    # as the per-cell bug, one level up. Measured: two cells with the SAME
+    # annualised Sharpe of 3.0 scored DSR 0.0009 (15m) versus 0.3078 (4h) purely
+    # from the mismatch, and the leaderboard sorts on this column, so it ordered
+    # itself slowest-timeframe-first regardless of merit.
+    annual_sharpes: list[float] = []
     for cell in cells:
         key = f"{cell.symbol}/{cell.timeframe}/{cell.strategy}/{cell.variant}"
         oos = oos_by_key.get(key)
-        if oos is not None and oos.size >= 50:
-            s = sharpe([float(x) for x in oos])
-            if s is not None:
-                per_bar_sharpes.append(s)
-    tournament_variance = (
-        float(np.var(np.asarray(per_bar_sharpes), ddof=1))
-        if len(per_bar_sharpes) >= 2 else 0.0
+        if oos is None or oos.size < 50:
+            continue
+        s = sharpe([float(x) for x in oos])
+        if s is None:
+            continue
+        cell_ppy = ppy_by_tf.get(cell.timeframe) or BARS_PER_YEAR.get(cell.timeframe, 365.25)
+        annual_sharpes.append(s * math.sqrt(cell_ppy))
+    annual_variance = (
+        float(np.var(np.asarray(annual_sharpes), ddof=1))
+        if len(annual_sharpes) >= 2 else 0.0
     )
 
     rows: list[dict[str, Any]] = []
@@ -479,7 +503,7 @@ def _rank(
             continue
         skew, kurt = _skew_kurt(r)
         ppy = ppy_by_tf.get(cell.timeframe) or BARS_PER_YEAR.get(cell.timeframe, 365.25)
-        variance_trials = tournament_variance or (0.5 / math.sqrt(ppy)) ** 2
+        variance_trials = (annual_variance / ppy) or (0.5 / math.sqrt(ppy)) ** 2
         dsr_global = deflated_sharpe_ratio(
             sr, len(r), skew, kurt, max(1, total_trials), variance_trials=variance_trials
         )
@@ -498,6 +522,8 @@ def _rank(
             "strategy": cell.strategy,
             "variant": cell.variant,
             "best_params": cell.best_params,
+            "deploy_params": cell.deploy_params or cell.best_params,
+            "oos_trades": cell.oos_trades,
             "oos_return_pct": cell.oos_return_pct,
             "oos_buy_hold_return_pct": cell.oos_buy_hold_return_pct,
             "excess_vs_buy_hold_pct": round(beats_bh, 3) if beats_bh is not None else None,

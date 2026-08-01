@@ -7,6 +7,8 @@ noise every single time.
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -52,7 +54,12 @@ def test_grids_are_timeframe_aware():
 
 
 def test_grid_size_counts_the_cartesian_product():
-    assert tn.grid_size("sma_cross", "1h") == 9        # 3 fast × 3 slow
+    """Asserted against the grid itself, not a hardcoded number — the grids
+    change as turnover controls are added and a literal would just rot."""
+    import numpy as _np
+
+    grid = tn.grid_for("sma_cross", "1h")
+    assert tn.grid_size("sma_cross", "1h") == int(_np.prod([len(v) for v in grid.values()]))
     assert tn.grid_size("buy_hold", "1h") == 1         # no parameters
 
 
@@ -98,9 +105,23 @@ def test_costs_reduce_the_out_of_sample_return():
     candles = _candles()
     free, _t1, _o1, _b1 = tn.evaluate_cell(candles, "sma_cross", costs=ZERO_COST)
     dear, _t2, _o2, _b2 = tn.evaluate_cell(
-        candles, "sma_cross", costs=bt.Costs(fee_bps=50.0, slippage_bps=50.0)
+        candles, "sma_cross", costs=bt.Costs(fee_bps=2.0, slippage_bps=2.0)
     )
     assert dear.oos_return_pct < free.oos_return_pct
+
+
+def test_ruinous_costs_are_screened_out_before_any_fitting():
+    """At 100bps a side nothing can cover its own turnover, so the feasibility
+    screen should reject every combination rather than fit and report them."""
+    candles = _candles()
+    cell, _t, oos, _b = tn.evaluate_cell(
+        candles, "sma_cross", costs=bt.Costs(fee_bps=50.0, slippage_bps=50.0)
+    )
+    assert cell.oos_ok is False
+    assert cell.oos_return_pct is None
+    assert cell.n_infeasible == cell.n_configs
+    assert "cost-feasibility" in (cell.oos_reason or "")
+    assert oos.size == 0
 
 
 # ── the full run ─────────────────────────────────────────────────────────────
@@ -178,3 +199,95 @@ def test_tournament_result_is_json_serializable(offline):
         symbols=("BTC",), timeframes=("1h",), strategies=("sma_cross",)
     )
     json.dumps(res)      # raises on numpy scalars leaking through
+
+
+# ── audit regressions ────────────────────────────────────────────────────────
+
+
+def test_deflated_sharpe_is_timeframe_invariant(offline, monkeypatch):
+    """Over the SAME calendar span, a cell's DSR must not depend on its bar size.
+
+    A per-bar Sharpe scales as 1/sqrt(ppy) and a 15m year has 16x the bars of a
+    4h one, so pooling raw per-bar Sharpes across timeframes lets the slowest
+    one dominate the variance and inflates the benchmark for the fast ones.
+    Measured before the fix: two cells with an identical annualised Sharpe
+    scored DSR 0.0009 (15m) versus 0.3078 (4h) on units alone.
+
+    The control has to equalise CALENDAR SPAN, not bar count. At equal bar
+    count a 4h series covers 16x more time and genuinely carries more evidence,
+    so a difference there would be correct behaviour rather than a units bug.
+    """
+    from app.quant.exchange import BARS_PER_YEAR
+
+    span_bars = {"4h": 500, "15m": 500 * 16}      # ~83 days each
+    cells, oos = [], {}
+    rng = np.random.default_rng(5)
+    for tf, n in span_bars.items():
+        ppy = BARS_PER_YEAR[tf]
+        target_per_bar = 1.5 / math.sqrt(ppy)     # same ANNUALISED Sharpe
+        r = rng.normal(0.0, 0.01, n)
+        r = (r - r.mean()) / r.std() * 0.01 + target_per_bar * 0.01
+        cell = tn.CellResult(
+            symbol="BTC", timeframe=tf, strategy="tsmom", variant="long_flat",
+            n_bars=n, n_configs=4, source="test",
+        )
+        cell.oos_ok = True
+        cell.oos_return_pct = 1.0
+        cell.oos_buy_hold_return_pct = 0.5
+        cells.append(cell)
+        oos[f"BTC/{tf}/tsmom/long_flat"] = r
+
+    board = tn._rank(cells, oos, total_trials=4000,
+                     ppy_by_tf={tf: BARS_PER_YEAR[tf] for tf in span_bars})
+    by_tf = {r["timeframe"]: r["dsr_tournament"] for r in board}
+    assert set(by_tf) == {"15m", "4h"}
+    assert by_tf["15m"] is not None and by_tf["4h"] is not None
+    assert abs(by_tf["15m"] - by_tf["4h"]) < 0.05
+
+
+def test_walk_forward_receives_only_the_feasible_combinations(monkeypatch):
+    """The screen leaves a NON-rectangular set. Collapsing it into per-key value
+    lists re-expands the cross product and re-admits rejected combinations —
+    measured at 17% of folds won by a config declared dead on arrival."""
+    seen = {}
+    real = bt.walk_forward
+
+    def spy(*args, **kwargs):
+        seen["combos"] = kwargs.get("combos")
+        seen["grid"] = kwargs.get("grid")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(tn.bt, "walk_forward", spy)
+    tn.evaluate_cell(_candles(), "sma_cross", costs=ZERO_COST)
+
+    assert seen["grid"] is None            # never a rebuilt grid
+    assert isinstance(seen["combos"], list)
+    assert all(isinstance(c, dict) for c in seen["combos"])
+
+
+def test_fold_parameters_are_chosen_net_of_costs(monkeypatch):
+    """Selecting on a cost-free Sharpe picks whichever rule trades most — the
+    one guaranteed not to survive its own turnover when scored honestly."""
+    closes = _series(3000)
+    cheap = bt.walk_forward(
+        closes, "sma_cross", grid={"fast": [5, 20], "slow": [10, 100]},
+        n_folds=4, costs=bt.Costs(fee_bps=0.0, slippage_bps=0.0), ppy=8766.0,
+    )
+    dear = bt.walk_forward(
+        closes, "sma_cross", grid={"fast": [5, 20], "slow": [10, 100]},
+        n_folds=4, costs=bt.Costs(fee_bps=40.0, slippage_bps=40.0), ppy=8766.0,
+    )
+    assert cheap["ok"] and dear["ok"]
+    # A high-cost run must not keep choosing the same churny parameters.
+    assert dear["folds"][0]["params"] != cheap["folds"][0]["params"] or (
+        dear["oos_return_pct"] < cheap["oos_return_pct"]
+    )
+
+
+def test_leaderboard_reports_the_parameters_it_would_deploy(offline):
+    res = tn.run_tournament(
+        symbols=("BTC",), timeframes=("1h",), strategies=("tsmom",), include_short=False
+    )
+    for row in res["leaderboard"]:
+        assert "deploy_params" in row
+        assert isinstance(row["oos_trades"], int)

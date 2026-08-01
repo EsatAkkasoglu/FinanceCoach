@@ -21,7 +21,6 @@ from app.quant.metrics import (
     ulcer_performance_index,
 )
 
-
 # ── shape metrics ────────────────────────────────────────────────────────────
 
 

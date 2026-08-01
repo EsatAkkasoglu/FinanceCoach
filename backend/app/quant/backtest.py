@@ -562,7 +562,10 @@ def run_backtest(
     )
 
 
-def summarize(result: BacktestResult, *, ppy: float, n_trials: int = 1) -> dict[str, Any]:
+def summarize(
+    result: BacktestResult, *, ppy: float, n_trials: int = 1,
+    variance_trials: float | None = None,
+) -> dict[str, Any]:
     """Risk-adjusted summary, computed by ``app.eval.scorecard`` — not re-derived.
 
     ``sharpe`` is per-bar (the form PSR/DSR are defined on);
@@ -604,7 +607,16 @@ def summarize(result: BacktestResult, *, ppy: float, n_trials: int = 1) -> dict[
         "win_rate": _r(sum(1 for x in r if x > 0) / len(r)),
         "psr": _r(probabilistic_sharpe_ratio(sr, len(r), skew, kurt)) if sr is not None else None,
         "dsr": (
-            _r(deflated_sharpe_ratio(sr, len(r), skew, kurt, max(1, n_trials)))
+            _r(deflated_sharpe_ratio(
+                sr, len(r), skew, kurt, max(1, n_trials),
+                # Same units trap as walk_forward: the library default of 1.0 is
+                # unit variance of ANNUAL Sharpes and pins DSR at 0.0 when fed a
+                # per-bar one.
+                variance_trials=(
+                    variance_trials if variance_trials is not None
+                    else trial_variance([], ppy)
+                ),
+            ))
             if sr is not None else None
         ),
         "n_trials": max(1, n_trials),
@@ -660,6 +672,7 @@ def walk_forward(
     highs: np.ndarray | None = None,
     lows: np.ndarray | None = None,
     grid: dict[str, list[Any]] | None = None,
+    combos: list[dict[str, Any]] | None = None,
     n_folds: int = 4,
     embargo: int = 5,
     costs: Costs | None = None,
@@ -682,7 +695,11 @@ def walk_forward(
     """
     costs = costs or Costs()
     grid = grid if grid is not None else PARAM_GRIDS.get(strategy, {})
-    combos = _grid_combos(grid)
+    # An explicit combo list is NOT the same as a grid. A screen that rejects
+    # individual combinations leaves a non-rectangular set, and collapsing it
+    # back into per-key value lists re-expands the full cross product — quietly
+    # re-admitting the very combinations that were rejected.
+    combos = list(combos) if combos is not None else _grid_combos(grid)
     c = np.asarray(closes, dtype=float)
 
     # Positions are causal, so computing them once on the full path and slicing
@@ -719,6 +736,8 @@ def walk_forward(
     #: Deflated Sharpe needs — see trial_variance() for why the default of 1.0
     #: silently makes DSR identically zero.
     trial_sharpes: list[float] = []
+    oos_trades = 0
+    last_params: dict[str, Any] | None = None
 
     for f in range(1, n_folds + 1):
         train_end = int(bounds[f])
@@ -729,8 +748,18 @@ def walk_forward(
 
         best_params, best_sr = None, None
         for params, held, warmup in precomputed:
-            seg = [float(x) for x in (held[warmup:train_end] * asset_r[warmup:train_end])]
-            s = sharpe(seg)
+            # Score the training window NET of costs. Selecting on a cost-free
+            # Sharpe and then reporting the net result picks whichever rule
+            # trades most — precisely the rule that cannot survive its own
+            # turnover once it is scored honestly.
+            hs = held[warmup:train_end]
+            prev_hs = np.concatenate(([0.0], hs[:-1])) if hs.size else hs
+            seg_net = (
+                hs * asset_r[warmup:train_end]
+                - np.abs(hs - prev_hs) * costs.per_turn
+                - np.abs(hs) * costs.per_bar_carry
+            )
+            s = sharpe([float(x) for x in seg_net])
             if s is None:
                 continue
             trial_sharpes.append(s)
@@ -746,6 +775,8 @@ def walk_forward(
         traded = np.abs(seg_pos - prev)
         net = seg_pos * seg_ret - traded * costs.per_turn - np.abs(seg_pos) * costs.per_bar_carry
         oos.extend(float(x) for x in net)
+        oos_trades += int(np.count_nonzero(traded > 1e-12))
+        last_params = best_params
         # Buy & hold over the very same test bars. Without this, "excess return"
         # would compare an out-of-sample record against a full-sample benchmark —
         # two different windows, so the difference is mostly just market drift.
@@ -789,6 +820,12 @@ def walk_forward(
         ),
         "trial_sharpe_variance": round(trial_variance(trial_sharpes, ppy), 12),
         "folds": fold_rows,
+        "oos_trades": oos_trades,
+        # The parameters the most recent fold selected on data before its own
+        # test window. This — not a full-sample argmax — is what a live book
+        # would be running, and it is the only choice whose forward result the
+        # walk-forward record actually speaks to.
+        "last_fold_params": last_params,
         "benchmark_return_pct": round(float(np.prod(1.0 + np.asarray(bench)) - 1.0) * 100.0, 3),
         "excess_vs_buy_hold_pct": round(
             (float(np.prod(1.0 + np.asarray(oos))) - float(np.prod(1.0 + np.asarray(bench)))) * 100.0, 3

@@ -214,7 +214,9 @@ def select_allocations(result: dict[str, Any], n: int = N_ALLOCATIONS) -> list[A
             timeframe=row["timeframe"],
             strategy=row["strategy"],
             variant=row.get("variant", "long_short"),
-            params=row.get("best_params") or {},
+            # Deploy what the last out-of-sample fold selected, not the
+            # full-sample argmax the leaderboard also carries.
+            params=row.get("deploy_params") or row.get("best_params") or {},
             weight=weight,
             selected_on={
                 "oos_sharpe_ann": row["oos_sharpe_ann"],

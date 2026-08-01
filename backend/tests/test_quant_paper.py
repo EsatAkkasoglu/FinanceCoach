@@ -236,3 +236,31 @@ def test_performance_counts_cycles_where_the_bar_moved(ledger, feed):
     assert out["ok"] is True
     assert out["n_cycles"] == 4
     assert out["n_duplicate_bar_cycles"] == 1
+
+
+def test_a_dropped_allocation_is_closed_and_charged(ledger, feed):
+    """A cell that falls off the leaderboard must be flattened, not orphaned.
+
+    Left in place it stops being marked (P&L silently freezes) and never pays
+    its exit cost, so the book diverges from any real one that had to actually
+    close the trade.
+    """
+    btc = Allocation("BTC", "15m", "sma_cross", "long_flat", {"fast": 10, "slow": 50}, 1.0)
+    paper.run_cycle([btc], costs=REAL_COST)
+    fees_after_open = paper.load_state()["fees_paid"]
+    assert paper.load_state()["positions"]
+
+    eth = Allocation("ETH", "15m", "sma_cross", "long_flat", {"fast": 10, "slow": 50}, 1.0)
+    row = paper.run_cycle([eth], costs=REAL_COST)          # BTC dropped
+
+    closed = [t for t in row["trades"] if t.get("reason") == "dropped from allocation"]
+    assert len(closed) == 1
+    assert closed[0]["key"].startswith("BTC/")
+    assert closed[0]["to_notional"] == 0.0
+
+    state = paper.load_state()
+    assert not any(k.startswith("BTC/") for k in state["positions"])
+    assert state["fees_paid"] > fees_after_open           # the exit was paid for
+    assert state["equity"] == pytest.approx(
+        state["start_equity"] + state["realised_pnl"] - state["fees_paid"]
+    )

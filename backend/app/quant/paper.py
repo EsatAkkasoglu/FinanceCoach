@@ -225,6 +225,28 @@ def run_cycle(
         pos["symbol"] = alloc.symbol
         positions[alloc.key] = pos
 
+    # Close anything the new allocation set dropped. A position whose cell fell
+    # off the leaderboard was previously left in `positions` forever: never
+    # re-marked (so its P&L silently stopped accruing) and never closed (so its
+    # exit cost was never paid). The book would quietly diverge from any real
+    # one that had to actually flatten the trade.
+    live_keys = {a.key for a in allocations}
+    for key in list(positions):
+        if key in live_keys:
+            continue
+        pos = positions[key]
+        notional = float(pos.get("notional") or 0.0)
+        if abs(notional) > 1e-6:
+            fee = abs(notional) * per_turn
+            state["fees_paid"] = float(state.get("fees_paid", 0.0)) + fee
+            state["n_trades"] = int(state.get("n_trades", 0)) + 1
+            trades.append({
+                "key": key, "price": pos.get("mark_price"),
+                "from_notional": round(notional, 2), "to_notional": 0.0,
+                "fee": round(fee, 4), "reason": "dropped from allocation",
+            })
+        positions.pop(key)
+
     unrealised = step_pnl
     state["realised_pnl"] = float(state.get("realised_pnl", 0.0)) + unrealised
     state["equity"] = (
