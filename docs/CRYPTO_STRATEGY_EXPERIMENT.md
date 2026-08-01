@@ -122,7 +122,12 @@ dışında yarıdan fazla kez medyanın altına düşüyor.
 Kaydedilmeye değer çünkü kolay bir yanlış çıkarım: "tablo her koşuda aynı çıkıyor,
 demek ki sağlam." Değil — sadece deterministik.
 
-## Zaman dilimi karşılaştırması (nihai koşu)
+## Zaman dilimi karşılaştırması — HİZALANMAMIŞ koşu (aşağıda düzeltildi)
+
+> Bu bölüm kayıt için duruyor. Buradaki sıralama **geçersizdir**: her zaman dilimi
+> farklı bir takvim aralığını ölçüyor. Düzeltilmiş hâli için
+> [Takvim hizalaması](#takvim-hizalaması--kusuru-düzeltmek) bölümüne bak.
+
 
 8 coin × 4 zaman dilimi × 8 strateji × long-flat/long-short = **512 hücre**.
 Fizibilite taraması 6616 parametre setinin 2264'ünü daha fitlenmeden eledi;
@@ -166,10 +171,7 @@ denk geliyor:
 Yani "4 saatlik daha iyi" ile "4 saatliğin kapsadığı 2.5 yıl daha iyiydi" bu
 düzenekte **ayrıştırılamaz**. Zaman dilimleri farklı rejimlerde ölçülüyor.
 Temiz bir karşılaştırma dört dilimi de aynı takvim aralığına sabitlemeyi
-gerektirirdi; bu koşuda yapılmadı, dolayısıyla yukarıdaki sıralama bir zaman
-dilimi sıralaması değil, **zaman dilimi + pencere** sıralamasıdır. Deneyin
-ilan edilen sorusuna ("hangi periyot kâr ettiriyor") verilebilecek dürüst cevap
-budur: bu veriyle ayrıştırılamadı.
+gerektirir — bir sonraki bölüm tam olarak bunu yapıyor.
 
 Strateji ailesi bazında da net bir kazanan yok — medyan Sharpe'lar macd +0.23'ten
 bollinger_reversion −0.56'ya kadar sıralanıyor ve hiçbiri istatistiksel olarak
@@ -190,6 +192,121 @@ Hiçbir hücre üçünü birden geçmiyor:
 - **PBO medyanı 0.575** (32 coin×tf bloğunun 19'unda >0.5). Örneklem-içi kazanan,
   örneklem dışında yarıdan fazla kez medyanın altına düşüyor. Tek istisna 4
   saatlik: medyan PBO 0.490 — sınırda, ama diğer üçünden belirgin şekilde düşük.
+
+## Takvim hizalaması — kusuru düzeltmek
+
+`exchange.Candles.window()` + `tournament._align_window()`: turnuva artık önce
+bütün serileri çekiyor, hepsinin kapsadığı **ortak takvim aralığını** hesaplıyor
+(`[max(başlangıç), min(bitiş)]`) ve her seriyi ona kesiyor. Sınırı 15dk verisi
+koyuyor — borsalar o granülerlikte en az geriye gidiyor.
+
+Ortaya çıkan pencere: **2026-03-06 → 2026-08-01, 147,6 gün.** Bar sayıları artık
+yalnızca dilim oranını yansıtıyor: 15dk 14.173 · 30dk 7.087 · 1sa 3.544 · 4sa 886.
+
+### Kontrollü A/B — çünkü aynı hatayı bir kez yaptım
+
+Hizalı koşuda evren de `DEFAULT_SYMBOLS`'e düşmüştü, yani **iki şey birden
+değişmişti**. Daha önce bir değişimi yanlış nedene bağlayıp geri almak zorunda
+kalmıştım; bu yüzden `scripts/ab_alignment.py` iki kolu arka arkaya koşturuyor:
+aynı evren, aynı cache'lenmiş mumlar, aynı kod, tek fark `align_calendar` bayrağı.
+
+| dilim | HİZALI: OOS gün / medSharpe / pozitif / al-tut'u geçen | HİZASIZ: OOS gün / medSharpe / pozitif / al-tut'u geçen |
+|---|---|---|
+| 15dk | 122g · **−0,37** · 4/22 · 14/22 | 136g · −1,17 · 2/24 · 15/24 |
+| 30dk | 119g · −0,91 · 9/54 · 27/54 | 220g · −1,31 · 3/57 · 42/57 |
+| 1sa | 116g · −1,01 · 9/75 · 40/75 | 306g · −1,21 · 3/75 · 67/75 |
+| 4sa | 96g · −0,63 · **40/112** · **86/112** | 806g · **−0,13** · 28/114 · 55/114 |
+| PBO medyanı | 0,587 | 0,496 |
+| hayatta kalan | 0 / 263 | 0 / 270 |
+
+**Bulgu: hizalama zaman dilimi sıralamasını devirir.** Hizasız kolda medyan
+Sharpe'ta en iyi dilim 4 saatlik (−0,13); hizalanınca −0,63'e düşüyor ve en iyi
+dilim 15dk oluyor (−0,37). Yani daha önce raporlanan **"+0,15 medyan Sharpe ile
+4 saatlik tek pozitif dilim" bulgusu bir pencere yan etkisiydi** — dilimin değil,
+4 saatliğin kapsadığı 2,5 yıllık dönemin özelliği. Evren sabit tutulduğu için bu
+sefer nedenin hizalama olduğu kesin.
+
+Ters yönde de bir devrilme var: PBO'da 4 saatlik hizasızken en iyi dilimdi,
+hizalanınca **en kötüsü** (0,754). Sebebi doğrudan: 6000 bardan 886 bara düşüyor,
+az veri = daha çok aşırı uydurma.
+
+### Kalan kusur, dürüstçe
+
+Hizalama takvimi eşitliyor ama **OOS penceresini tam eşitlemiyor**: 122/119/116/96
+gün. Sebep ısınma penceresi — 886 barlık 4 saatlik seride ısınma, 14.173 barlık
+15dk serisine göre çok daha büyük bir oran yiyor. Yayılım 5,9 kattan 1,27 kata
+indi, ama sıfırlanmadı. Bu artık ikinci mertebe bir etki, yine de sıfır değil.
+
+## Bir "edge" çıktı — ve üç kontrol onu öldürdü
+
+Hizalı koşu şimdiye kadarki en güçlü satırı üretti:
+`LINK/15dk/rsi_reversion/long_short` — OOS **+%123,4** (al-tut −%5,8), Sharpe
+**4,46**, maxDD −%19, bootstrap **p=0,002**, yerel DSR 0,891. Turnuva DSR'si
+0,353 (eşik 0,95) zaten "hayır" diyordu ama tek başına o yeterli değil; üç
+bağımsız kontrol yapıldı.
+
+**1. Tek bir vuruştan mı geliyor? Hayır.** En büyük 100 bar, log-getirinin yalnızca
+%12,8'ini taşıyor; en büyük tek barın katkısı **negatif**. 5.775 kazanan / 5.640
+kaybeden bar — bar başına %0,007'lik minik ama dağılmış bir fark.
+
+**2. Genelleşiyor mu? Hayır.** Aynı kural, aynı parametre, aynı pencere, sekiz coin:
+
+| BTC | ETH | SOL | XRP | DOGE | **LINK** | AVAX | ADA |
+|---|---|---|---|---|---|---|---|
+| −9,5% | +3,9% | −11,3% | −5,7% | −5,5% | **+123,4%** | +13,9% | −24,9% |
+
+**3. Mekanizma tutuyor mu? Hayır — ters yönde.** Ortalamaya dönüş kuralının
+çalışması için seride negatif otokorelasyon gerekir. 15dk getirilerinin lag-1
+otokorelasyonu:
+
+| BTC | XRP | SOL | ETH | DOGE | ADA | **LINK** | AVAX |
+|---|---|---|---|---|---|---|---|
+| −0,047 | −0,044 | −0,041 | −0,037 | −0,027 | −0,024 | **−0,021** | −0,010 |
+
+LINK, ortalamaya dönüşü **en zayıf ikinci** seri (4 barlık varyans oranı 0,997 —
+pratikte saf rastgele yürüyüş). En güçlü ortalamaya dönüşe sahip BTC'de aynı kural
+**kaybediyor**. Yani kuralın sömürdüğünü iddia ettiği etki, "çalıştığı" sembolde
+neredeyse yok.
+
+Kesitsel test ve mekanizma testi, DSR'den bağımsız olarak aynı cevabı veriyor:
+bu bir kural değil, 4352 denemenin en şanslısı. **Kaydedilmeye değer çünkü tek
+bir hücreye bakıp "p=0,002, demek ki gerçek" demek çok kolaydı.**
+
+## Kaldıraç — sezginin tersi
+
+Sık sorulan hâliyle: *"15dk'da edge maliyeti karşılamıyorsa, karşılayana kadar
+kaldıraç kullansak?"* `backtest.leverage_scan()` bunu ölçüyor, ve cevap hayır.
+
+Komisyon **notional'ın bps'i** olarak alınır, dolayısıyla kaldıraçla birlikte
+ölçeklenir:
+
+```
+1x:  p·r − |Δp|·c
+Lx:  L·(p·r − |Δp|·c)      ← aynı ifade, L ile çarpılmış
+```
+
+Ortalama da standart sapma da L ile ölçeklendiği için **Sharpe değişmez** ve
+beklenen getirinin işareti değişmez. Gerçek veriyle dört hücrede de dört haneye
+kadar sabit çıktı. Perp'te durum daha kötü: funding de notional'ın bps'i.
+
+Değişen tek şey iflas — ve getiri eğrisi tepe yapıp çöküyor (volatilite
+sürüklenmesi):
+
+| hücre | 1x | en iyi kaldıraç | orada | iflas/tasfiye eşiği |
+|---|---|---|---|---|
+| XRP/15dk | +14,3% | 1,5x | +16,5% | 8,2x |
+| DOGE/30dk | +25,6% | 2,2x | +40,2% | 10,2x |
+| TRX/1sa | +28,4% | 8,5x | +210,9% | >12x |
+| ETH/4sa | +224,6% | 1,5x | +281,2% | **4,5x** |
+
+ETH/4sa: 1x'te +%225 kazandıran **aynı strateji** 5x'te −%99,7, 10x'te 527. barda
+tasfiye. Sinyaller aynı, işlemler aynı.
+
+Tasfiye kontrolü bar içi fitili kullanıyor (long için `low`, short için `high`,
+önceki kapanışa karşı) — kaldıraçlı pozisyonu öldüren şey kapanış değil fitildir,
+ve kapanışa bakan bir motor o barı **kazanç** olarak raporlar. Modellenmeyenler,
+hepsi gerçeği daha kötü yapar: kısmi tasfiye, cross-margin bulaşması, ADL,
+funding sıçraması, tasfiye kaskadının açtığı makas.
 
 ## Kritik değişken: turnover
 
@@ -218,7 +335,14 @@ varyant her zaman ızgarada ve sonuçlar doğrudan karşılaştırılabilir kal�
   olduğu için her birine dilim ayrılır. Tüm slotları en iyi backtest eden zaman
   dilimine yüklemek karşılaştırmayı yok ederdi.
 - Pozisyon sinyal dönene kadar açık kalır — 15dk'lık bir kural 15dk sonra
-  kapanmak zorunda değildir.
+  kapanmak zorunda değildir. **Stop-loss ve take-profit yoktur.** Çıkışın tek
+  koşulu ters sinyaldir (`backtest._carry_forward`). Bu bilinçli: bar-kapanışı
+  motorunda bir barın içinde hem stop hem hedef fiyatına değilmişse hangisinin
+  önce yazıldığı bilinemez, ve backtest'lerin kendini kandırdığı yer tam
+  burasıdır. Bedeli de açık — ETH/4sa hücresinin −%56 drawdown'ı stopsuz
+  çalışmanın faturası. Ölçülen ortalama tutma süreleri: 15dk 2,8 gün, 30dk ve
+  1sa 7,4 gün, 4sa 20 gün. **Zaman dilimi örnekleme frekansıdır, işlem frekansı
+  değil.**
 - Yeniden hedeflemeden **önce** mark-to-market: fiyat hareketi onu fiilen taşıyan
   pozisyona yazılır.
 
@@ -271,13 +395,23 @@ sonuçtu.
 
 Sayılarla:
 
-- 4352 konfigürasyon backtest edildi, 2264'ü daha fitlenmeden maliyet taramasında
-  elendi, 284 hücre değerlendirildi, **0 hücre üç testi birden geçti**.
+- Hizasız koşu: 4352 konfigürasyon backtest edildi, 2264'ü daha fitlenmeden
+  maliyet taramasında elendi, 284 hücre değerlendirildi, **0 hayatta kalan**.
+- Hizalı koşu (147,6 günlük ortak pencere): 4352 konfigürasyon, 263–265 hücre,
+  yine **0 hayatta kalan**. En güçlü satır (LINK/15dk, p=0,002) üç bağımsız
+  kontrolde çöktü.
 - İleri kağıt defter 4.7 saatte 6 gözlemle **−%0,28** yaptı; bunun yarısından
   fazlası tek seferlik açılış maliyeti. Bu sayı hiçbir yöne kanıt değil.
-- "Hangi periyot kâr ettiriyor" sorusu **cevaplanamadı**: zaman dilimleri farklı
-  takvim pencerelerini kapsadığı için sıralama, periyodun kendisinden değil
-  pencereden geliyor olabilir ve bu düzenek ikisini ayıramıyor.
+- **"Hangi periyot kâr ettiriyor" sorusu artık cevaplanabilir hâle geldi ve
+  cevap "hiçbiri".** Ortak pencerede dört dilimin de medyan Sharpe'ı negatif
+  (15dk −0,37 · 30dk −0,91 · 1sa −1,01 · 4sa −0,63). Hizasız koşudaki "4 saatlik
+  pozitif" bulgusu, kontrollü A/B'de pencere yan etkisi olarak çürütüldü.
+- Kaldıraç bir çözüm değil: maliyet notional'ın bps'i olduğu için Sharpe kaldıraca
+  **duyarsız**; değişen tek şey iflas hızı.
+
+Ayakta kalan tek yapısal bulgu **maliyet aritmetiği**: hizalı koşuda 15dk
+hücrelerinin %81'i, 4 saatliğin %12'si daha fitlenmeden eleniyor. Bu pencereye
+de stratejiye de bağlı değil — bölme işlemi.
 
 Deneyin gerçek çıktısı sıralama değil, **düzeneğin kendisi**: sessizce yanlış
 sonuç üreten iki hata (birim uyuşmazlığı yüzünden yapısal olarak 0 çıkan Deflated
@@ -290,10 +424,14 @@ Kendi hipotezlerimden biri de bu süreçte çürütüldü: "liderlik tablosu ko�
 koşuya tamamen değişiyor, seçim gürültü" iddiası kontrollü testte 9/10 kesişimle
 yanlış çıktı; kaynağı benim aradaki kod değişikliklerimdi.
 
-Buradan devam edilecekse sıradaki adım daha fazla parametre taramak değil,
-**karşılaştırmayı düzeltmek**: dört zaman dilimini de aynı takvim aralığına
-sabitlemek, ve ileri testi sinyalin fiilen döndüğü kadar uzun bir pencerede
-çalıştırmak.
+Karşılaştırmayı düzeltmek — dört dilimi aynı takvim aralığına sabitlemek — bu
+turda yapıldı ve manşeti devirdi. Geriye kalan iki açık:
+
+1. **Isınma penceresinin artık etkisi.** Hizalamadan sonra bile OOS aralıkları
+   96–122 gün arasında; 886 barlık 4 saatlik seride ısınma orantısız yer kaplıyor.
+2. **İleri test hâlâ çok kısa.** 6 gözlem hiçbir şey söylemiyor; sinyalin fiilen
+   döndüğü kadar uzun bir pencere gerekiyor — ölçülen tutma sürelerine göre bu
+   günler değil, haftalar demek.
 
 ## Kabul edilen sınırlar
 
@@ -312,6 +450,7 @@ cd backend
 uv run python scripts/run_experiment.py --tournament   # sadece sıralama
 uv run python scripts/run_experiment.py --cycle        # bir adım ilerlet
 uv run python scripts/run_experiment.py --report       # durum
+uv run python scripts/ab_alignment.py                  # hizalı vs hizasız A/B
 ./scripts/experiment_loop.sh 8 900                     # 8 saat, 15dk'da bir
 ```
 
