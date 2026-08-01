@@ -212,6 +212,37 @@ class Candles:
             self.quality,
         )
 
+    def window(self, start_ms: int, end_ms: int) -> Candles:
+        """The bars whose OPEN time falls in ``[start_ms, end_ms]``.
+
+        Exists so several timeframes can be pinned to one calendar span. Without
+        it each timeframe simply takes "the last N bars", which is a different
+        number of DAYS per timeframe — 8000 bars is 84 days at 15m and 938 days
+        at 4h. Comparing those two and calling the difference a *timeframe*
+        effect confounds it with a *regime* effect, and nothing in the result can
+        separate the two afterwards.
+
+        Bounds are inclusive and no interpolation happens: a timeframe with no
+        bar exactly at ``start_ms`` simply begins at its first bar inside the
+        span, which is at most one bar of slack.
+        """
+        if self.ts.size == 0:
+            return self
+        mask = (self.ts >= int(start_ms)) & (self.ts <= int(end_ms))
+        return Candles(
+            self.symbol, self.timeframe, self.source,
+            self.ts[mask], self.opens[mask], self.highs[mask],
+            self.lows[mask], self.closes[mask], self.volumes[mask],
+            self.quality,
+        )
+
+    @property
+    def span_days(self) -> float:
+        """Calendar days actually covered — the number the bar count hides."""
+        if self.ts.size < 2:
+            return 0.0
+        return float(self.ts[-1] - self.ts[0]) / 86_400_000.0
+
 
 # ── raw rows: [ts_ms, o, h, l, c, v] oldest-first, closed bars only ──────────
 

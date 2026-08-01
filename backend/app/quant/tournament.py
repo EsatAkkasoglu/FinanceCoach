@@ -52,8 +52,13 @@ log = logging.getLogger("fincoach.quant.tournament")
 DEFAULT_SYMBOLS = ("BTC", "ETH", "SOL", "XRP", "DOGE", "LINK", "AVAX", "ADA")
 DEFAULT_TIMEFRAMES = ("15m", "30m", "1h", "4h")
 
-#: Deeper history at fast timeframes; 4h is limited by listing age, not by us.
-BARS_WANTED: dict[str, int] = {"15m": 9000, "30m": 9000, "1h": 9000, "4h": 6000}
+#: Deep enough at every timeframe that the common calendar window (see
+#: ``align_calendar``) is set by how far back 15m data reaches, not by an
+#: arbitrary bar budget. 15m is the binding constraint: OKX serves ~14k bars
+#: (~150 days), Binance.US ~30k. The slower timeframes only need enough bars to
+#: cover that same span — 150 days is 7.2k bars at 30m, 3.6k at 1h, 900 at 4h —
+#: and are asked for roughly double so truncation always has slack.
+BARS_WANTED: dict[str, int] = {"15m": 15000, "30m": 12000, "1h": 8000, "4h": 4000}
 
 #: Taker fee + slippage per side, in bps. OKX/Binance spot taker is ~10bps at the
 #: base tier; 5bps of slippage is generous for a small clip in BTC/ETH and thin
@@ -331,6 +336,53 @@ def evaluate_cell(
     return cell, trial_series, oos_series, bench_series
 
 
+def _align_window(
+    series: dict[tuple[str, str], Candles], say: Callable[[str], None]
+) -> dict[str, Any] | None:
+    """The widest calendar span every fetched series covers.
+
+    ``[max(first bar), min(last bar)]`` over every (symbol, timeframe). The
+    shallowest series — in practice 15m, which venues serve least history for —
+    sets the start; the truncation is what makes a timeframe comparison mean
+    anything.
+
+    Returns ``None`` when there is nothing to align or the overlap is empty, in
+    which case the caller runs unaligned rather than producing no result at all.
+    """
+    if not series:
+        return None
+    starts = {k: int(c.ts[0]) for k, c in series.items() if c.ts.size}
+    ends = {k: int(c.ts[-1]) for k, c in series.items() if c.ts.size}
+    if not starts:
+        return None
+    start_ms, end_ms = max(starts.values()), min(ends.values())
+    if end_ms <= start_ms:
+        say("  calendar alignment skipped: the fetched series do not overlap")
+        return None
+
+    binding_start = max(starts, key=lambda k: starts[k])
+    binding_end = min(ends, key=lambda k: ends[k])
+    days = (end_ms - start_ms) / 86_400_000.0
+    say(
+        f"  aligned window: {_iso(start_ms)} → {_iso(end_ms)} ({days:.0f} days); "
+        f"start set by {binding_start[0]}/{binding_start[1]}, "
+        f"end by {binding_end[0]}/{binding_end[1]}"
+    )
+    return {
+        "start_ms": start_ms,
+        "end_ms": end_ms,
+        "start": _iso(start_ms),
+        "end": _iso(end_ms),
+        "days": round(days, 1),
+        "start_set_by": f"{binding_start[0]}/{binding_start[1]}",
+        "end_set_by": f"{binding_end[0]}/{binding_end[1]}",
+    }
+
+
+def _iso(ms: int) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.gmtime(ms / 1000))
+
+
 def run_tournament(
     symbols: tuple[str, ...] = DEFAULT_SYMBOLS,
     timeframes: tuple[str, ...] = DEFAULT_TIMEFRAMES,
@@ -341,12 +393,19 @@ def run_tournament(
     embargo: int = 24,
     use_cache: bool = True,
     include_short: bool = True,
+    align_calendar: bool = True,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Run the full grid and rank what survives.
 
     Every configuration evaluated anywhere in the run counts toward the
     multiple-testing correction applied to the leaderboard.
+
+    With ``align_calendar`` (the default) every series is cut to the one span
+    they all cover, so "15m vs 4h" is a timeframe comparison rather than a
+    comparison of two different years. The first run of this tournament did not
+    do that: 15m was measured over 84 days and 4h over 938, and the resulting
+    ranking could not be attributed to the timeframe at all.
     """
     strategies = strategies or tuple(k for k in bt.SIGNALS if k != "buy_hold")
     # Long/flat cannot win in a downtrend — it can only lose less. Testing the
@@ -366,6 +425,11 @@ def run_tournament(
         if progress:
             progress(msg)
 
+    # ── pass 1: fetch everything before evaluating anything ──────────────────
+    # The two passes exist so a common calendar window can be computed. Fetching
+    # and evaluating in one loop makes that impossible: the span every timeframe
+    # must be cut to is only knowable once the shallowest series is in hand.
+    series: dict[tuple[str, str], Candles] = {}
     for timeframe in timeframes:
         for symbol in symbols:
             key = f"{symbol}/{timeframe}"
@@ -392,6 +456,29 @@ def run_tournament(
                 }
                 _say(f"  {key}: REJECTED ({candles.source}) — {why}")
                 continue
+            series[(symbol, timeframe)] = candles
+
+    window = _align_window(series, _say) if align_calendar else None
+    if window:
+        start_ms, end_ms = window["start_ms"], window["end_ms"]
+        aligned: dict[tuple[str, str], Candles] = {}
+        for (symbol, timeframe), candles in series.items():
+            cut = candles.window(start_ms, end_ms)
+            if len(cut) < _MIN_BARS:
+                fetch_errors.append(
+                    f"{symbol}/{timeframe}: only {len(cut)} bars inside the aligned window"
+                )
+                continue
+            aligned[(symbol, timeframe)] = cut
+        series = aligned
+
+    # ── pass 2: evaluate ─────────────────────────────────────────────────────
+    for timeframe in timeframes:
+        for symbol in symbols:
+            candles = series.get((symbol, timeframe))
+            if candles is None:
+                continue
+            key = f"{symbol}/{timeframe}"
 
             series_for_pbo: list[np.ndarray] = []
             for strategy in strategies:
@@ -415,7 +502,7 @@ def run_tournament(
 
             q = candles.quality
             _say(
-                f"  {key}: {len(candles)} bars from {candles.source}"
+                f"  {key}: {len(candles)} bars ({candles.span_days:.0f}d) from {candles.source}"
                 + (f" (stale {q.stale_fraction:.0%}, range {q.median_range_pct:.3f}%)" if q else "")
             )
 
@@ -435,6 +522,11 @@ def run_tournament(
             "fee_bps": costs.fee_bps,
             "slippage_bps": costs.slippage_bps,
             "round_trip_bps": round((costs.fee_bps + costs.slippage_bps) * 2, 2),
+        },
+        "calendar_window": window,
+        "bars_by_timeframe": {
+            tf: sorted({len(c) for (s, t), c in series.items() if t == tf})
+            for tf in timeframes
         },
         "total_configurations_tested": total_trials,
         "n_cells": len(cells),

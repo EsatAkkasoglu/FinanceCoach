@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -560,6 +560,104 @@ def run_backtest(
         turnover=float(traded.sum()),
         cost_drag=gross_total - net_total,
     )
+
+
+#: Exchange maintenance margin. 0.5% is the usual tier-1 figure for majors on
+#: Binance/OKX perps; thin alts are worse, so this is the optimistic end.
+DEFAULT_MAINTENANCE_MARGIN = 0.005
+
+
+def leverage_scan(
+    closes: np.ndarray,
+    highs: np.ndarray,
+    lows: np.ndarray,
+    raw_positions: np.ndarray,
+    *,
+    costs: Costs,
+    ppy: float,
+    warmup: int = 0,
+    leverages: Sequence[float] = (1.0, 2.0, 3.0, 5.0, 10.0, 20.0),
+    maintenance_margin: float = DEFAULT_MAINTENANCE_MARGIN,
+) -> list[dict[str, Any]]:
+    """What leverage actually does to one strategy — including blowing it up.
+
+    Exists to settle a specific and very common intuition: *"the edge is too
+    small to cover fees at 15m, so lever it up until it clears them."* That
+    reasoning does not work, and the arithmetic is short enough to state.
+
+    Leverage L multiplies the position, and fees are charged in **bps of
+    notional**, so they scale by L too. Per-bar net return goes from
+    ``p·r − |Δp|·c`` to ``L·(p·r − |Δp|·c)``. Both mean and standard deviation
+    scale by L, so the **Sharpe ratio is unchanged** and the sign of the
+    expected return is unchanged. A rule that loses 3bps a bar after costs loses
+    30bps a bar at 10×. Leverage is a magnifier, not a repair — and
+    ``funding_bps_per_bar`` scales with notional as well, so on perps the drag
+    gets strictly worse.
+
+    What leverage does change is **ruin**. This function therefore models the
+    one thing that is not scale-invariant: an intrabar move against the position
+    large enough to consume the margin. The check uses each bar's low (for
+    longs) or high (for shorts) against the previous close, so a wick that
+    liquidates is caught even when the bar closes back in your favour — which is
+    exactly how leveraged positions actually die.
+
+    Liquidation is modelled as total loss of equity, terminating the path.
+    Deliberately *not* modelled, all of which make real leverage worse than this:
+    partial liquidation, cross-margin contagion, auto-deleveraging, funding
+    spikes, and the wider spread a liquidation cascade prints.
+    """
+    c = np.asarray(closes, dtype=float)
+    hi = np.asarray(highs if highs is not None else closes, dtype=float)
+    lo = np.asarray(lows if lows is not None else closes, dtype=float)
+    held = align_positions(raw_positions)
+    asset_r = to_returns(c)
+    if asset_r.size == 0 or held.size != asset_r.size:
+        return []
+
+    start = min(max(0, warmup), max(0, held.size - 1))
+    held, asset_r = held[start:], asset_r[start:]
+    # Worst intrabar excursion from the mark the position was taken at.
+    prev_close = c[start:-1]
+    worst_down = lo[start + 1:] / prev_close - 1.0     # ≤ 0 for a long
+    worst_up = hi[start + 1:] / prev_close - 1.0       # ≥ 0, hurts a short
+    adverse = np.where(held > 0, worst_down, np.where(held < 0, -worst_up, 0.0))
+
+    prev = np.concatenate(([0.0], held[:-1]))
+    traded = np.abs(held - prev)
+    unit_net = held * asset_r - traded * costs.per_turn - np.abs(held) * costs.per_bar_carry
+
+    out: list[dict[str, Any]] = []
+    for lev in leverages:
+        lev = float(lev)
+        # Margin is gone once the adverse excursion times leverage eats all but
+        # the maintenance requirement.
+        breach = np.flatnonzero(np.abs(held) * lev * adverse <= -(1.0 - maintenance_margin))
+        liq_at = int(breach[0]) if breach.size else None
+
+        r = lev * unit_net
+        if liq_at is not None:
+            r = np.concatenate((r[:liq_at], [-1.0]))   # margin call wipes the account
+        equity = np.cumprod(1.0 + np.maximum(r, -1.0))
+        peak = np.maximum.accumulate(equity)
+        srs = [float(x) for x in r]
+        # Withheld after a liquidation (a Sharpe across a wipeout ranks nothing)
+        # and when the path never varied — `sharpe` returns None on zero vol.
+        sr = sharpe(srs) if len(srs) > 2 and liq_at is None else None
+        out.append({
+            "leverage": lev,
+            "net_return_pct": round(float(equity[-1] - 1.0) * 100.0, 4) if equity.size else None,
+            "sharpe_ann": round(sr * math.sqrt(ppy), 4) if sr is not None else None,
+            "max_drawdown_pct": round(float((equity / peak - 1.0).min()) * 100.0, 4),
+            "liquidated": liq_at is not None,
+            "liquidated_at_bar": liq_at,
+            # A levered path can also reach zero without any single margin call,
+            # by compounding ordinary losses. Reporting only `liquidated` would
+            # let a -100% row read as if it had survived.
+            "ruined": bool(equity.size and float(equity.min()) <= 0.01),
+            "bars_survived": int(liq_at) if liq_at is not None else int(r.size),
+            "worst_bar_pct": round(float(np.min(r)) * 100.0, 4) if r.size else None,
+        })
+    return out
 
 
 def summarize(
