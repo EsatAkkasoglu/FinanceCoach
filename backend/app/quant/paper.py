@@ -263,12 +263,28 @@ def equity_curve() -> tuple[list[int], list[float]]:
 
 def performance() -> dict[str, Any]:
     """Forward-test summary — with the sample size stated, not buried."""
-    rows = read_journal()
+    all_rows = read_journal()
+    # A cycle that ran against the SAME closed bar as the previous one is not a
+    # second observation — it is the same one, recorded twice. Counting it would
+    # overstate how much forward evidence exists, which is the one number this
+    # summary exists to be honest about.
+    rows: list[dict[str, Any]] = []
+    for row in all_rows:
+        if rows and row.get("marks") == rows[-1].get("marks"):
+            continue
+        rows.append(row)
+    duplicates = len(all_rows) - len(rows)
+
     if len(rows) < 2:
         return {
             "ok": False,
-            "reason": f"only {len(rows)} cycle(s) recorded — nothing to summarise yet",
+            "reason": (
+                f"only {len(rows)} distinct observation(s) recorded "
+                f"({len(all_rows)} cycles, {duplicates} against an unchanged bar) "
+                "— nothing to summarise yet"
+            ),
             "n_cycles": len(rows),
+            "n_raw_cycles": len(all_rows),
         }
     eq = np.asarray([r["equity"] for r in rows], dtype=float)
     rets = eq[1:] / eq[:-1] - 1.0
@@ -279,6 +295,8 @@ def performance() -> dict[str, Any]:
     return {
         "ok": True,
         "n_cycles": len(rows),
+        "n_raw_cycles": len(all_rows),
+        "n_duplicate_bar_cycles": duplicates,
         "hours_elapsed": round(hours, 2),
         "start_equity": rows[0]["start_equity"],
         "equity": rows[-1]["equity"],

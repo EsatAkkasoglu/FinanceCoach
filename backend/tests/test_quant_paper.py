@@ -203,3 +203,36 @@ def test_performance_reports_the_sample_size_caveat(ledger, feed):
     assert out["n_cycles"] == 5
     assert "too short a sample" in out["caveat"]
     assert out["max_drawdown_pct"] <= 0.0
+
+
+# ── duplicate-bar cycles are not observations ────────────────────────────────
+
+
+def test_performance_does_not_count_a_repeated_bar_as_new_evidence(ledger, feed):
+    """A tournament cycle runs ~17 minutes; the loop can then fire again against
+    the SAME closed bar. Counting that twice overstates how much forward
+    evidence exists, which is the one number this summary exists to be honest
+    about."""
+    allocs = [Allocation("BTC", "15m", "sma_cross", "long_flat", {"fast": 10, "slow": 50}, 1.0)]
+    paper.run_cycle(allocs, costs=REAL_COST)          # opens
+    paper.run_cycle(allocs, costs=REAL_COST)          # same bar → duplicate
+    paper.run_cycle(allocs, costs=REAL_COST)          # same bar → duplicate
+
+    out = paper.performance()
+    assert out["ok"] is False                          # 1 distinct observation
+    assert out["n_cycles"] == 1
+    assert out["n_raw_cycles"] == 3
+    assert "unchanged bar" in out["reason"]
+
+
+def test_performance_counts_cycles_where_the_bar_moved(ledger, feed):
+    allocs = [Allocation("BTC", "15m", "sma_cross", "long_flat", {"fast": 10, "slow": 50}, 1.0)]
+    for step in range(4):
+        feed["closes"] = _rising(400 + step)          # a genuinely new bar each time
+        paper.run_cycle(allocs, costs=REAL_COST)
+    paper.run_cycle(allocs, costs=REAL_COST)          # one repeat at the end
+
+    out = paper.performance()
+    assert out["ok"] is True
+    assert out["n_cycles"] == 4
+    assert out["n_duplicate_bar_cycles"] == 1

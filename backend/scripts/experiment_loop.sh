@@ -31,6 +31,12 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; t
 fi
 echo $$ > "$PID_FILE"
 
+# Anchor of the cadence grid: the window start, so cycles land on the same
+# offsets across restarts instead of drifting with each relaunch.
+START_TS_FILE="$DIR/start_ts"
+if [ ! -f "$START_TS_FILE" ]; then date +%s > "$START_TS_FILE"; fi
+START_TS="$(cat "$START_TS_FILE")"
+
 if [ -f "$DEADLINE_FILE" ]; then
   DEADLINE="$(cat "$DEADLINE_FILE")"
   echo "$(date -u +%FT%TZ) resuming existing window, deadline=$DEADLINE" | tee -a "$LOG"
@@ -53,10 +59,14 @@ while true; do
   timeout 1500 uv run python scripts/run_experiment.py --cycle >> "$LOG" 2>&1 \
     || echo "$(date -u +%FT%TZ) cycle failed (exit $?) — continuing" >> "$LOG"
 
-  # Recompute the sleep AFTER the cycle so a slow tournament does not push the
-  # cadence out; if a cycle overran the interval, start the next one immediately.
-  ELAPSED=$(( $(date +%s) - NOW ))
-  SLEEP=$(( INTERVAL - ELAPSED ))
-  [ "$SLEEP" -lt 30 ] && SLEEP=30
+  # Sleep to the NEXT point on a fixed wall-clock grid, not "interval minus how
+  # long that took". A tournament cycle runs ~17 minutes; the naive form floors
+  # at a few seconds and fires again immediately, against the very same closed
+  # bar — a duplicate observation that inflates the forward log's sample count
+  # without adding any evidence. Aligning to the grid keeps cycles on bar
+  # boundaries however long a cycle overran.
+  END=$(date +%s)
+  SLEEP=$(( INTERVAL - ((END - START_TS) % INTERVAL) ))
+  [ "$SLEEP" -lt 60 ] && SLEEP=$(( SLEEP + INTERVAL ))
   sleep "$SLEEP"
 done
