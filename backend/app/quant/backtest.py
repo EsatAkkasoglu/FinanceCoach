@@ -359,6 +359,67 @@ PARAM_GRIDS: dict[str, dict[str, list[Any]]] = {
 }
 
 
+def apply_confirmation(raw: np.ndarray, bars: int) -> np.ndarray:
+    """Act on a new target only after it has held for ``bars`` consecutive bars.
+
+    This is the no-trade band, expressed on the position rather than on a score
+    so it works uniformly across every rule here without rewriting them.
+
+    Why it is the highest-value knob in the whole engine: at 15-minute bars a
+    30bps round trip is roughly twice BTC's one-bar sigma, so a rule that flips
+    on noise pays away more than it can possibly earn. Bysik & Ślepaczuk
+    (70,872 hourly BTC/USDT bars, 27 walk-forward folds) took one unchanged
+    forecast from ARC -64.0% to +65.4% purely by adding execution hysteresis,
+    which cut trades from 10,619 to 251. The alpha did not improve; the
+    turnover stopped destroying it.
+
+    ``bars <= 1`` is the identity, so every previously recorded result stays
+    exactly reproducible and the two are directly comparable.
+    """
+    p = np.asarray(raw, dtype=float)
+    if bars <= 1 or p.size == 0:
+        return p
+    out = np.empty_like(p)
+    current = p[0]
+    streak_value = p[0]
+    streak = 1
+    out[0] = current
+    for i in range(1, p.size):
+        if p[i] == streak_value:
+            streak += 1
+        else:
+            streak_value, streak = p[i], 1
+        if streak >= bars and streak_value != current:
+            current = streak_value
+        out[i] = current
+    return out
+
+
+def apply_min_hold(raw: np.ndarray, bars: int) -> np.ndarray:
+    """Once a position is opened, keep it for at least ``bars`` bars.
+
+    A target is allowed to persist past its own signal — a 15-minute rule does
+    not have to be flat again 15 minutes later. Combined with
+    :func:`apply_confirmation` this is what lets a fast-timeframe rule hold a
+    position across many bars instead of round-tripping the spread every bar.
+    """
+    p = np.asarray(raw, dtype=float)
+    if bars <= 1 or p.size == 0:
+        return p
+    out = np.empty_like(p)
+    current = p[0]
+    held_for = 1
+    out[0] = current
+    for i in range(1, p.size):
+        if p[i] != current and held_for >= bars:
+            current = p[i]
+            held_for = 1
+        else:
+            held_for += 1
+        out[i] = current
+    return out
+
+
 def build_positions(
     strategy: str,
     closes: np.ndarray,
@@ -371,16 +432,32 @@ def build_positions(
     """Target position per bar, before the execution shift.
 
     ``allow_short`` maps the flat leg to -1 instead of 0, turning a long/flat
-    rule into long/short. Returns ``(positions, warmup_bars)``.
+    rule into long/short.
+
+    Two turnover controls are read out of ``params`` rather than passed
+    separately, so they travel through the parameter grid like any other knob:
+    ``confirm_bars`` (act only on a target that has persisted) and
+    ``min_hold_bars`` (do not reverse before this many bars). Both default to 1,
+    which is the identity. Returns ``(positions, warmup_bars)``.
     """
     fn = SIGNALS.get(strategy)
     if fn is None:
         raise KeyError(f"unknown strategy: {strategy}")
-    raw, warmup = fn(closes, highs, lows, **(params or {}))
+    params = dict(params or {})
+    confirm_bars = int(params.pop("confirm_bars", 1) or 1)
+    min_hold_bars = int(params.pop("min_hold_bars", 1) or 1)
+
+    raw, warmup = fn(closes, highs, lows, **params)
     raw = np.nan_to_num(np.asarray(raw, dtype=float), nan=0.0)
     if allow_short and strategy != "buy_hold":
         raw = np.where(raw > 0, 1.0, -1.0)
     raw[:warmup] = 0.0  # nothing is tradable before the indicator is defined
+
+    if confirm_bars > 1:
+        raw = apply_confirmation(raw, confirm_bars)
+    if min_hold_bars > 1:
+        raw = apply_min_hold(raw, min_hold_bars)
+    raw[:warmup] = 0.0
     return raw, warmup
 
 
@@ -542,6 +619,33 @@ def summarize(result: BacktestResult, *, ppy: float, n_trials: int = 1) -> dict[
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def trial_variance(trial_sharpes: list[float], ppy: float) -> float:
+    """Variance of the trial Sharpe ratios, in the SAME units as the Sharpe passed
+    alongside it.
+
+    This is the input ``deflated_sharpe_ratio`` needs and the one everybody gets
+    wrong. Its ``variance_trials`` defaults to 1.0, which reads as "the Sharpes
+    across trials have unit variance" — true for ANNUAL Sharpes, absurd for the
+    per-bar Sharpes this engine works in. At 15-minute bars a per-bar Sharpe of
+    0.0955 is an annualised 17.9; leaving variance_trials at 1.0 puts the
+    benchmark SR0 at 3.5 per-bar, i.e. an **annualised Sharpe of ~660**. Nothing
+    clears that, so DSR comes back 0.0000 for every cell and any survivor gate
+    built on it can never fire.
+
+    That is a false negative dressed as rigour, which is worse than no test at
+    all: the tournament would report "nothing works" and look honest doing it.
+
+    Falls back to the variance implied by a 0.5 spread in ANNUALISED Sharpe
+    across trials when the sample is too thin to estimate — conservative, and in
+    the right units.
+    """
+    if len(trial_sharpes) >= 2:
+        var = float(np.var(np.asarray(trial_sharpes, dtype=float), ddof=1))
+        if var > 0 and math.isfinite(var):
+            return var
+    return (0.5 / math.sqrt(max(ppy, 1.0))) ** 2
+
+
 def _grid_combos(grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
     if not grid:
         return [{}]
@@ -611,6 +715,10 @@ def walk_forward(
     oos: list[float] = []
     bench: list[float] = []
     fold_rows: list[dict[str, Any]] = []
+    #: Every in-sample Sharpe the search looked at. Their VARIANCE is what the
+    #: Deflated Sharpe needs — see trial_variance() for why the default of 1.0
+    #: silently makes DSR identically zero.
+    trial_sharpes: list[float] = []
 
     for f in range(1, n_folds + 1):
         train_end = int(bounds[f])
@@ -623,7 +731,10 @@ def walk_forward(
         for params, held, warmup in precomputed:
             seg = [float(x) for x in (held[warmup:train_end] * asset_r[warmup:train_end])]
             s = sharpe(seg)
-            if s is not None and (best_sr is None or s > best_sr):
+            if s is None:
+                continue
+            trial_sharpes.append(s)
+            if best_sr is None or s > best_sr:
                 best_sr, best_params = s, params
         if best_params is None:
             continue
@@ -670,9 +781,13 @@ def walk_forward(
         "oos_max_drawdown_pct": round(mdd * 100.0, 3) if mdd is not None else None,
         "oos_dsr": (
             (lambda d: round(d, 4) if d is not None else None)(
-                deflated_sharpe_ratio(sr, len(oos), skew, kurt, len(combos))
+                deflated_sharpe_ratio(
+                    sr, len(oos), skew, kurt, len(combos),
+                    variance_trials=trial_variance(trial_sharpes, ppy),
+                )
             ) if sr is not None else None
         ),
+        "trial_sharpe_variance": round(trial_variance(trial_sharpes, ppy), 12),
         "folds": fold_rows,
         "benchmark_return_pct": round(float(np.prod(1.0 + np.asarray(bench)) - 1.0) * 100.0, 3),
         "excess_vs_buy_hold_pct": round(

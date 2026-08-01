@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from app.quant.backtest import (
+    trial_variance,
     PARAM_GRIDS,
     Costs,
     align_positions,
@@ -256,3 +257,51 @@ def test_walk_forward_test_blocks_do_not_overlap_training():
     train_sizes = [f["train_bars"] for f in out["folds"]]
     assert train_sizes == sorted(train_sizes)
     assert len(set(train_sizes)) == len(train_sizes)  # expanding, never repeating
+
+
+# ── Deflated Sharpe units (regression) ───────────────────────────────────────
+
+
+def test_trial_variance_is_in_per_bar_units_not_annual():
+    """The bug this pins: deflated_sharpe_ratio defaults variance_trials=1.0,
+    which reads as unit variance of ANNUAL Sharpes. Fed the per-bar Sharpes this
+    engine works in, it puts the benchmark at an annualised Sharpe of ~660 and
+    pins every DSR at exactly 0.0 — a survivor gate that can never fire, and a
+    false negative that looks like rigour."""
+    ppy = 365.25 * 24 * 4                       # 15-minute bars
+    per_bar = [0.01, 0.02, 0.015, -0.005, 0.03]
+    var = trial_variance(per_bar, ppy)
+    assert var == pytest.approx(float(np.var(np.asarray(per_bar), ddof=1)))
+    assert var < 0.01                            # per-bar scale, nowhere near 1.0
+
+
+def test_trial_variance_falls_back_in_per_bar_units():
+    ppy = 365.25 * 24 * 4
+    fallback = trial_variance([], ppy)
+    assert fallback == pytest.approx((0.5 / math.sqrt(ppy)) ** 2)
+    assert 0.0 < fallback < 1e-4
+
+
+def test_walk_forward_dsr_is_not_structurally_zero():
+    """A strategy with a genuinely strong edge must produce a NON-zero deflated
+    Sharpe. Before the units fix every cell returned exactly 0.0000."""
+    n = 4000
+    t = np.arange(n, dtype=float)
+    # A clean, persistent trend: momentum should capture it and score well.
+    closes = 100.0 * np.exp(0.0004 * t + 0.01 * np.sin(t / 50.0))
+    out = walk_forward(
+        closes, "tsmom", grid={"lookback": [24, 48]},
+        n_folds=4, costs=ZERO, ppy=365.25 * 24 * 4,
+    )
+    assert out["ok"] is True
+    assert out["oos_dsr"] is not None
+    assert out["oos_dsr"] > 0.0
+    assert out["trial_sharpe_variance"] < 0.01
+
+
+def test_walk_forward_reports_a_fair_benchmark():
+    closes = _wave(900)
+    out = walk_forward(closes, "tsmom", n_folds=4, ppy=252.0)
+    assert out["ok"] is True
+    assert out["benchmark_return_pct"] is not None
+    assert out["excess_vs_buy_hold_pct"] is not None

@@ -63,6 +63,13 @@ DEFAULT_COSTS = bt.Costs(fee_bps=10.0, slippage_bps=5.0)
 
 _MIN_BARS = 400
 
+#: Nothing in crypto delivers a gross Sharpe above this at intraday frequency,
+#: so a configuration needing more than this just to cover costs is dead on
+#: arrival — measured, not fitted.
+MAX_BREAKEVEN_SHARPE = 1.5
+#: …or that is bleeding this much of the notional per year in pure friction.
+MAX_ANNUAL_COST_DRAG = 0.30
+
 
 def grid_for(strategy: str, timeframe: str) -> dict[str, list[Any]]:
     """Parameter grid scaled to the bar size.
@@ -74,16 +81,23 @@ def grid_for(strategy: str, timeframe: str) -> dict[str, list[Any]]:
     raises the bar the result must clear.
     """
     fast_tf = timeframe in ("15m", "30m")
+    # The no-trade band. At 15m a 30bps round trip is ~2x the one-bar sigma, so
+    # an unfiltered rule pays away more than it can earn; requiring a target to
+    # persist before acting on it is what makes a fast timeframe tradable at
+    # all. 1 is the identity, so the unfiltered variant is always in the grid
+    # and stays directly comparable.
+    band = [1, 4, 12] if fast_tf else [1, 2, 6]
     grids: dict[str, dict[str, list[Any]]] = {
-        "sma_cross": {"fast": [10, 20, 50], "slow": [50, 100, 200]},
-        "ema_cross": {"fast": [8, 21], "slow": [55, 100]},
+        "sma_cross": {"fast": [20, 50], "slow": [100, 200], "confirm_bars": band},
+        "ema_cross": {"fast": [8, 21], "slow": [55, 100], "confirm_bars": band},
         "macd": {"fast": [12], "slow": [26], "signal": [9]},
         "rsi_reversion": {
-            "period": [7, 14], "low": [20.0, 30.0], "high": [70.0, 80.0],
+            "period": [14], "low": [20.0, 30.0], "high": [70.0, 80.0],
+            "min_hold_bars": band,
         },
-        "tsmom": {"lookback": [24, 48, 96, 192] if fast_tf else [6, 12, 24, 48]},
-        "donchian": {"lookback": [20, 55, 100] if fast_tf else [10, 20, 55]},
-        "bollinger_reversion": {"period": [20, 50], "k": [1.5, 2.0, 2.5]},
+        "tsmom": {"lookback": [48, 96, 192] if fast_tf else [12, 24, 48], "confirm_bars": band},
+        "donchian": {"lookback": [55, 100] if fast_tf else [20, 55], "confirm_bars": band},
+        "bollinger_reversion": {"period": [20, 50], "k": [2.0, 2.5], "min_hold_bars": band},
         "vol_regime_tsmom": {
             "lookback": [24, 48] if fast_tf else [6, 12],
             "vol_window": [96] if fast_tf else [48],
@@ -140,10 +154,53 @@ class CellResult:
     oos_buy_hold_return_pct: float | None = None
     oos_cost_drag_pct: float | None = None
     dsr_local: float | None = None
+    n_infeasible: int = 0
+    infeasible_examples: list[dict[str, Any]] = field(default_factory=list)
     shape: dict[str, float | None] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def feasibility(
+    held: np.ndarray, asset_returns: np.ndarray, costs: bt.Costs, ppy: float
+) -> dict[str, Any]:
+    """What GROSS annualised Sharpe this configuration must earn just to break even.
+
+    Pure arithmetic on the position path — no fitting, microseconds per combo.
+    A rule that flips every other bar at 15-minute frequency has to clear a
+    gross Sharpe of ~10 before costs to end up at zero, and nothing in crypto
+    delivers that. Screening those cells out BEFORE the walk-forward does two
+    good things at once: it saves the compute, and it shrinks the trial count
+    that every surviving cell's Deflated Sharpe is deflated against.
+
+    Rejecting on arithmetic is also the one kind of rejection that cannot be
+    accused of data mining: it does not look at whether the rule made money.
+    """
+    if held.size < 10 or asset_returns.size != held.size:
+        return {"feasible": False, "reason": "too few bars"}
+    prev = np.concatenate(([0.0], held[:-1]))
+    flips_per_bar = float(np.mean(np.abs(held - prev)))
+    ann_cost = flips_per_bar * ppy * costs.per_turn
+    exposure = float(np.sqrt(np.mean(held ** 2)))
+    asset_ann_vol = float(np.std(asset_returns, ddof=1)) * math.sqrt(ppy)
+    strat_ann_vol = asset_ann_vol * max(exposure, 1e-9)
+    breakeven = ann_cost / max(strat_ann_vol, 1e-9)
+    avg_hold = 1.0 / max(flips_per_bar, 1e-12)
+
+    reason = None
+    if breakeven > MAX_BREAKEVEN_SHARPE:
+        reason = f"needs a gross Sharpe of {breakeven:.1f} just to cover costs"
+    elif ann_cost > MAX_ANNUAL_COST_DRAG:
+        reason = f"{ann_cost:.0%}/yr of pure cost drag"
+    return {
+        "feasible": reason is None,
+        "reason": reason,
+        "breakeven_gross_sharpe": round(breakeven, 3),
+        "annual_cost_drag": round(ann_cost, 4),
+        "avg_holding_bars": round(avg_hold, 2),
+        "flips_per_bar": round(flips_per_bar, 5),
+    }
 
 
 def _net_returns(
@@ -189,7 +246,12 @@ def evaluate_cell(
     bh = bt.run_backtest(candles.closes, bh_raw, costs=costs)
     cell.buy_hold_return_pct = round(bh.net_total_return * 100.0, 3)
 
+    from app.quant.data import to_returns as _to_returns  # noqa: PLC0415
+
+    asset_r = _to_returns(candles.closes)
     trial_series: list[np.ndarray] = []
+    feasible_combos: list[dict[str, Any]] = []
+    infeasible: list[dict[str, Any]] = []
     best_sr, best_params, best_ret = None, {}, None
     for params in combos:
         try:
@@ -200,19 +262,41 @@ def evaluate_cell(
             continue
         if rets.size < 50:
             continue
+        held = bt.align_positions(
+            bt.build_positions(
+                strategy, candles.closes, candles.highs, candles.lows, params,
+                allow_short=allow_short,
+            )[0]
+        )
+        feas = feasibility(held, asset_r, costs, ppy)
+        if not feas["feasible"]:
+            infeasible.append({"params": params, **feas})
+            continue
+        feasible_combos.append(params)
         trial_series.append(rets)
         sr = sharpe([float(x) for x in rets])
         if sr is not None and (best_sr is None or sr > best_sr):
             best_sr, best_params = sr, params
             best_ret = float(np.prod(1.0 + rets) - 1.0)
 
+    cell.n_infeasible = len(infeasible)
+    cell.infeasible_examples = infeasible[:3]
     cell.best_params = best_params
+    if not feasible_combos:
+        cell.oos_reason = (
+            "every parameter set fails the cost-feasibility screen: "
+            + (infeasible[0]["reason"] if infeasible else "unknown")
+        )
+        return cell, trial_series, np.asarray([]), np.asarray([])
     cell.is_return_pct = round(best_ret * 100.0, 3) if best_ret is not None else None
     cell.is_sharpe_ann = round(best_sr * math.sqrt(ppy), 4) if best_sr is not None else None
 
+    feasible_grid = {
+        k: sorted({c[k] for c in feasible_combos}) for k in (grid or {})
+    } if grid else {}
     wf = bt.walk_forward(
         candles.closes, strategy,
-        highs=candles.highs, lows=candles.lows, grid=grid,
+        highs=candles.highs, lows=candles.lows, grid=feasible_grid,
         n_folds=n_folds, embargo=embargo, costs=costs, ppy=ppy,
         allow_short=allow_short,
         min_test_bars=max(60, len(candles) // (n_folds * 4)),
@@ -325,7 +409,10 @@ def run_tournament(
                 + (f" (stale {q.stale_fraction:.0%}, range {q.median_range_pct:.3f}%)" if q else "")
             )
 
-    leaderboard = _rank(cells, oos_by_key, total_trials)
+    leaderboard = _rank(
+        cells, oos_by_key, total_trials,
+        {tf: BARS_PER_YEAR.get(tf, 365.25) for tf in timeframes},
+    )
     verdict = _verdict(leaderboard, pbo_by_series, total_trials, len(rejected))
     return {
         "ok": True,
@@ -352,9 +439,31 @@ def run_tournament(
 
 
 def _rank(
-    cells: list[CellResult], oos_by_key: dict[str, np.ndarray], total_trials: int
+    cells: list[CellResult], oos_by_key: dict[str, np.ndarray], total_trials: int,
+    ppy_by_tf: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
-    """Leaderboard, deflated against the WHOLE tournament and bootstrap-tested."""
+    """Leaderboard, deflated against the WHOLE tournament and bootstrap-tested.
+
+    The tournament-wide deflation needs the spread of Sharpe ratios ACROSS the
+    whole search, in per-bar units. Passing the library default of 1.0 puts the
+    benchmark at an annualised Sharpe of several hundred and pins every DSR at
+    exactly 0.0 — a survivor gate that can never fire. See
+    ``backtest.trial_variance``.
+    """
+    ppy_by_tf = ppy_by_tf or {}
+    per_bar_sharpes: list[float] = []
+    for cell in cells:
+        key = f"{cell.symbol}/{cell.timeframe}/{cell.strategy}/{cell.variant}"
+        oos = oos_by_key.get(key)
+        if oos is not None and oos.size >= 50:
+            s = sharpe([float(x) for x in oos])
+            if s is not None:
+                per_bar_sharpes.append(s)
+    tournament_variance = (
+        float(np.var(np.asarray(per_bar_sharpes), ddof=1))
+        if len(per_bar_sharpes) >= 2 else 0.0
+    )
+
     rows: list[dict[str, Any]] = []
     for cell in cells:
         if not cell.oos_ok or cell.oos_return_pct is None:
@@ -369,7 +478,11 @@ def _rank(
         if sr is None:
             continue
         skew, kurt = _skew_kurt(r)
-        dsr_global = deflated_sharpe_ratio(sr, len(r), skew, kurt, max(1, total_trials))
+        ppy = ppy_by_tf.get(cell.timeframe) or BARS_PER_YEAR.get(cell.timeframe, 365.25)
+        variance_trials = tournament_variance or (0.5 / math.sqrt(ppy)) ** 2
+        dsr_global = deflated_sharpe_ratio(
+            sr, len(r), skew, kurt, max(1, total_trials), variance_trials=variance_trials
+        )
         boot = mx.bootstrap_pvalue(oos, n_boot=1500)
         # Compare against buy & hold over the SAME out-of-sample bars, never the
         # full-sample figure — different windows would make the excess meaningless.
@@ -394,6 +507,7 @@ def _rank(
             "oos_bars": cell.oos_bars,
             "dsr_local": cell.dsr_local,
             "dsr_tournament": round(dsr_global, 4) if dsr_global is not None else None,
+            "trial_sharpe_variance": round(variance_trials, 12),
             "bootstrap_p": boot["p_value"] if boot else None,
             "omega": cell.shape.get("omega"),
             "ulcer_index": cell.shape.get("ulcer_index"),
