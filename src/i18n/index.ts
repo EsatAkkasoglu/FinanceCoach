@@ -17,6 +17,7 @@ import enDocuments from "./locales/en/documents.json";
 import enLanding from "./locales/en/landing.json";
 import enNotifications from "./locales/en/notifications.json";
 import enBilling from "./locales/en/billing.json";
+import enQuant from "./locales/en/quant.json";
 
 import trCommon from "./locales/tr/common.json";
 import trAuth from "./locales/tr/auth.json";
@@ -33,6 +34,7 @@ import trDocuments from "./locales/tr/documents.json";
 import trLanding from "./locales/tr/landing.json";
 import trNotifications from "./locales/tr/notifications.json";
 import trBilling from "./locales/tr/billing.json";
+import trQuant from "./locales/tr/quant.json";
 import { getLanguageFromPath, supportedLanguages } from "@/lib/routing";
 
 export const defaultNS = "common";
@@ -53,6 +55,7 @@ export const resources = {
     landing: enLanding,
     notifications: enNotifications,
     billing: enBilling,
+    quant: enQuant,
   },
   tr: {
     common: trCommon,
@@ -70,6 +73,7 @@ export const resources = {
     landing: trLanding,
     notifications: trNotifications,
     billing: trBilling,
+    quant: trQuant,
   },
 } as const;
 

@@ -27,11 +27,11 @@ import numpy as np
 import numpy_financial as npf
 from langchain_core.tools import tool
 
-import app.services.yfinance_service as yf_svc
 from app.auth import get_display_currency
+from app.quant.data import close_map
 from app.tools._cache import cache_get, cache_set
 from app.tools._calc_result import err, format_money, format_pct, ok
-from app.tools.fund_tools import get_fund_history, get_fund_quote
+from app.tools.fund_tools import get_fund_quote
 from app.tools.market_tools import get_company_overview, get_quote
 from app.tools.portfolio_tools import list_holdings
 
@@ -632,32 +632,6 @@ def correlation_matrix(series: dict[str, list[float]]) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _yf_period(days: int) -> str:
-    if days <= 35:
-        return "1mo"
-    if days <= 95:
-        return "3mo"
-    if days <= 190:
-        return "6mo"
-    if days <= 370:
-        return "1y"
-    return "2y"
-
-
-def _holding_close_series(asset_class: str, ticker: str, days: int) -> dict[str, float] | None:
-    """Best-effort {date: close} for one holding's native-currency price.
-    Returns None if it can't be fetched (the holding is then excluded)."""
-    try:
-        if asset_class == "fund":
-            rows = get_fund_history.invoke({"code": ticker, "days": days})
-            return {r["date"]: float(r["price"]) for r in rows if r.get("price")}
-        rows = yf_svc.history(ticker, period=_yf_period(days))
-        return {r["date"]: float(r["close"]) for r in rows if r.get("close")}
-    except Exception as exc:  # noqa: BLE001
-        log.info("risk: history fetch failed for %s: %s", ticker, exc)
-        return None
-
-
 @tool
 def analyze_portfolio_risk(
     period_days: int = 365, risk_free_rate_pct: float = 0.0
@@ -689,7 +663,7 @@ def analyze_portfolio_risk(
 
     series: dict[str, dict[str, float]] = {}
     for r in non_cash:
-        s = _holding_close_series(r["asset_class"], r["ticker"], period_days)
+        s = close_map(r["asset_class"], r["ticker"], period_days)
         if s and len(s) >= 5:
             series[r["ticker"]] = s
     if not series:

@@ -30,6 +30,11 @@ from app.tools.portfolio_tools import (
     remove_holding,
     set_cash_balance,
 )
+from app.tools.quant_tools import (
+    compute_beta_alpha,
+    compute_value_at_risk,
+    optimize_portfolio,
+)
 
 SYSTEM_PROMPT_BASE = """You are the Portfolio Manager on the FinCoach Investment Committee.
 You are the AUTHORITY on the user's holdings AND the BOOKKEEPER who persists
@@ -63,6 +68,26 @@ quote their values / formatted_value verbatim, never recompute by hand):
   • compute_return_metrics(prices=…)     — vol / Sharpe / drawdown for ONE supplied
                                            price series (e.g. a single fund's history)
   • correlation_matrix(series)           — correlation across supplied price series
+
+QUANT TOOLS (also deterministic — same rule: quote their numbers verbatim):
+  • compute_value_at_risk()              — VaR / expected shortfall / EWMA vol.
+                                           No ticker = the user's whole portfolio.
+                                           USE THIS for "how much could I lose",
+                                           "what's my downside on a bad day".
+  • compute_beta_alpha(benchmark="SPY")  — beta, annualised alpha, R², tracking
+                                           error, up/down capture. No ticker =
+                                           whole portfolio. USE THIS for "what's
+                                           my beta", "am I just tracking the index".
+  • optimize_portfolio(objective=…)      — max_sharpe / min_variance / risk_parity
+                                           weights over the user's REAL holdings,
+                                           plus the efficient frontier and the
+                                           current-vs-target gap. USE THIS for
+                                           "how should I rebalance", "what's the
+                                           optimal mix". Prefer risk_parity when
+                                           the user is sceptical of return
+                                           forecasts — it uses none.
+  These optimise/describe the PAST. Always carry their caveat sentence into your
+  answer; never present an optimiser output as a recommendation to trade.
   If one returns ok:false, read its `error` and retry with corrected args.
 
 WRITE FLOW (user reports buy / sell / cash):
@@ -182,6 +207,10 @@ _TOOLS = [
     analyze_portfolio_risk,
     compute_return_metrics,
     correlation_matrix,
+    # Quant layer (app/quant): tail risk, benchmark regression, optimization
+    compute_value_at_risk,
+    compute_beta_alpha,
+    optimize_portfolio,
 ]
 
 

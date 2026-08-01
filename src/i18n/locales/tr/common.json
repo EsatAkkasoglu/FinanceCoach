@@ -26,7 +26,8 @@
     "discover": "Piyasalar",
     "goals": "Hedefler",
     "documents": "Belgeler",
-    "settings": "Ayarlar"
+    "settings": "Ayarlar",
+    "quant": "Quant Lab"
   },
   "errors": {
     "backendUnreachable": "Sunucuya ulaşılamıyor. `uv run uvicorn app.main:app` komutu ile başlatın.",

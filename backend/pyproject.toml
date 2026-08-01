@@ -24,6 +24,11 @@ dependencies = [
     "pandas>=2.2.0",
     "numpy>=1.26.0",
     "numpy-financial>=1.0.0",
+    # Quant layer (app/quant): SLSQP for long-only mean-variance, brentq for
+    # implied vol, stats.t for exact regression t-stats. Deliberately the ONLY
+    # place scipy is used — app/eval/scorecard.py keeps its hand-rolled
+    # normal CDF/PPF so the metric kernel stays dependency-free.
+    "scipy>=1.16.0",
     "requests>=2.32.0",
     "feedparser>=6.0.0",
     # Config
@@ -79,6 +84,12 @@ ignore = ["E501"]
 # Migrating to StrEnum changes str()/serialization semantics on persisted
 # columns, so suppress UP042 here rather than risk altering stored values.
 "app/db/models.py" = ["UP042"]
+# Option-pricing code uses the universal Black-Scholes notation (S spot,
+# K strike, T time to expiry). Lower-casing those to satisfy pep8-naming makes
+# every formula harder to check against the literature than the convention it
+# would enforce, so N803/N806 are suppressed here and nowhere else.
+"app/quant/options.py" = ["N803"]
+"tests/test_quant_options.py" = ["N806"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency/parameter helpers are designed to be called in argument

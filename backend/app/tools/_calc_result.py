@@ -24,7 +24,15 @@ from typing import Any, Literal
 
 from app.auth import get_display_currency, get_ui_language
 
-UiType = Literal["metric", "donut", "diverging_bar", "bars", "table", "none"]
+UiType = Literal[
+    "metric", "donut", "diverging_bar", "bars", "table", "none",
+    # Quant layer (app/quant) — each has a matching branch in
+    # src/components/chat/CalcResultCard.tsx. Adding one here without adding it
+    # to the TS union there means the card silently renders nothing.
+    "equity_curve",   # data: {labels?, equity[], benchmark[], drawdown[]}
+    "frontier",       # data: {points[{vol_pct, return_pct}], current?, optimal?}
+    "heatmap",        # data: {labels[], matrix[][]}
+]
 
 # Currency → (thousands_sep, decimal_sep, symbol, symbol_prefix?) — mirrors the
 # locales used in src/lib/format.ts (USD→en-US, TRY→tr-TR, EUR→de-DE, GBP→en-GB).

@@ -1595,6 +1595,201 @@ export async function getScorecard(): Promise<ScorecardResponse | null> {
   return r.json() as Promise<ScorecardResponse>;
 }
 
+// ── Quant Lab (backend/app/quant) ──────────────────────────────────────────
+
+/** Summary produced by `app.quant.backtest.summarize`. */
+export interface BacktestMetrics {
+  n_bars: number;
+  insufficient_data?: boolean;
+  total_return_pct: number | null;
+  gross_return_pct: number | null;
+  benchmark_return_pct: number | null;
+  excess_vs_buy_hold_pct: number | null;
+  cagr_pct: number | null;
+  ann_vol_pct: number | null;
+  sharpe: number | null;
+  sharpe_annualized: number | null;
+  sortino: number | null;
+  calmar: number | null;
+  max_drawdown_pct: number | null;
+  profit_factor: number | null;
+  win_rate: number | null;
+  psr: number | null;
+  dsr: number | null;
+  n_trials: number;
+  n_trades: number;
+  turnover: number | null;
+  cost_drag_pct: number | null;
+}
+
+export interface WalkForwardFold {
+  fold: number;
+  train_bars: number;
+  test_bars: number;
+  params: Record<string, number>;
+  train_sharpe: number | null;
+  test_sharpe: number | null;
+  test_return_pct: number;
+}
+
+/** Out-of-sample validation block; `ok: false` carries the reason it was skipped. */
+export interface WalkForwardResult {
+  ok: boolean;
+  reason?: string;
+  n_folds?: number;
+  n_trials?: number;
+  embargo_bars?: number;
+  oos_bars?: number;
+  oos_return_pct?: number;
+  oos_sharpe?: number | null;
+  oos_sharpe_annualized?: number | null;
+  oos_sortino?: number | null;
+  oos_max_drawdown_pct?: number | null;
+  oos_dsr?: number | null;
+  folds?: WalkForwardFold[];
+  note?: string;
+}
+
+export interface BacktestRequest {
+  ticker: string;
+  strategy?: string;
+  period_days?: number;
+  fast?: number;
+  slow?: number;
+  lookback?: number;
+  fee_bps?: number;
+  slippage_bps?: number;
+  allow_short?: boolean;
+  walk_forward?: boolean;
+}
+
+export interface BacktestResponse {
+  ok: boolean;
+  error?: string;
+  ticker?: string;
+  strategy?: string;
+  params?: Record<string, number>;
+  costs?: { fee_bps: number; slippage_bps: number };
+  dates?: string[];
+  /** Full-resolution curves — the page has no SSE size cap to respect. */
+  equity?: number[];
+  benchmark?: number[];
+  drawdown?: number[];
+  positions?: number[];
+  metrics?: BacktestMetrics;
+  walk_forward?: WalkForwardResult | null;
+}
+
+export interface StrategyInfo {
+  key: string;
+  grid: Record<string, (number | string)[]>;
+  n_combinations: number;
+}
+
+export interface FrontierPoint {
+  vol_pct: number;
+  return_pct: number;
+  sharpe?: number;
+}
+
+export interface WeightChange {
+  ticker: string;
+  current_pct: number;
+  target_pct: number;
+  change_pct: number;
+}
+
+export interface OptimizeResponse {
+  ok: boolean;
+  error?: string;
+  explanation?: string;
+  formatted_value?: string;
+  objective?: string;
+  currency?: string;
+  shrinkage?: number;
+  converged?: boolean;
+  points?: FrontierPoint[];
+  current?: FrontierPoint & { label: string };
+  optimal?: FrontierPoint & { label: string };
+  bars?: { label: string; value: number }[];
+  changes?: WeightChange[];
+}
+
+export interface QuantRiskResponse {
+  ok: boolean;
+  error?: string;
+  currency?: string;
+  n_obs?: number;
+  confidence?: number;
+  weights?: { label: string; value: number }[];
+  var_pct?: number;
+  cvar_pct?: number;
+  cornish_fisher_var_pct?: number | null;
+  ewma_vol_pct?: number | null;
+  worst_day_pct?: number;
+  max_drawdown_pct?: number;
+  drawdown_curve?: number[];
+  benchmark?: string;
+  benchmark_stats?: {
+    n_obs: number;
+    beta: number;
+    alpha_annualized_pct: number;
+    r2: number | null;
+    beta_t_stat: number | null;
+    beta_p_value: number;
+    correlation: number | null;
+    idiosyncratic_vol_pct: number;
+    tracking_error_pct: number;
+  } | null;
+  capture?: { up_capture_pct: number | null; down_capture_pct: number | null } | null;
+}
+
+/** Strategy catalogue — drives the Quant Lab picker and shows each search width. */
+export async function getQuantStrategies(): Promise<StrategyInfo[]> {
+  const r = await apiFetch(`/quant/strategies`);
+  if (!r.ok) return [];
+  const body = (await r.json()) as { ok: boolean; strategies?: StrategyInfo[] };
+  return body.strategies ?? [];
+}
+
+/** Full-resolution backtest, optionally with walk-forward validation. */
+export async function runBacktest(req: BacktestRequest): Promise<BacktestResponse> {
+  const r = await apiFetch(`/quant/backtest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  return r.json() as Promise<BacktestResponse>;
+}
+
+/** Efficient frontier + optimal weights over the user's real holdings. */
+export async function optimizePortfolio(req: {
+  objective?: string;
+  period_days?: number;
+  long_only?: boolean;
+  max_weight_pct?: number;
+}): Promise<OptimizeResponse> {
+  const r = await apiFetch(`/quant/optimize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  return r.json() as Promise<OptimizeResponse>;
+}
+
+/** Portfolio tail risk + benchmark regression. */
+export async function getQuantRisk(
+  periodDays = 365, confidence = 0.95, benchmark = "SPY",
+): Promise<QuantRiskResponse> {
+  const params = new URLSearchParams({
+    period_days: String(periodDays),
+    confidence: String(confidence),
+    benchmark,
+  });
+  const r = await apiFetch(`/quant/risk?${params}`);
+  return r.json() as Promise<QuantRiskResponse>;
+}
+
 /** Read-only multi-asset, horizon-aware trade signal (no order placed). */
 export async function getTradeSignal(
   symbol: string, horizon: HorizonBucket = "swing", assetClass = "",

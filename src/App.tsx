@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Menu, Globe, LayoutDashboard, Briefcase, Wallet, Coins, Compass, Target, FileText, Settings as SettingsIcon, MessageSquare } from "lucide-react";
+import { Menu, Globe, LayoutDashboard, Briefcase, Wallet, Coins, Compass, FlaskConical, Target, FileText, Settings as SettingsIcon, MessageSquare } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { onIdTokenChanged } from "firebase/auth";
@@ -15,6 +15,7 @@ import { Budget } from "@/components/budget/Budget";
 import { Funds } from "@/components/funds/Funds";
 import { Goals } from "@/components/goals/Goals";
 import { Discover } from "@/components/insights/Discover";
+import { QuantLab } from "@/components/quant/QuantLab";
 import { Documents } from "@/components/documents/Documents";
 import { Settings } from "@/components/settings/Settings";
 import { CurrencySwitcher } from "@/components/budget/CurrencySwitcher";
@@ -112,6 +113,7 @@ const ROUTE_TITLE_KEYS = {
   "/budget":    "nav.budget",
   "/funds":     "nav.funds",
   "/discover":  "nav.discover",
+  "/quant":     "nav.quant",
   "/goals":     "nav.goals",
   "/documents": "nav.documents",
   "/settings":  "nav.settings",
@@ -409,6 +411,7 @@ export default function App() {
     "/budget":     { title: t("nav.budget"),    icon: Wallet         },
     "/funds":      { title: t("nav.funds"),     icon: Coins          },
     "/discover":   { title: t("nav.discover"),  icon: Compass        },
+    "/quant":      { title: t("nav.quant"),     icon: FlaskConical   },
     "/goals":      { title: t("nav.goals"),     icon: Target         },
     "/documents":  { title: t("nav.documents"), icon: FileText       },
     "/settings":   { title: t("nav.settings"),  icon: SettingsIcon   },
@@ -532,7 +535,8 @@ export default function App() {
               <Route path="/:lang/funds" element={<Funds />} />
               <Route path="/:lang/settings" element={<Settings />} />
               <Route path="/:lang/goals" element={<Goals />} />
-              <Route path="/:lang/discover" element={<Discover />} />
+              <Route path="/:lang/quant" element={<QuantLab />} />
+            <Route path="/:lang/discover" element={<Discover />} />
               <Route path="/:lang/documents" element={<Documents />} />
               <Route path="/:lang/chat" element={<ChatRoute />} />
               <Route path="/:lang/chat/:convId" element={<ChatRoute />} />

@@ -50,6 +50,7 @@ from app.routers.insights import router as insights_router
 from app.routers.memory import router as memory_router
 from app.routers.networth import router as networth_router
 from app.routers.news import router as news_router
+from app.routers.quant import router as quant_router
 from app.routers.symbols import router as symbols_router
 from app.routers.waitlist import router as waitlist_router
 from app.services.account_deletion import delete_user_account
@@ -232,6 +233,7 @@ app.include_router(symbols_router)
 app.include_router(insights_router)
 app.include_router(crypto_router)
 app.include_router(evaluation_router)
+app.include_router(quant_router)
 app.include_router(memory_router)
 app.include_router(networth_router)
 app.include_router(admin_router)

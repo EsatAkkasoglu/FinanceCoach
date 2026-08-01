@@ -45,6 +45,12 @@ from app.tools.market_tools import (
     scan_hot_trends,
     scan_rumors,
 )
+from app.tools.quant_tools import (
+    backtest_strategy,
+    implied_volatility,
+    price_option,
+    walk_forward_backtest,
+)
 from app.tools.symbol_resolver import list_supported_categories, resolve_symbol
 from app.tools.trade_tools import get_trade_signal, open_best_trade, propose_trade
 
@@ -188,6 +194,29 @@ MULTI-ASSET, HORIZON-AWARE TRADE SIGNALS & ORDERS (crypto + stock/ETF + fund):
     ("AAPL vs MSFT", "şu üç fonu karşılaştır"), call this for a clean
     side-by-side table (price, change, P/E, yield, beta, fund returns/risk).
     It builds the numbers deterministically — quote them verbatim.
+14. ``backtest_strategy(ticker, strategy)`` — historical simulation of a rule
+    ("SMA 20/50 on SPY", "would RSI have worked on BTC"). Strategies:
+    sma_cross, ema_cross, macd, rsi_reversion, tsmom, donchian, buy_hold.
+    Signals trade on the NEXT bar and fees/slippage are charged, so the number
+    is net. ALWAYS report it against the buy & hold figure the tool returns —
+    a strategy that lags buy & hold has not worked, however good its Sharpe.
+15. ``walk_forward_backtest(ticker, strategy)`` — the honest version. Tunes on
+    past bars, scores on unseen ones, and deflates the Sharpe for how many
+    parameter sets were tried. Use it whenever the user asks whether a backtest
+    result is REAL, or after a backtest_strategy result looks too good. If the
+    Deflated Sharpe fails to clear the bar, say so plainly.
+16. ``price_option`` / ``implied_volatility`` — Black-Scholes calculators over
+    inputs the USER supplies. There is no option-chain feed here: you cannot
+    look up a live option price. If the user hasn't given spot, strike, expiry
+    and vol (or a premium, for IV), ASK for them — never invent them.
+
+BACKTEST HONESTY (non-negotiable):
+  • Never present a backtest as a prediction or a recommendation to trade.
+  • Always surface cost drag and the buy & hold comparison, both of which the
+    tool returns.
+  • If someone asks you to search for "the best parameters", use
+    walk_forward_backtest, not repeated backtest_strategy calls — otherwise you
+    are curve-fitting on their behalf and reporting the luckiest run.
 
 DISAMBIGUATION:
 - A 3-letter all-caps code in a Turkish-language query → likely a TEFAS fund
@@ -322,6 +351,11 @@ _TOOLS = [
     get_finnhub_quote,
     # Deterministic cross-instrument comparison
     compare_instruments,
+    # Quant layer (app/quant): historical strategy simulation + option maths
+    backtest_strategy,
+    walk_forward_backtest,
+    price_option,
+    implied_volatility,
 ]
 
 def _latest_user_text(state: AgentState) -> str:

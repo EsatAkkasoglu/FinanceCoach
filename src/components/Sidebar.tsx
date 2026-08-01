@@ -16,7 +16,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, LayoutDashboard, Briefcase, Wallet, Target, FileText,
-  Settings as SettingsIcon, Coins, Compass, Search, Brain,
+  Settings as SettingsIcon, Coins, Compass, FlaskConical, Search, Brain,
   Plus, Trash2, Pencil, Check, X, LogOut, ChevronDown, ChevronRight,
   ChevronLeft, Zap,
 } from "lucide-react";
@@ -55,7 +55,8 @@ const NAV_SECTIONS: { label: string | null; items: NavItem[] }[] = [
   {
     label: "Research",
     items: [
-      { path: "/discover",  key: "discover",  icon: Compass  },
+      { path: "/discover",  key: "discover",  icon: Compass      },
+      { path: "/quant",     key: "quant",     icon: FlaskConical },
       { path: "/documents", key: "documents", icon: FileText },
     ],
   },
