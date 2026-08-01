@@ -92,24 +92,35 @@ oranı, medyan bar aralığı, bölünme boyutunda sıçramalar) ve **en derin d
 likit** kaynağı seçer. Düzeltmeden sonra TRX, HYPE, DOGE ve BNB otomatik olarak
 OKX'e geçti ve evrendeki her coin kapılardan geçti.
 
-## Bulgu 3: liderlik tablosu koşular arası hiç sabit kalmıyor
+## Bulgu 3: liderlik tablosu KARARLI — ve bu bir edge kanıtı değil
 
-Dört turnuva koşusu, saatler arayla, esasen aynı veri üzerinde (90–370 günlük
-serilere birkaç saatlik yeni bar ekleniyor). Son iki koşunun top-10'ları
-**hiçbir ortak eleman içermiyor.**
+Dört turnuva koşusunun top-10'ları birbirinden tamamen farklı çıktı (son ikisinde
+kesişim 0/10). İlk okuma "seçim gürültü, tablo hiç sabit kalmıyor" idi. **Bu okuma
+yanlıştı ve temiz test onu çürüttü.**
 
-| koşu | tepedeki hücreler | PBO |
-|---|---|---|
-| 1 | TRX/15dk (ölü defter artefaktı) | 0.40 |
-| 2 | DOGE/15dk, TRX/15dk, HYPE/1sa | 0.36 |
-| 3 | HYPE/4sa, XRP/4sa, SOL/4sa | 0.60 |
-| 4 | HYPE/15dk, TRX/30dk, XRP/30dk | 0.58 |
-
-Dürüst uyarı: koşular arasında kod da değişti (DSR havuzlama düzeltmesi sıralamayı,
+Koşular arasında kodu da değiştirmiştim (DSR havuzlama düzeltmesi sıralamayı,
 fizibilite ve net-seçim düzeltmeleri hangi parametrelerin kazandığını değiştirdi),
-bu yüzden 0/10'un ne kadarının gerçek istikrarsızlık, ne kadarının düzeltmeler
-olduğu bu dört koşudan ayırt edilemez. Aynı kodla arka arkaya iki koşu bunu
-temizler.
+yani 0/10'un kaynağı belirsizdi. Kontrollü test: **aynı kod, aynı sekiz coin,
+~40 dakika arayla iki koşu.**
+
+| | koşu 4 | koşu 5 |
+|---|---|---|
+| konfigürasyon | 4352 | 4352 |
+| PBO | 0.5774 | 0.5754 |
+| top-10 kesişimi | — | **9/10** |
+| coin kesişimi | — | **6/6** |
+
+Yani liderlik tablosu son derece kararlı; önceki 0/10 tamamen kendi
+düzeltmelerimden kaynaklanıyordu.
+
+**Ama kararlılık bir edge kanıtı değildir.** Turnuva, neredeyse aynı veri üzerinde
+deterministik bir hesap — tekrar üretilebilir olması beklenen davranıştır ve
+seçilen kuralın YENİ veriye genelleneceği hakkında hiçbir şey söylemez. Genelleme
+sorusunu soran test PBO'dur, ve o 0.577 diyor: örneklem-içi kazanan, örneklem
+dışında yarıdan fazla kez medyanın altına düşüyor.
+
+Kaydedilmeye değer çünkü kolay bir yanlış çıkarım: "tablo her koşuda aynı çıkıyor,
+demek ki sağlam." Değil — sadece deterministik.
 
 ## Zaman dilimi karşılaştırması
 
