@@ -92,6 +92,49 @@ oranı, medyan bar aralığı, bölünme boyutunda sıçramalar) ve **en derin d
 likit** kaynağı seçer. Düzeltmeden sonra TRX, HYPE, DOGE ve BNB otomatik olarak
 OKX'e geçti ve evrendeki her coin kapılardan geçti.
 
+## Bulgu 3: liderlik tablosu koşular arası hiç sabit kalmıyor
+
+Dört turnuva koşusu, saatler arayla, esasen aynı veri üzerinde (90–370 günlük
+serilere birkaç saatlik yeni bar ekleniyor). Son iki koşunun top-10'ları
+**hiçbir ortak eleman içermiyor.**
+
+| koşu | tepedeki hücreler | PBO |
+|---|---|---|
+| 1 | TRX/15dk (ölü defter artefaktı) | 0.40 |
+| 2 | DOGE/15dk, TRX/15dk, HYPE/1sa | 0.36 |
+| 3 | HYPE/4sa, XRP/4sa, SOL/4sa | 0.60 |
+| 4 | HYPE/15dk, TRX/30dk, XRP/30dk | 0.58 |
+
+Dürüst uyarı: koşular arasında kod da değişti (DSR havuzlama düzeltmesi sıralamayı,
+fizibilite ve net-seçim düzeltmeleri hangi parametrelerin kazandığını değiştirdi),
+bu yüzden 0/10'un ne kadarının gerçek istikrarsızlık, ne kadarının düzeltmeler
+olduğu bu dört koşudan ayırt edilemez. Aynı kodla arka arkaya iki koşu bunu
+temizler.
+
+## Zaman dilimi karşılaştırması
+
+Sıralama hatası düzeltildikten sonraki tablo:
+
+| tf | hücre | medyan Sharpe | pozitif | al-tut'u geçen | medyan DSR |
+|---|---|---|---|---|---|
+| 15dk | 34 | **−1.54** | 5/34 | 24/34 | 0.0040 |
+| 30dk | 59 | **−1.00** | 20/59 | 11/59 | 0.0002 |
+| 1sa | 79 | **−0.60** | 10/79 | 59/79 | 0.0000 |
+| 4sa | 112 | **+0.15** | 41/112 | 16/112 | 0.0000 |
+
+Top-10 ise 5× 15dk + 5× 30dk — hiç 4 saatlik yok. **İkisi çelişmiyor, farklı
+şeyler söylüyor:** hızlı zaman dilimlerinde dağılım geniş (çoğu hücre sert
+kaybediyor, birkaçı 2.1 Sharpe'a çıkıyor), 4 saatlikte merkezi hafif pozitif ama
+uç kazanan yok. Yani hızlıdaki "kazananlar" gürültülü bir dağılımın sağ kuyruğu.
+
+Bir önceki koşuda "top-10'un onu da 4 saatlik" diye raporlanan sonuç, DSR
+havuzlama hatasının ürünüydü; liderlik tablosu o sütuna göre sıralandığı için
+kendini en-yavaş-önce diziyordu. Medyan gradyanı ise DSR'den bağımsız hesaplandığı
+için etkilenmedi ve ayakta kaldı.
+
+Hiçbir hücre üç testin üçünü birden geçmiyor: en yüksek DSR 0.178 (eşik 0.95), en
+düşük bootstrap p=0.068, PBO 0.577.
+
 ## Kritik değişken: turnover
 
 15dk barda 30bps gidiş-dönüş, BTC'nin tek-bar oynaklığının kabaca **2 katı**.
