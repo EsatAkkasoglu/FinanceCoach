@@ -264,6 +264,7 @@ def run_tournament(
     oos_by_key: dict[str, np.ndarray] = {}
     pbo_by_series: dict[str, Any] = {}
     fetch_errors: list[str] = []
+    rejected: dict[str, Any] = {}
     total_trials = 0
 
     def _say(msg: str) -> None:
@@ -284,6 +285,18 @@ def run_tournament(
                 continue
             if len(candles) < _MIN_BARS:
                 fetch_errors.append(f"{key}: only {len(candles)} bars")
+                continue
+            # A stale or frozen book produces spectacular mean-reversion
+            # backtests that are pure bid-ask bounce. Skipping loudly beats
+            # crowning an untradeable series — see exchange.assess.
+            if not candles.tradeable:
+                why = "; ".join(candles.quality.reasons) if candles.quality else "unknown"
+                rejected[key] = {
+                    "source": candles.source,
+                    "reasons": candles.quality.reasons if candles.quality else [],
+                    "quality": candles.quality.as_dict() if candles.quality else None,
+                }
+                _say(f"  {key}: REJECTED ({candles.source}) — {why}")
                 continue
 
             series_for_pbo: list[np.ndarray] = []
@@ -306,9 +319,14 @@ def run_tournament(
                     matrix = np.column_stack([s[-width:] for s in series_for_pbo])
                     pbo_by_series[key] = mx.probability_of_backtest_overfitting(matrix)
 
-            _say(f"  {key}: {len(candles)} bars from {candles.source}")
+            q = candles.quality
+            _say(
+                f"  {key}: {len(candles)} bars from {candles.source}"
+                + (f" (stale {q.stale_fraction:.0%}, range {q.median_range_pct:.3f}%)" if q else "")
+            )
 
     leaderboard = _rank(cells, oos_by_key, total_trials)
+    verdict = _verdict(leaderboard, pbo_by_series, total_trials, len(rejected))
     return {
         "ok": True,
         "generated_at": int(time.time()),
@@ -323,11 +341,13 @@ def run_tournament(
         },
         "total_configurations_tested": total_trials,
         "n_cells": len(cells),
+        "n_rejected_series": len(rejected),
         "fetch_errors": fetch_errors,
+        "rejected_for_data_quality": rejected,
         "cells": [c.as_dict() for c in cells],
         "leaderboard": leaderboard,
         "pbo": pbo_by_series,
-        "verdict": _verdict(leaderboard, pbo_by_series, total_trials),
+        "verdict": verdict,
     }
 
 
@@ -389,7 +409,8 @@ def _rank(
 
 
 def _verdict(
-    leaderboard: list[dict[str, Any]], pbo: dict[str, Any], total_trials: int
+    leaderboard: list[dict[str, Any]], pbo: dict[str, Any], total_trials: int,
+    n_rejected: int = 0,
 ) -> dict[str, Any]:
     """The honest headline. A null result is a result."""
     survivors = [r for r in leaderboard if r["survives"]]
@@ -399,6 +420,7 @@ def _verdict(
 
     return {
         "n_evaluated": len(leaderboard),
+        "n_rejected_series": n_rejected,
         "n_positive_oos": len(positive),
         "n_beat_buy_hold": len(beat_bh),
         "n_survivors": len(survivors),

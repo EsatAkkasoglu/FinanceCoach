@@ -108,10 +108,18 @@ def market_context() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         ctx["news_error"] = f"{type(exc).__name__}"
 
-    try:
-        ctx["trending"] = rapidapi.trending_coins(limit=10)
-    except Exception:  # noqa: BLE001
-        pass
+    for label, fn in (
+        ("trending", lambda: rapidapi.trending_coins(limit=10)),
+        ("breadth", rapidapi.market_breadth),
+        ("news_tags", lambda: rapidapi.news_trending_tags(6)),
+        ("news_latest", lambda: rapidapi.news_latest(5)),
+    ):
+        try:
+            value = fn()
+            if value:
+                ctx[label] = value
+        except Exception:  # noqa: BLE001 — context is never worth failing a cycle over
+            pass
     return ctx
 
 
@@ -145,36 +153,59 @@ def load_tournament() -> dict[str, Any] | None:
 
 
 def select_allocations(result: dict[str, Any], n: int = N_ALLOCATIONS) -> list[Allocation]:
-    """Choose what to run forward.
+    """Choose what to run forward — one always-in-market rule per timeframe.
 
-    Ranking is by out-of-sample Sharpe, NOT by out-of-sample total return. In a
-    falling market the highest-return rule is usually the one that was flat the
-    longest, which says nothing about skill; Sharpe at least asks what was earned
-    per unit of risk taken.
+    Three deliberate choices:
+
+    * **Long/short only.** A long/flat rule spends most of a falling tape in
+      cash, which answers nothing about whether the rule has skill and takes no
+      position at all. The experiment is asking which rule makes money, so the
+      book stays in the market and expresses a direction every bar.
+    * **One cell per timeframe.** The question is explicitly about 15m vs 30m
+      vs 1h vs 4h, so each gets a slice and they are compared on the same book
+      over the same window. Loading all six slots onto whichever timeframe
+      happened to backtest best would destroy the comparison.
+    * **Ranked by out-of-sample Sharpe, not return.** In a falling market the
+      top-return rule is usually the one that was flat longest; Sharpe at least
+      asks what was earned per unit of risk taken.
 
     Survivors of the full three-test bar are preferred when any exist. When none
-    do — the expected case — the top Sharpe cells are run forward anyway and
-    flagged ``selected_without_significance``. That is the honest experiment:
-    the backtest could not resolve an edge, so the forward log is asked to.
+    do — the expected case — the best cells run forward anyway, flagged
+    ``selected_without_significance``. That IS the experiment: the backtest
+    could not resolve an edge, so the forward log is asked to.
     """
-    board = [r for r in result.get("leaderboard", []) if r.get("oos_sharpe_ann") is not None]
+    board = [
+        r for r in result.get("leaderboard", [])
+        if r.get("oos_sharpe_ann") is not None and r.get("variant") == "long_short"
+    ]
+    if not board:
+        # No long/short cell survived; fall back rather than trade nothing.
+        board = [r for r in result.get("leaderboard", []) if r.get("oos_sharpe_ann") is not None]
     if not board:
         return []
 
-    survivors = [r for r in board if r.get("survives")]
-    pool = survivors or board
-    ranked = sorted(pool, key=lambda r: r["oos_sharpe_ann"], reverse=True)
-
-    # At most one cell per symbol: six rules on BTC is one bet, not six.
     chosen: list[dict[str, Any]] = []
     seen_symbols: set[str] = set()
-    for row in ranked:
+
+    # Pass 1: the best rule on each timeframe, on distinct symbols.
+    for timeframe in result.get("timeframes", []):
+        pool = [r for r in board if r["timeframe"] == timeframe]
+        survivors = [r for r in pool if r.get("survives")]
+        for row in sorted(survivors or pool, key=lambda r: r["oos_sharpe_ann"], reverse=True):
+            if row["symbol"] in seen_symbols:
+                continue
+            chosen.append(row)
+            seen_symbols.add(row["symbol"])
+            break
+
+    # Pass 2: fill any remaining slots with the best cells left over.
+    for row in sorted(board, key=lambda r: r["oos_sharpe_ann"], reverse=True):
+        if len(chosen) >= n:
+            break
         if row["symbol"] in seen_symbols:
             continue
         chosen.append(row)
         seen_symbols.add(row["symbol"])
-        if len(chosen) >= n:
-            break
 
     weight = 1.0 / max(1, len(chosen))
     return [
@@ -182,7 +213,7 @@ def select_allocations(result: dict[str, Any], n: int = N_ALLOCATIONS) -> list[A
             symbol=row["symbol"],
             timeframe=row["timeframe"],
             strategy=row["strategy"],
-            variant=row.get("variant", "long_flat"),
+            variant=row.get("variant", "long_short"),
             params=row.get("best_params") or {},
             weight=weight,
             selected_on={

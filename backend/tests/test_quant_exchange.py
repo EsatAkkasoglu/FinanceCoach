@@ -25,6 +25,22 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def _rows(n: int, start_i: int = 0, base: float = 100.0) -> list[list[float]]:
+    """Realistic bars: a moving close and a non-zero high-low range.
+
+    Constant prices would trip the stale-book gate (100% of bars unchanged) and
+    a flat 1.0 -> 2.0 step would trip the discontinuity truncator, so fixtures
+    have to look like a market or they test the guards instead of the loader.
+    """
+    out = []
+    for k in range(n):
+        i = start_i + k
+        close = base * (1.0 + 0.0007 * i + 0.004 * np.sin(i / 7.0))
+        out.append([float(i * 900_000), close * 0.999, close * 1.003,
+                    close * 0.997, close, 100.0 + i])
+    return out
+
+
 # ── normalisation ────────────────────────────────────────────────────────────
 
 
@@ -105,7 +121,7 @@ def test_fetch_falls_through_to_the_next_venue(cache_dir, monkeypatch):
     def dead(symbol, timeframe, want):
         raise RuntimeError("venue down")
 
-    good = [[float(i * 900_000), 1, 2, 0.5, 1.0 + i * 0.01, 10] for i in range(200)]
+    good = _rows(200)
     monkeypatch.setattr(ex, "_SOURCES", (("dead", dead), ("good", lambda s, t, w: good)))
 
     c = ex.fetch_candles("BTC", "15m", 100)
@@ -115,8 +131,8 @@ def test_fetch_falls_through_to_the_next_venue(cache_dir, monkeypatch):
 
 def test_fetch_keeps_the_deepest_series_across_venues(cache_dir, monkeypatch):
     """A venue that returns a stub is not a hit — the loader keeps looking."""
-    shallow = [[float(i * 900_000), 1, 2, 0.5, 1.0, 10] for i in range(10)]
-    deep = [[float(i * 900_000), 1, 2, 0.5, 1.0, 10] for i in range(500)]
+    shallow = _rows(10)
+    deep = _rows(500)
     monkeypatch.setattr(
         ex, "_SOURCES",
         (("shallow", lambda s, t, w: shallow), ("deep", lambda s, t, w: deep)),
@@ -144,13 +160,13 @@ def test_unsupported_timeframe_is_rejected(cache_dir):
 
 
 def test_cache_is_written_and_extends_a_later_fetch(cache_dir, monkeypatch):
-    first = [[float(i * 900_000), 1, 2, 0.5, 1.0, 10] for i in range(300)]
+    first = _rows(300)
     monkeypatch.setattr(ex, "_SOURCES", (("v1", lambda s, t, w: first),))
     ex.fetch_candles("BTC", "15m", 200)
     assert (cache_dir / "BTC_15m.json").exists()
 
     # A later fetch returning only NEW bars must still see the cached history.
-    later = [[float((300 + i) * 900_000), 1, 2, 0.5, 2.0, 10] for i in range(20)]
+    later = _rows(20, start_i=300)
     monkeypatch.setattr(ex, "_SOURCES", (("v2", lambda s, t, w: later),))
     merged = ex.fetch_candles("BTC", "15m", 200)
     assert len(merged) == 320
@@ -158,7 +174,7 @@ def test_cache_is_written_and_extends_a_later_fetch(cache_dir, monkeypatch):
 
 def test_a_corrupt_cache_does_not_stop_a_fetch(cache_dir, monkeypatch):
     (cache_dir / "BTC_15m.json").write_text("{not json", encoding="utf-8")
-    rows = [[float(i * 900_000), 1, 2, 0.5, 1.0, 10] for i in range(50)]
+    rows = _rows(50)
     monkeypatch.setattr(ex, "_SOURCES", (("v", lambda s, t, w: rows),))
     assert len(ex.fetch_candles("BTC", "15m", 50)) == 50
 
@@ -173,10 +189,67 @@ def test_bars_per_year_matches_a_24_7_market():
 
 
 def test_candles_tail_and_dates_line_up():
-    rows = [[float(i * 3_600_000), 1, 2, 0.5, 1.0 + i, 10] for i in range(100)]
+    rows = _rows(100)
     c = ex._normalise(rows, "ETH", "1h", "test")
     t = c.tail(10)
     assert len(t) == 10
     assert len(t.dates) == 10
     assert t.closes[-1] == c.closes[-1]
     assert np.all(np.diff(c.ts) > 0)
+
+
+# ── data-quality gates ───────────────────────────────────────────────────────
+
+
+def test_a_stale_book_is_marked_untradeable():
+    """The TRX case: 68% of bars unchanged, zero volume, no range. Spectacular
+    mean-reversion backtests on this are bid-ask bounce, not an edge."""
+    rows = []
+    for i in range(400):
+        close = 0.33 if i % 3 else 0.33 * (1 + 0.01 * ((i // 3) % 5 - 2))
+        rows.append([float(i * 900_000), close, close, close, close, 0.0])
+    c = ex._normalise(rows, "TRX", "15m", "test")
+    assert c.tradeable is False
+    joined = " ".join(c.quality.reasons)
+    assert "stale book" in joined
+    assert "zero volume" in joined
+
+
+def test_a_liquid_book_passes_every_gate():
+    c = ex._normalise(_rows(500), "BTC", "15m", "test")
+    assert c.tradeable is True
+    assert c.quality.reasons == []
+    assert c.quality.stale_fraction < ex.MAX_STALE_FRACTION
+
+
+def test_a_split_sized_jump_truncates_the_series():
+    """TRX/1h printed +385% in one bar — a redenomination, not a return. Keeping
+    it hands any long rule a free 385%."""
+    rows = _rows(300) + _rows(200, start_i=300, base=500.0)
+    c = ex._normalise(rows, "TRX", "1h", "test")
+    assert len(c) == 200                      # only the post-break segment survives
+    assert c.quality.n_discontinuities == 0   # and the survivor is clean
+
+
+def test_fetch_prefers_a_liquid_venue_over_a_deeper_stale_one(cache_dir, monkeypatch):
+    """Depth was the old criterion, and it is exactly how a dead book won."""
+    stale = [
+        [float(i * 900_000), 0.33, 0.33, 0.33, 0.33, 0.0] for i in range(2000)
+    ]
+    liquid = _rows(600)
+    monkeypatch.setattr(
+        ex, "_SOURCES",
+        (("deep-but-dead", lambda s, t, w: stale), ("liquid", lambda s, t, w: liquid)),
+    )
+    c = ex.fetch_candles("TRX", "15m", 1500, use_cache=False)
+    assert c.source == "liquid"
+    assert c.tradeable is True
+
+
+def test_quality_is_json_safe():
+    c = ex._normalise(_rows(300), "BTC", "15m", "test")
+    payload = c.quality.as_dict()
+    import json
+
+    json.dumps(payload)
+    assert set(payload) >= {"stale_fraction", "median_range_pct", "tradeable", "reasons"}

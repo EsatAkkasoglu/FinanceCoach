@@ -70,6 +70,108 @@ class ExchangeError(RuntimeError):
     """No source could supply usable candles."""
 
 
+# ── data quality ─────────────────────────────────────────────────────────────
+#
+# Learned the hard way. The first full tournament run crowned
+# TRX/15m/bollinger_reversion with a +8744% out-of-sample return. It was not an
+# edge: on Binance.US, 68% of TRX 15-minute bars had ZERO return, 64% had zero
+# volume, and the median bar range was 0.000%. The price sat frozen for hours,
+# then printed an 11% jump when somebody finally traded. A mean-reversion rule
+# backtested on that "buys the low print and sells the high print" — it is
+# harvesting the bid-ask bounce of a dead order book, which no one can trade.
+#
+# The same pair on OKX had 3% stale bars and a 0.07% median range: a real
+# market. So the venue, not the coin, was the problem — and picking a source by
+# history depth (which is what made Binance.US the default) selected the worst
+# possible venue for exactly the pairs where it mattered most.
+#
+# These gates run on every fetch. A series that fails them is returned with
+# ``tradeable=False`` and the tournament skips it, loudly.
+
+#: Above this share of unchanged closes the series is a stale book, not a market.
+MAX_STALE_FRACTION = 0.20
+#: Above this share of zero-volume bars nothing is actually trading.
+MAX_ZERO_VOLUME_FRACTION = 0.20
+#: A median high-low range below this is a frozen book (BTC/ETH run ~0.16%).
+MIN_MEDIAN_RANGE_PCT = 0.02
+#: A single-bar move this large is a split, redenomination or data splice —
+#: never a market move. TRX/1h showed +385.59% in one 30-minute bar.
+DISCONTINUITY_THRESHOLD = 0.50
+
+
+@dataclass
+class Quality:
+    """Whether a price series is fit to backtest on."""
+
+    n_bars: int
+    stale_fraction: float
+    zero_volume_fraction: float
+    median_range_pct: float
+    max_abs_return_pct: float
+    n_discontinuities: int
+    tradeable: bool
+    reasons: list[str]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "n_bars": self.n_bars,
+            "stale_fraction": round(self.stale_fraction, 4),
+            "zero_volume_fraction": round(self.zero_volume_fraction, 4),
+            "median_range_pct": round(self.median_range_pct, 4),
+            "max_abs_return_pct": round(self.max_abs_return_pct, 3),
+            "n_discontinuities": self.n_discontinuities,
+            "tradeable": self.tradeable,
+            "reasons": self.reasons,
+        }
+
+
+def assess(
+    closes: np.ndarray, highs: np.ndarray, lows: np.ndarray, volumes: np.ndarray
+) -> Quality:
+    """Grade a price series for tradability."""
+    n = int(closes.size)
+    if n < 20:
+        return Quality(n, 1.0, 1.0, 0.0, 0.0, 0, False, [f"only {n} bars"])
+
+    rets = closes[1:] / closes[:-1] - 1.0
+    stale = float(np.mean(np.abs(rets) < 1e-12))
+    zero_vol = float(np.mean(volumes <= 0))
+    med_range = float(np.median((highs - lows) / np.maximum(closes, 1e-12))) * 100.0
+    max_abs = float(np.max(np.abs(rets))) * 100.0
+    n_disc = int(np.count_nonzero(np.abs(rets) > DISCONTINUITY_THRESHOLD))
+
+    reasons: list[str] = []
+    if stale > MAX_STALE_FRACTION:
+        reasons.append(f"{stale:.0%} of bars never moved — stale book")
+    if zero_vol > MAX_ZERO_VOLUME_FRACTION:
+        reasons.append(f"{zero_vol:.0%} of bars had zero volume")
+    if med_range < MIN_MEDIAN_RANGE_PCT:
+        reasons.append(f"median bar range {med_range:.3f}% — frozen book")
+    if n_disc:
+        reasons.append(f"{n_disc} bar(s) moved >{DISCONTINUITY_THRESHOLD:.0%} — split or data splice")
+
+    return Quality(n, stale, zero_vol, med_range, max_abs, n_disc, not reasons, reasons)
+
+
+def _truncate_at_discontinuity(rows: list[list[float]]) -> list[list[float]]:
+    """Keep only the segment after the last split/splice jump.
+
+    A redenomination is not a return. Leaving it in hands any long-biased rule a
+    free 385% and makes the whole series meaningless; the honest response is to
+    treat everything before the break as a different instrument.
+    """
+    if len(rows) < 3:
+        return rows
+    closes = np.asarray([r[4] for r in rows], dtype=float)
+    rets = closes[1:] / np.maximum(closes[:-1], 1e-12) - 1.0
+    breaks = np.flatnonzero(np.abs(rets) > DISCONTINUITY_THRESHOLD)
+    if breaks.size == 0:
+        return rows
+    cut = int(breaks[-1]) + 1
+    log.info("truncating %d bars before a price discontinuity at index %d", cut, cut)
+    return rows[cut:]
+
+
 @dataclass
 class Candles:
     """Oldest-first OHLCV for one (symbol, timeframe)."""
@@ -83,6 +185,7 @@ class Candles:
     lows: np.ndarray
     closes: np.ndarray
     volumes: np.ndarray
+    quality: Quality | None = None
 
     def __len__(self) -> int:
         return int(self.closes.size)
@@ -97,11 +200,16 @@ class Candles:
             time.strftime("%Y-%m-%d %H:%M", time.gmtime(int(t) / 1000)) for t in self.ts
         ]
 
+    @property
+    def tradeable(self) -> bool:
+        return bool(self.quality is None or self.quality.tradeable)
+
     def tail(self, n: int) -> Candles:
         return Candles(
             self.symbol, self.timeframe, self.source,
             self.ts[-n:], self.opens[-n:], self.highs[-n:],
             self.lows[-n:], self.closes[-n:], self.volumes[-n:],
+            self.quality,
         )
 
 
@@ -244,7 +352,11 @@ def _normalise(rows: list[list[float]], symbol: str, timeframe: str, source: str
             continue
         by_ts[int(row[0])] = row
     ordered = [by_ts[t] for t in sorted(by_ts)]
+    ordered = _truncate_at_discontinuity(ordered)
     arr = np.asarray(ordered, dtype=float) if ordered else np.empty((0, 6))
+    quality = (
+        assess(arr[:, 4], arr[:, 2], arr[:, 3], arr[:, 5]) if arr.size else None
+    )
     return Candles(
         symbol=symbol.upper(), timeframe=timeframe, source=source,
         ts=arr[:, 0].astype(np.int64) if arr.size else np.empty(0, dtype=np.int64),
@@ -253,6 +365,7 @@ def _normalise(rows: list[list[float]], symbol: str, timeframe: str, source: str
         lows=arr[:, 3] if arr.size else np.empty(0),
         closes=arr[:, 4] if arr.size else np.empty(0),
         volumes=arr[:, 5] if arr.size else np.empty(0),
+        quality=quality,
     )
 
 
@@ -304,17 +417,34 @@ def fetch_candles(
         if hit:
             cached_rows, source = hit
 
+    # Try every venue and keep the best TRADEABLE series — depth alone is the
+    # wrong criterion. Binance.US paginates fastest and so used to win by
+    # default, which is precisely how a dead TRX book became the data behind a
+    # +8744% "edge". A liquid short series beats a frozen long one.
     fresh: list[list[float]] = []
     errors: list[str] = []
+    best_quality: Quality | None = None
     for name, fn in _SOURCES:
         try:
             rows = fn(symbol, timeframe, want)
         except Exception as exc:  # noqa: BLE001 — try the next venue
             errors.append(f"{name}: {type(exc).__name__} {str(exc)[:90]}")
             continue
-        if len(rows) > len(fresh):
-            fresh, source = rows, name
-        if len(fresh) >= want * _SUFFICIENT:
+        if not rows:
+            continue
+        candidate = _normalise(rows, symbol, timeframe, name)
+        q = candidate.quality
+        better = (
+            fresh == []
+            or (q and q.tradeable and not (best_quality and best_quality.tradeable))
+            or (
+                bool(q and q.tradeable) == bool(best_quality and best_quality.tradeable)
+                and len(rows) > len(fresh)
+            )
+        )
+        if better:
+            fresh, source, best_quality = rows, name, q
+        if best_quality and best_quality.tradeable and len(fresh) >= want * _SUFFICIENT:
             break
 
     merged = cached_rows + fresh
