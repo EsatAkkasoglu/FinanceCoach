@@ -48,6 +48,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 from app.eval.scorecard import (
     _skew_kurt,
@@ -107,6 +108,47 @@ def sma_series(values: np.ndarray, period: int) -> np.ndarray:
     return out
 
 
+def _rolling_std(values: np.ndarray, period: int) -> np.ndarray:
+    """Rolling sample stdev; the first ``period-1`` entries are NaN.
+
+    Computed from rolling sums rather than a Python loop — at 9000 bars × a
+    parameter grid × 32 (symbol, timeframe) pairs, the loop version dominates
+    the tournament's runtime.
+    """
+    v = np.asarray(values, dtype=float)
+    out = np.full(v.size, np.nan)
+    if period < 2 or v.size < period:
+        return out
+    c1 = np.cumsum(np.insert(v, 0, 0.0))
+    c2 = np.cumsum(np.insert(v * v, 0, 0.0))
+    s1 = c1[period:] - c1[:-period]
+    s2 = c2[period:] - c2[:-period]
+    var = (s2 - s1 * s1 / period) / (period - 1)
+    out[period - 1:] = np.sqrt(np.maximum(var, 0.0))
+    return out
+
+
+def atr_series(
+    highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 14
+) -> np.ndarray:
+    """Wilder's ATR at every bar — the series form of ``crypto_short_term.atr``."""
+    h = np.asarray(highs, dtype=float)
+    low_arr = np.asarray(lows, dtype=float)
+    c = np.asarray(closes, dtype=float)
+    n = c.size
+    out = np.full(n, np.nan)
+    if n <= period or h.size != n or low_arr.size != n:
+        return out
+    prev = c[:-1]
+    tr = np.maximum.reduce([h[1:] - low_arr[1:], np.abs(h[1:] - prev), np.abs(low_arr[1:] - prev)])
+    val = float(tr[:period].mean())
+    out[period] = val
+    for i in range(period, tr.size):
+        val = (val * (period - 1) + tr[i]) / period
+        out[i + 1] = val
+    return out
+
+
 def rsi_series(values: np.ndarray, period: int = 14) -> np.ndarray:
     """Wilder's RSI at every bar; the first ``period`` entries are NaN.
 
@@ -154,6 +196,9 @@ def macd_series(
 # ─────────────────────────────────────────────────────────────────────────────
 
 SignalFn = Callable[..., tuple[np.ndarray, int]]
+
+#: How often the vol-regime filter recomputes its expanding quantile (in bars).
+_QUANTILE_REFRESH = 24
 
 
 def _carry_forward(entries: np.ndarray, exits: np.ndarray) -> np.ndarray:
@@ -213,12 +258,74 @@ def _sig_donchian(closes, highs, lows, *, lookback: int = 20, **_):
     n = c.size
     entries = np.zeros(n, dtype=bool)
     exits = np.zeros(n, dtype=bool)
+    if n <= lookback:
+        return entries.astype(float), lookback
     # Channel is built from the PRIOR `lookback` bars — never including bar i,
-    # which would make the breakout test trivially self-referential.
-    for i in range(lookback, n):
-        entries[i] = c[i] > h[i - lookback:i].max()
-        exits[i] = c[i] < low_arr[i - lookback:i].min()
+    # which would make the breakout test trivially self-referential. The
+    # sliding windows below end at i-1 for exactly that reason.
+    hi = sliding_window_view(h[:-1], lookback).max(axis=1)
+    lo = sliding_window_view(low_arr[:-1], lookback).min(axis=1)
+    entries[lookback:] = c[lookback:] > hi
+    exits[lookback:] = c[lookback:] < lo
     return _carry_forward(entries, exits), lookback
+
+
+def _sig_bollinger_reversion(closes, highs, lows, *, period: int = 20, k: float = 2.0, **_):
+    """Buy the lower band, exit at the mean. Classic intraday mean reversion.
+
+    Both legs are close-vs-level tests, so a bar-close engine can evaluate them
+    with no intrabar ambiguity — unlike a stop-and-target pair, which can both
+    sit inside one bar's range with no way to know which printed first.
+    """
+    c = np.asarray(closes, dtype=float)
+    mid = sma_series(c, period)
+    sd = _rolling_std(c, period)
+    lower = mid - k * sd
+    defined = np.isfinite(mid) & np.isfinite(sd)
+    return _carry_forward(defined & (c < lower), defined & (c > mid)), period
+
+
+def _sig_vol_regime_tsmom(
+    closes, highs, lows, *, lookback: int = 48, vol_window: int = 96,
+    vol_quantile: float = 0.5, **_
+):
+    """Time-series momentum, but only while realised volatility is elevated.
+
+    Tests the standing claim that trend-following pays in high-vol regimes and
+    bleeds in quiet ones. The regime threshold is an EXPANDING quantile of past
+    volatility — a full-sample quantile would leak the future into every bar.
+    """
+    c = np.asarray(closes, dtype=float)
+    n = c.size
+    warmup = max(lookback, vol_window) + 2
+    raw = np.zeros(n, dtype=float)
+    if n <= warmup:
+        return raw, warmup
+
+    rets = np.zeros(n, dtype=float)
+    rets[1:] = np.diff(c) / c[:-1]
+    vol = _rolling_std(rets, vol_window)
+
+    trend = np.zeros(n, dtype=bool)
+    trend[lookback:] = c[lookback:] > c[:-lookback]
+
+    # Expanding quantile, refreshed every `_QUANTILE_REFRESH` bars and held in
+    # between. A per-bar recompute is O(n² log n) and dominates the tournament;
+    # refreshing on a schedule stays strictly causal (the threshold in force at
+    # bar i was computed from bars < i) while being ~two orders faster.
+    threshold = np.full(n, np.nan)
+    current = np.nan
+    for i in range(warmup, n):
+        if (i - warmup) % _QUANTILE_REFRESH == 0:
+            window = vol[:i]
+            window = window[np.isfinite(window)]
+            current = float(np.quantile(window, vol_quantile)) if window.size >= 10 else np.nan
+        threshold[i] = current
+
+    live = np.isfinite(vol) & np.isfinite(threshold)
+    raw[live & (vol >= threshold) & trend] = 1.0
+    raw[:warmup] = 0.0
+    return raw, warmup
 
 
 def _sig_buy_hold(closes, highs, lows, **_):
@@ -232,6 +339,8 @@ SIGNALS: dict[str, SignalFn] = {
     "macd": _sig_macd,
     "tsmom": _sig_tsmom,
     "donchian": _sig_donchian,
+    "bollinger_reversion": _sig_bollinger_reversion,
+    "vol_regime_tsmom": _sig_vol_regime_tsmom,
     "buy_hold": _sig_buy_hold,
 }
 
@@ -244,6 +353,8 @@ PARAM_GRIDS: dict[str, dict[str, list[Any]]] = {
     "macd": {"fast": [12], "slow": [26], "signal": [9]},
     "tsmom": {"lookback": [21, 63, 126, 252]},
     "donchian": {"lookback": [20, 55]},
+    "bollinger_reversion": {"period": [20, 50], "k": [1.5, 2.0, 2.5]},
+    "vol_regime_tsmom": {"lookback": [24, 48], "vol_window": [96], "vol_quantile": [0.4, 0.6]},
     "buy_hold": {},
 }
 
@@ -451,6 +562,7 @@ def walk_forward(
     ppy: float = 252.0,
     allow_short: bool = False,
     min_test_bars: int = 30,
+    return_series: bool = False,
 ) -> dict[str, Any]:
     """Expanding-window walk-forward: tune on the past, score on the future.
 
@@ -497,6 +609,7 @@ def walk_forward(
 
     bounds = np.linspace(max_warmup, asset_r.size, n_folds + 2).round().astype(int)
     oos: list[float] = []
+    bench: list[float] = []
     fold_rows: list[dict[str, Any]] = []
 
     for f in range(1, n_folds + 1):
@@ -522,6 +635,10 @@ def walk_forward(
         traded = np.abs(seg_pos - prev)
         net = seg_pos * seg_ret - traded * costs.per_turn - np.abs(seg_pos) * costs.per_bar_carry
         oos.extend(float(x) for x in net)
+        # Buy & hold over the very same test bars. Without this, "excess return"
+        # would compare an out-of-sample record against a full-sample benchmark —
+        # two different windows, so the difference is mostly just market drift.
+        bench.extend(float(x) for x in seg_ret)
         fold_rows.append({
             "fold": f,
             "train_bars": train_end - max_warmup,
@@ -557,6 +674,13 @@ def walk_forward(
             ) if sr is not None else None
         ),
         "folds": fold_rows,
+        "benchmark_return_pct": round(float(np.prod(1.0 + np.asarray(bench)) - 1.0) * 100.0, 3),
+        "excess_vs_buy_hold_pct": round(
+            (float(np.prod(1.0 + np.asarray(oos))) - float(np.prod(1.0 + np.asarray(bench)))) * 100.0, 3
+        ),
+        **(
+            {"oos_returns": oos, "benchmark_returns": bench} if return_series else {}
+        ),
         "note": (
             "Out-of-sample only: each fold's parameters were chosen on prior bars "
             f"and applied unchanged to the next block. The Deflated Sharpe accounts "

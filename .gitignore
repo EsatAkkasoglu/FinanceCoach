@@ -31,6 +31,8 @@ backend/.env
 *.sqlite3
 backend/fincoach.db
 backend/chroma_db/
+# Experiment artefacts: candle cache, paper ledger, tournament output
+backend/data/
 backend/evals/_eval.db*
 backend/evals/results/
 

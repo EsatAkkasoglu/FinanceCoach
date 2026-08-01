@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # spot/index prices, OHLCV history, top-by-market-cap, and derivatives
     # (funding rate, open interest). https://developers.coindesk.com
     coindesk_api_key: str = Field(default="", alias="COINDESK_API_KEY")
+    # RapidAPI gateway key. Each RapidAPI product needs its own subscription —
+    # an unsubscribed one returns 403 even with a valid key (see services/rapidapi.py).
+    rapidapi_key: str = Field(default="", alias="RAPIDAPI_KEY")
     # Default derivatives venue for funding-rate / open-interest lookups.
     coindesk_futures_market: str = Field(default="binance", alias="COINDESK_FUTURES_MARKET")
     # Curated short-term crypto basket — chosen so BOTH news analysis (heavy,
