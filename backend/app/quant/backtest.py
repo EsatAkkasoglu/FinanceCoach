@@ -777,6 +777,7 @@ def walk_forward(
     ppy: float = 252.0,
     allow_short: bool = False,
     min_test_bars: int = 30,
+    eval_start: int = 0,
     return_series: bool = False,
 ) -> dict[str, Any]:
     """Expanding-window walk-forward: tune on the past, score on the future.
@@ -790,6 +791,15 @@ def walk_forward(
     record, and its Sharpe is deflated by the number of combinations tried.
     Returns ``{"ok": False, "reason": ...}`` when the history is too short —
     it never fabricates a fold.
+
+    ``eval_start`` is the first bar index the folds may use, for callers that
+    prepended history purely to warm the indicators up. Without it the warm-up
+    is taken out of the *evaluated* span, which is fine when it is 1% of the
+    series and badly distorting when it is 22% — an 886-bar 4h series and a
+    14,173-bar 15m series covering the same calendar end up with materially
+    different out-of-sample windows, which is exactly the confound calendar
+    alignment exists to remove. Pass the prefix length and the evaluated span
+    starts where the caller intended, identically at every timeframe.
     """
     costs = costs or Costs()
     grid = grid if grid is not None else PARAM_GRIDS.get(strategy, {})
@@ -812,7 +822,10 @@ def walk_forward(
 
     asset_r = to_returns(c)
     max_warmup = max((w for _, _, w in precomputed), default=0)
-    usable = asset_r.size - max_warmup
+    # Whichever is later: the longest indicator warm-up in the grid, or the
+    # point the caller declared the evaluated window to begin at.
+    begin = min(max(max_warmup, int(eval_start)), asset_r.size)
+    usable = asset_r.size - begin
     folds_possible = int(usable // max(1, min_test_bars)) - 1
     n_folds = max(0, min(n_folds, folds_possible))
     if n_folds < 1:
@@ -826,7 +839,7 @@ def walk_forward(
             "n_trials": len(combos),
         }
 
-    bounds = np.linspace(max_warmup, asset_r.size, n_folds + 2).round().astype(int)
+    bounds = np.linspace(begin, asset_r.size, n_folds + 2).round().astype(int)
     oos: list[float] = []
     bench: list[float] = []
     fold_rows: list[dict[str, Any]] = []
@@ -845,15 +858,20 @@ def walk_forward(
             continue
 
         best_params, best_sr = None, None
-        for params, held, warmup in precomputed:
+        for params, held, _warmup in precomputed:
             # Score the training window NET of costs. Selecting on a cost-free
             # Sharpe and then reporting the net result picks whichever rule
             # trades most — precisely the rule that cannot survive its own
             # turnover once it is scored honestly.
-            hs = held[warmup:train_end]
+            # Scored from `begin`, not from this combo's own warm-up. Starting
+            # each combo at its own warm-up gave short-lookback combos a longer
+            # training window than long-lookback ones inside the same fold, so
+            # the selection was partly a comparison of sample sizes. `begin` is
+            # >= every combo's warm-up, so no un-warmed bar is ever scored.
+            hs = held[begin:train_end]
             prev_hs = np.concatenate(([0.0], hs[:-1])) if hs.size else hs
             seg_net = (
-                hs * asset_r[warmup:train_end]
+                hs * asset_r[begin:train_end]
                 - np.abs(hs - prev_hs) * costs.per_turn
                 - np.abs(hs) * costs.per_bar_carry
             )
@@ -881,7 +899,7 @@ def walk_forward(
         bench.extend(float(x) for x in seg_ret)
         fold_rows.append({
             "fold": f,
-            "train_bars": train_end - max_warmup,
+            "train_bars": train_end - begin,
             "test_bars": int(test_end - test_start),
             "params": best_params,
             "train_sharpe": round(float(best_sr), 4) if best_sr is not None else None,

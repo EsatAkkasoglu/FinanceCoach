@@ -231,6 +231,7 @@ def evaluate_cell(
     n_folds: int = 5,
     embargo: int = 24,
     allow_short: bool = False,
+    eval_start: int = 0,
 ) -> tuple[CellResult, list[np.ndarray], np.ndarray, np.ndarray]:
     """Walk-forward one strategy on one series.
 
@@ -307,7 +308,8 @@ def evaluate_cell(
         highs=candles.highs, lows=candles.lows, combos=feasible_combos,
         n_folds=n_folds, embargo=embargo, costs=costs, ppy=ppy,
         allow_short=allow_short,
-        min_test_bars=max(60, len(candles) // (n_folds * 4)),
+        eval_start=eval_start,
+        min_test_bars=max(60, (len(candles) - eval_start) // (n_folds * 4)),
         return_series=True,
     )
     oos_series = np.asarray(wf.pop("oos_returns", []), dtype=float)
@@ -381,6 +383,34 @@ def _align_window(
 
 def _iso(ms: int) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.gmtime(ms / 1000))
+
+
+def warmup_bars_for(timeframe: str, strategies: tuple[str, ...]) -> int:
+    """Longest indicator warm-up any configuration at this timeframe needs.
+
+    Measured, not guessed: every combination in every grid is built against a
+    dummy series and the warm-up it reports is taken. That number becomes a
+    PREFIX of bars fetched before the evaluated window, so warm-up is paid for
+    out of history rather than out of the window under test.
+
+    Without the prefix the warm-up is deducted from the evaluated span itself,
+    which costs 1% of a 14,173-bar 15m series and 22% of an 886-bar 4h series
+    covering the same calendar — reintroducing, at second order, the very
+    timeframe-versus-window confound the alignment removes.
+    """
+    probe = np.linspace(100.0, 120.0, 4000)
+    worst = 0
+    for strategy in strategies:
+        for params in _combos(grid_for(strategy, timeframe)):
+            for allow_short in (False, True):
+                try:
+                    _raw, warmup = bt.build_positions(
+                        strategy, probe, probe, probe, params, allow_short=allow_short
+                    )
+                except Exception:  # noqa: BLE001 — a bad combo cannot set the budget
+                    continue
+                worst = max(worst, int(warmup))
+    return worst
 
 
 def run_tournament(
@@ -459,17 +489,49 @@ def run_tournament(
             series[(symbol, timeframe)] = candles
 
     window = _align_window(series, _say) if align_calendar else None
+    eval_start_by: dict[tuple[str, str], int] = {}
     if window:
-        start_ms, end_ms = window["start_ms"], window["end_ms"]
+        raw_start, end_ms = window["start_ms"], window["end_ms"]
+        prefix = {tf: warmup_bars_for(tf, strategies) for tf in timeframes}
+        # Bar spacing read off the data rather than assumed, so a venue that
+        # skips bars cannot silently shift the prefix.
+        steps = {
+            tf: int(np.median(np.diff(c.ts)))
+            for (_s, tf), c in series.items() if c.ts.size > 1
+        }
+        # Push the evaluated start far enough in that EVERY timeframe can serve
+        # its whole warm-up out of bars that precede the window. 4h binds: its
+        # ~200-bar warm-up is a month of calendar, against under two days at 15m.
+        eval_start_ms = max(
+            (raw_start + prefix.get(tf, 0) * steps[tf] for tf in timeframes if tf in steps),
+            default=raw_start,
+        )
+        window["eval_start_ms"] = eval_start_ms
+        window["eval_start"] = _iso(eval_start_ms)
+        window["eval_days"] = round((end_ms - eval_start_ms) / 86_400_000.0, 1)
+        window["warmup_prefix_bars"] = prefix
+        _say(
+            f"  evaluated window: {_iso(eval_start_ms)} → {_iso(end_ms)} "
+            f"({window['eval_days']:.0f} days); warm-up served from a prefix of "
+            + ", ".join(f"{tf}:{prefix.get(tf, 0)}" for tf in timeframes)
+        )
+
         aligned: dict[tuple[str, str], Candles] = {}
         for (symbol, timeframe), candles in series.items():
-            cut = candles.window(start_ms, end_ms)
-            if len(cut) < _MIN_BARS:
+            step = steps.get(timeframe)
+            if step is None:
+                continue
+            cut = candles.window(eval_start_ms - prefix.get(timeframe, 0) * step, end_ms)
+            # Where the evaluated span actually begins in the cut series — found
+            # by timestamp, not by assuming the prefix has no gaps.
+            idx = int(np.searchsorted(cut.ts, eval_start_ms))
+            if len(cut) - idx < _MIN_BARS:
                 fetch_errors.append(
-                    f"{symbol}/{timeframe}: only {len(cut)} bars inside the aligned window"
+                    f"{symbol}/{timeframe}: only {len(cut) - idx} bars inside the evaluated window"
                 )
                 continue
             aligned[(symbol, timeframe)] = cut
+            eval_start_by[(symbol, timeframe)] = idx
         series = aligned
 
     # ── pass 2: evaluate ─────────────────────────────────────────────────────
@@ -487,6 +549,7 @@ def run_tournament(
                     cell, trials, oos, _bench = evaluate_cell(
                         candles, strategy, costs=costs, n_folds=n_folds,
                         embargo=embargo, allow_short=allow_short,
+                        eval_start=eval_start_by.get((symbol, timeframe), 0),
                     )
                     cells.append(cell)
                     total_trials += cell.n_configs
@@ -525,7 +588,14 @@ def run_tournament(
         },
         "calendar_window": window,
         "bars_by_timeframe": {
-            tf: sorted({len(c) for (s, t), c in series.items() if t == tf})
+            tf: sorted({len(c) for (_s, t), c in series.items() if t == tf})
+            for tf in timeframes
+        },
+        "evaluated_bars_by_timeframe": {
+            tf: sorted({
+                len(c) - eval_start_by.get(k, 0)
+                for k, c in series.items() if k[1] == tf
+            })
             for tf in timeframes
         },
         "total_configurations_tested": total_trials,

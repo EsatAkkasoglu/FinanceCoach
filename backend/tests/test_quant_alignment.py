@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from app.quant import backtest as bt
 from app.quant import tournament as tn
 from app.quant.exchange import Candles
 
@@ -115,6 +116,95 @@ def test_alignment_returns_none_when_series_do_not_overlap():
 
 def test_alignment_returns_none_for_an_empty_universe():
     assert tn._align_window({}, _noop) is None
+
+
+def test_warmup_budget_is_measured_not_guessed():
+    """The prefix has to cover the LONGEST warm-up any config in the grid needs."""
+    strategies = tuple(k for k in bt.SIGNALS if k != "buy_hold")
+    for tf in ("15m", "30m", "1h", "4h"):
+        budget = tn.warmup_bars_for(tf, strategies)
+        assert budget > 0
+        probe = np.linspace(100.0, 120.0, 4000)
+        for strategy in strategies:
+            for params in tn._combos(tn.grid_for(strategy, tf)):
+                _raw, warmup = bt.build_positions(strategy, probe, probe, probe, params)
+                assert warmup <= budget, f"{tf}/{strategy}/{params} needs {warmup} > {budget}"
+
+
+# ── eval_start: paying for warm-up out of history, not out of the window ─────
+
+
+def _series(n: int, seed: int = 3) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return 100.0 * np.cumprod(1.0 + rng.normal(0.0002, 0.01, n))
+
+
+def _wf(closes, **kw):
+    return bt.walk_forward(
+        closes, "sma_cross", grid={"fast": [10], "slow": [50]},
+        n_folds=5, embargo=10, costs=bt.Costs(), ppy=252.0, **kw
+    )
+
+
+def test_eval_start_shrinks_the_evaluated_span():
+    c = _series(3000)
+    base = _wf(c)
+    shifted = _wf(c, eval_start=1000)
+    assert base["ok"] and shifted["ok"]
+    assert shifted["oos_bars"] < base["oos_bars"]
+
+
+def test_eval_start_below_the_indicator_warmup_is_a_no_op():
+    """The engine still cannot evaluate un-warmed bars, so a small prefix
+    changes nothing — the guarantee that makes the flag safe to pass blindly."""
+    c = _series(3000)
+    assert _wf(c, eval_start=5)["oos_bars"] == _wf(c)["oos_bars"]
+
+
+def test_eval_start_leaves_the_evaluated_fraction_timeframe_independent():
+    """The actual fix.
+
+    Two series covering the SAME calendar at different bar sizes: 4000 fast bars
+    against 1000 four-times-coarser ones. Each gets a warm-up prefix worth the
+    same slice of calendar (200 fast bars, 50 slow ones), and both prefixes
+    exceed the indicator's own warm-up — which is the condition the tournament
+    arranges by sizing the prefix from the widest grid.
+
+    The evaluated span must then be the same FRACTION of each series. Without
+    the prefix the fixed indicator warm-up is deducted from the window itself,
+    which costs the coarse series four times as much of its calendar.
+    """
+    grid = {"fast": [5], "slow": [20]}          # 20-bar warm-up, under both prefixes
+    kw = dict(n_folds=5, embargo=10, costs=bt.Costs(), ppy=252.0)
+    f = bt.walk_forward(_series(4200), "sma_cross", grid=grid, eval_start=200, **kw)
+    s = bt.walk_forward(_series(1050, seed=4), "sma_cross", grid=grid, eval_start=50, **kw)
+    assert f["ok"] and s["ok"]
+    f_frac = f["oos_bars"] / (4200 - 200)
+    s_frac = s["oos_bars"] / (1050 - 50)
+    assert abs(f_frac - s_frac) < 0.05, (f_frac, s_frac)
+
+
+def test_eval_start_beyond_the_series_refuses_rather_than_fabricating_folds():
+    out = _wf(_series(3000), eval_start=2990)
+    assert out["ok"] is False
+    assert "not enough history" in out["reason"]
+
+
+def test_training_windows_are_equal_length_across_configs_in_a_fold():
+    """A combo with a short lookback used to get a longer training window than
+    one with a long lookback inside the same fold, so the selection was partly a
+    comparison of sample sizes rather than of rules."""
+    c = _series(3000)
+    out = bt.walk_forward(
+        c, "sma_cross", grid={"fast": [5, 10], "slow": [20, 200]},
+        n_folds=3, embargo=5, costs=bt.Costs(), ppy=252.0,
+    )
+    assert out["ok"]
+    # train_bars is reported from the common start, so it grows monotonically
+    # with the fold index and never depends on which combo won.
+    train = [f["train_bars"] for f in out["folds"]]
+    assert train == sorted(train)
+    assert all(t > 0 for t in train)
 
 
 def test_alignment_reports_which_series_binds_each_end():
