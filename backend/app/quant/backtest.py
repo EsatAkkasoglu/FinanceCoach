@@ -512,11 +512,19 @@ def run_backtest(
     costs: Costs,
     warmup: int = 0,
     dates: list[str] | None = None,
+    funding_rates: np.ndarray | None = None,
 ) -> BacktestResult:
     """Run one parameterisation over a price path.
 
     ``raw_positions`` are *unshifted* targets from :func:`build_positions`; the
     one-bar execution shift happens here so no caller can forget it.
+
+    ``funding_rates`` is a per-bar SIGNED rate (positive = longs pay), aligned
+    with ``closes``. It replaces the flat ``funding_bps_per_bar`` carry, which
+    was both zero by default and unsigned — charging a short for funding it
+    would actually have received. With real rates the term becomes
+    ``-position * rate``, so the transfer runs in the direction the venue
+    actually settles it.
     """
     c = np.asarray(closes, dtype=float)
     asset_r = to_returns(c)
@@ -535,6 +543,12 @@ def run_backtest(
     prev = np.concatenate(([0.0], held[:-1]))
     traded = np.abs(held - prev)
     cost = traded * costs.per_turn + np.abs(held) * costs.per_bar_carry
+    if funding_rates is not None:
+        # Signed transfer, not a fee: +rate means longs pay shorts. Sliced to
+        # match `held`, which is one shorter than closes and starts at `start`.
+        fr = np.asarray(funding_rates, dtype=float)[: held.size + start][start:]
+        if fr.size == held.size:
+            cost = cost + held * fr
 
     gross = held * asset_r
     net = gross - cost
@@ -972,6 +986,7 @@ def walk_forward(
     allow_short: bool = False,
     min_test_bars: int = 30,
     eval_start: int = 0,
+    funding_rates: np.ndarray | None = None,
     return_series: bool = False,
 ) -> dict[str, Any]:
     """Expanding-window walk-forward: tune on the past, score on the future.
@@ -1015,6 +1030,15 @@ def walk_forward(
         precomputed.append((params, align_positions(raw), warmup))
 
     asset_r = to_returns(c)
+    # Signed funding, aligned to the return series (one shorter than closes).
+    # None becomes zeros so every expression below stays uniform.
+    fr = (
+        np.asarray(funding_rates, dtype=float)[: asset_r.size]
+        if funding_rates is not None
+        else np.zeros(asset_r.size)
+    )
+    if fr.size != asset_r.size:
+        fr = np.zeros(asset_r.size)
     max_warmup = max((w for _, _, w in precomputed), default=0)
     # Whichever is later: the longest indicator warm-up in the grid, or the
     # point the caller declared the evaluated window to begin at.
@@ -1068,6 +1092,7 @@ def walk_forward(
                 hs * asset_r[begin:train_end]
                 - np.abs(hs - prev_hs) * costs.per_turn
                 - np.abs(hs) * costs.per_bar_carry
+                - hs * fr[begin:train_end]
             )
             s = sharpe([float(x) for x in seg_net])
             if s is None:
@@ -1083,7 +1108,12 @@ def walk_forward(
         seg_ret = asset_r[test_start:test_end]
         prev = np.concatenate(([0.0], seg_pos[:-1]))
         traded = np.abs(seg_pos - prev)
-        net = seg_pos * seg_ret - traded * costs.per_turn - np.abs(seg_pos) * costs.per_bar_carry
+        net = (
+            seg_pos * seg_ret
+            - traded * costs.per_turn
+            - np.abs(seg_pos) * costs.per_bar_carry
+            - seg_pos * fr[test_start:test_end]
+        )
         oos.extend(float(x) for x in net)
         oos_trades += int(np.count_nonzero(traded > 1e-12))
         last_params = best_params

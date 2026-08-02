@@ -45,6 +45,8 @@ from app.eval.scorecard import _skew_kurt, deflated_sharpe_ratio, sharpe
 from app.quant import backtest as bt
 from app.quant import metrics as mx
 from app.quant.exchange import BARS_PER_YEAR, Candles, ExchangeError, fetch_candles
+from app.quant.funding import fetch_funding, per_bar_funding
+from app.quant.funding import summary as fnd_summary
 
 log = logging.getLogger("fincoach.quant.tournament")
 
@@ -233,6 +235,7 @@ def evaluate_cell(
     embargo: int = 24,
     allow_short: bool = False,
     eval_start: int = 0,
+    funding_rates: np.ndarray | None = None,
 ) -> tuple[CellResult, list[np.ndarray], np.ndarray, np.ndarray]:
     """Walk-forward one strategy on one series.
 
@@ -310,6 +313,7 @@ def evaluate_cell(
         n_folds=n_folds, embargo=embargo, costs=costs, ppy=ppy,
         allow_short=allow_short,
         eval_start=eval_start,
+        funding_rates=funding_rates,
         min_test_bars=max(60, (len(candles) - eval_start) // (n_folds * 4)),
         return_series=True,
     )
@@ -483,6 +487,7 @@ def run_tournament(
     use_cache: bool = True,
     include_short: bool = True,
     align_calendar: bool = True,
+    use_funding: bool = True,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Run the full grid and rank what survives.
@@ -601,6 +606,32 @@ def run_tournament(
             f"{embargo}-bar embargo"
         )
 
+    # Funding, per (symbol, timeframe), aligned to the FINAL cut bars. Fetched
+    # once per symbol and mapped onto each timeframe's stamps — a settlement is
+    # charged to the one bar containing it, so a position that opens and closes
+    # between stamps pays nothing, exactly as the venue works.
+    funding_by: dict[tuple[str, str], np.ndarray] = {}
+    funding_report: dict[str, Any] = {}
+    if use_funding:
+        for symbol in symbols:
+            try:
+                fnd = fetch_funding(symbol)
+            except Exception as exc:  # noqa: BLE001 — funding must not kill a run
+                funding_report[symbol] = {"error": f"{type(exc).__name__}: {str(exc)[:80]}"}
+                continue
+            funding_report[symbol] = fnd_summary(fnd)
+            for timeframe in timeframes:
+                c = series.get((symbol, timeframe))
+                if c is not None:
+                    funding_by[(symbol, timeframe)] = per_bar_funding(c.ts, fnd)
+        _say(
+            "  funding: "
+            + ", ".join(
+                f"{s}{v.get('annualised_pct', 0):+.1f}%/yr" for s, v in funding_report.items()
+                if "error" not in v
+            )
+        )
+
     # ── pass 2: evaluate ─────────────────────────────────────────────────────
     for timeframe in timeframes:
         for symbol in symbols:
@@ -617,6 +648,7 @@ def run_tournament(
                         candles, strategy, costs=costs, n_folds=n_folds,
                         embargo=embargo, allow_short=allow_short,
                         eval_start=eval_start_by.get((symbol, timeframe), 0),
+                        funding_rates=funding_by.get((symbol, timeframe)),
                     )
                     cells.append(cell)
                     total_trials += cell.n_configs
@@ -674,6 +706,7 @@ def run_tournament(
             "round_trip_bps": round((costs.fee_bps + costs.slippage_bps) * 2, 2),
         },
         "calendar_window": window,
+        "funding": funding_report,
         "bars_by_timeframe": {
             tf: sorted({len(c) for (_s, t), c in series.items() if t == tf})
             for tf in timeframes
