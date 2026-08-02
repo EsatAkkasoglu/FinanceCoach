@@ -474,6 +474,34 @@ açık:
    döndüğü kadar uzun bir pencere gerekiyor — ölçülen tutma sürelerine göre bu
    günler değil, haftalar demek.
 
+## Bağımsız denetim — iki karşıt uzman panelinin bulguları
+
+Deney, iki karşıt persona (iyimser/kötümser) tarafından bağımsız denetime
+sokuldu; tam tutanak `docs/CRYPTO_STRATEGY_DEBATE.md`. Panelin deney hakkında
+bulduğu ve moderatör doğrulamasından geçen kusurlar:
+
+1. **A/B kolları bir seride farklı veri gördü.** Tur-3'te hizalı kol
+   AVAX/30dk'yı Binance.US'ten alıp kalite kapısında reddetti; hizasız kol aynı
+   seriyi OKX'ten alıp değerlendirdi. Venue seçimi koşu anında yapıldığı için
+   cache tazelenince kollar ayrışabiliyor. Düzeltme şartı: veri katmanı koşu
+   öncesi dondurulmalı.
+2. **Bootstrap anlamlılığı koşular arası kırılgan.** Koşu-4 arşivinde TRX/4sa
+   p=0,0053 ile anlamlıyken 28 dakika sonraki nihai koşuda anlamsıza kaydı
+   (dokümandaki "284'te 1 anlamlı" cümlesi nihai koşu için doğruydu; koşu-4'te
+   2 vardı). Tek-koşu p-değerine güvenilmez.
+3. **Walk-forward OOS serileri arşivlenmiyor.** Sonuç JSON'u yalnız özet
+   metrikleri saklıyor; sepet-düzeyi veya yeniden-fiyatlama analizleri bu
+   yüzden deploy-parametre kontaminasyonuna mahkûm (ölçülen kontaminasyon:
+   +0,27…+1,01 Sharpe). Seriler arşivlenmeli.
+
+Panelin **mutabakatla** ayakta bıraktıkları: sıfır hayatta kalan hükmü (en
+cömert etkin-deneme düzeltmesinde bile en güçlü satır DSR 0,85 < 0,95),
+maliyet aritmetiği (iki tarafın stres testlerinde de sağlam) ve "bu düzenek
+mikroskop değil, elektir" çerçevesi (SE(Sharpe)≈2,0 @ 92 gün). Panelin
+**düşürdükleri**: "al-tut'u geçen" sütunu (rastgele kitapların %74–78'i de
+geçiyor — yaklaşık bilgisiz) ve sepet toplulaştırma "+2,07 Sharpe" bulgusu
+(gerçek fold-seçimli serilerle dört sepetin dördü negatif).
+
 ## Kabul edilen sınırlar
 
 - Bar-kapanışı icra. Bar içi dolum, kısmi dolum, emir defteri derinliği ve düz
