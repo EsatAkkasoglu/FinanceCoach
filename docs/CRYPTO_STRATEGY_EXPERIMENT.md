@@ -569,6 +569,89 @@ büyük-kayıp şekilli. Hiçbir varyant hiçbir hücreyi üç-testli anlamlıl�
 kapısından geçirmedi ve bu çalışma bir edge araması değil, işlem dağılımı
 anatomisidir.
 
+## Funding artık sıfır değil — ve panelin işaret tahmini yanlıştı
+
+`funding_bps_per_bar = 0` varsayımı kaldırıldı. İki şey birden yanlıştı:
+
+**İşaret.** Funding bir ücret değil, **transferdir**: pozitif oran = long'lar
+short'lara öder. Eski kod `|pozisyon| × oran` alıyordu, yani short'a *alacağı*
+parayı fatura ediyordu. Motor artık `−pozisyon × oran` uyguluyor.
+
+**Zamanlama.** Funding 8 saatlik damgalarda kesilir, her bar değil. Her damga
+onu içeren tek bara yazılıyor — iki damga arasında açılıp kapanan pozisyon hiç
+ödemiyor.
+
+Veri OKX `funding-rate-history` (anahtarsız; Binance futures 451, Bybit 403),
+281 damga, 2026-04-30 → 08-02, dondurulmuş katmana dahil.
+
+**Ölçülen rejim — panelin varsayımının tersi.** Prof. Aksoy dönem kaynaklarına
+dayanarak "kalıcı negatif funding, short'lar öder, sonuçlar sistematik iyimser"
+demişti. Gerçek OOS penceresinde sekiz sembolde de funding **pozitif**:
+
+| coin | yıllık | negatif damga |
+|---|---|---|
+| BTC | +3,1% | %24,6 |
+| ETH | +2,5% | %29,2 |
+| SOL | +0,7% | %41,3 |
+| XRP | +1,5% | %38,1 |
+| DOGE | +4,8% | %22,1 |
+| LINK | +4,0% | %25,3 |
+| AVAX | +1,7% | %37,4 |
+| ADA | +2,5% | %36,3 |
+
+Yani bu pencerede long'lar ödüyor, short'lar alıyor. Kontrollü A/B (aynı
+dondurulmuş veri, tek fark funding):
+
+| | fundingsiz | funding'li | fark |
+|---|---|---|---|
+| long_flat medyan Sharpe | −1,344 | −1,388 | **−0,044** |
+| long_short medyan Sharpe | +0,136 | +0,149 | **+0,013** |
+| hayatta kalan | 0 | 0 | — |
+
+Long-ağırlıklı kolu kötüleştiriyor, long/short kolunu hafifçe iyileştiriyor —
+tam da pozitif funding rejiminin öngördüğü yön. Aksoy ölçüm talebinde haklıydı,
+işaret tahmininde yanıldı; kaynaktan çıkarımla ölçüm arasındaki fark bu.
+Büyüklük ikinci mertebeden (0,01–0,04 Sharpe) ve hükmü değiştirmiyor.
+
+## "%70-80 win oranı" hedefi — kendi verisiyle test
+
+Hedef açıkça istendi, tartışmak yerine ölçüldü: stop 3×ATR'de sabit tutulup
+hedef 0,25×ATR'den 6×ATR'ye süpürüldü (256 hücre, ~42.000 işlem/varyant).
+
+Tüm evrende toplam win oranı **%42,5'te tavan yapıyor** (TP≈1–1,5×ATR) ve
+hedefi daraltmak oranı **düşürüyor** — ilk bakışta sezgiye aykırı. Sebep dilim
+kırılımında görünüyor:
+
+| TP | 15dk | 30dk | 1sa | 4sa |
+|---|---|---|---|---|
+| 0,25× | %1,0 | %5,5 | %12,7 | **%65,1** |
+| 0,5× | %7,6 | %23,1 | %46,0 | **%66,6** |
+| 1,0× | %34,7 | %49,0 | %52,0 | %51,5 |
+| 3,0× | %31,4 | %34,1 | %32,2 | %30,2 |
+
+### Kritik ayrım: "hedefi tutturmak" ≠ "para kazanmak"
+
+| dilim | TP | hedefte çıkış | **NET kazançlı** | ort. kazanç | maliyet |
+|---|---|---|---|---|---|
+| 15dk | 0,25× | **%78,8** | **%1,0** | +0,050% | 0,300% |
+| 30dk | 0,25× | %77,8 | %5,5 | +0,089% | 0,300% |
+| 1sa | 0,25× | %75,5 | %12,7 | +0,102% | 0,300% |
+| 4sa | 0,25× | %77,4 | %65,1 | +0,137% | 0,300% |
+
+15 dakikalık barda kural hedefini **%79 oranında tutturuyor** — ve işlemlerin
+%99'unda para kaybediyor. Çünkü 0,25×ATR o barda ~0,05%, gidiş-dönüş maliyet
+ise 0,30%: hedefe ulaşmak, komisyonun altıda birini kazanmak demek.
+
+**Yani maliyet, win oranına yapısal bir tavan koyuyor** ve tavan dilime bağlı:
+15dk'da ~%40, 4 saatlikte ~%67. %70-80 bandı bu evrende, bu maliyetle,
+hiçbir hedef/stop kombinasyonuyla erişilemedi.
+
+Ve erişilebilen en yüksek oran bile kâr getirmiyor: 4sa/TP0,5× win %66,6 iken
+medyan hücre getirisi **−%6,62**. İşlem başına beklenti dokuz varyantın
+hepsinde −0,33% ile −0,35% arasında sabit — win oranı %7'den %42'ye çıkarken
+bile kıpırdamıyor. Win oranı, çıkışları nereye koyduğunun bir özelliğidir;
+kuralın bir şey öngörüp öngörmediğinin değil.
+
 ## Kabul edilen sınırlar
 
 - Bar-kapanışı icra. Bar içi dolum, kısmi dolum, emir defteri derinliği ve düz
