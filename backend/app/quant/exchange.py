@@ -437,9 +437,31 @@ def fetch_candles(
     Merges any cached history with a fresh fetch, so a scheduled cycle extends
     the series instead of re-downloading it. Raises :class:`ExchangeError` only
     when every source fails AND there is no cache.
+
+    When ``FINCOACH_FROZEN_DATA`` names a snapshot directory, that snapshot is
+    the ONLY source: no network, no live cache, no writes. This exists because
+    an audit caught the live path serving *different venues to the two arms of
+    the same A/B* — the cache refreshed between arms and the venue-quality race
+    picked differently. A comparison is only controlled if the data cannot
+    move; frozen mode makes that a property of the layer instead of a hope.
     """
     if timeframe not in _TIMEFRAME_MS:
         raise ExchangeError(f"unsupported timeframe: {timeframe}")
+
+    frozen = os.environ.get("FINCOACH_FROZEN_DATA")
+    if frozen:
+        path = os.path.join(frozen, f"{symbol.upper()}_{timeframe}.json")
+        if not os.path.exists(path):
+            raise ExchangeError(
+                f"frozen data layer {frozen} has no {symbol.upper()}/{timeframe} "
+                "— frozen mode never falls back to the network"
+            )
+        with open(path, encoding="utf-8") as fh:
+            blob = json.load(fh)
+        return _normalise(
+            blob.get("rows", []), symbol, timeframe,
+            f"frozen:{blob.get('source', 'unknown')}",
+        )
 
     cached_rows: list[list[float]] = []
     source = "cache"

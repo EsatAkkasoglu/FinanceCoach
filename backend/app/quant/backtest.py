@@ -562,6 +562,200 @@ def run_backtest(
     )
 
 
+def run_sltp_backtest(
+    closes: np.ndarray,
+    highs: np.ndarray,
+    lows: np.ndarray,
+    opens: np.ndarray,
+    raw_positions: np.ndarray,
+    *,
+    costs: Costs,
+    warmup: int = 0,
+    atr_period: int = 14,
+    sl_atr: float | None = None,
+    tp_atr: float | None = None,
+) -> dict[str, Any]:
+    """Bar-by-bar simulation with intrabar stop-loss / take-profit, plus a
+    trade ledger.
+
+    The main engine deliberately has no stops: with only OHLC there is no way
+    to know whether a bar that touches both the stop and the target printed
+    the stop first. This simulator adds stops anyway — because the question
+    "what do SL/TP do to the win rate" is worth answering — but it resolves
+    that ambiguity **pessimistically** (the stop is assumed to fill first) and
+    counts every ambiguous bar, so the optimism cannot hide.
+
+    Semantics, chosen to match :func:`run_backtest` exactly when both levels
+    are disabled (a test pins this identity):
+
+    * ``raw_positions[t]`` is decided at the close of bar ``t`` and earns the
+      ``t → t+1`` return — the same one-bar shift as the engine.
+    * Levels are set from the ATR at entry and FROZEN for the life of the
+      trade: ``stop = entry − d·sl_atr·ATR``, ``target = entry + d·tp_atr·ATR``.
+      A trailing stop is a different (and more flatterable) instrument.
+    * Intrabar fills: a bar that OPENS beyond the level fills at the open —
+      gapping through a stop does not grant the stop price.
+    * After a stop/target exit the same direction is BLOCKED until the raw
+      signal leaves it (goes flat or flips) at least once. Without this, a
+      still-long signal re-enters on the very next bar and the stop devolves
+      into a random re-entry tax.
+    """
+    c = np.asarray(closes, dtype=float)
+    h = np.asarray(highs, dtype=float)
+    low_arr = np.asarray(lows, dtype=float)
+    o = np.asarray(opens, dtype=float)
+    raw = np.asarray(raw_positions, dtype=float)
+    n = c.size
+    if n < 3 or raw.size != n:
+        return {"ok": False, "reason": "series too short or misaligned"}
+
+    atr = atr_series(h, low_arr, c, atr_period)
+    per_turn = costs.per_turn
+    carry = costs.per_bar_carry
+
+    rets = np.zeros(n - 1)          # rets[i] = return earned close[i] → close[i+1]
+    pos = 0.0                       # position held over the CURRENT interval
+    entry_px = 0.0
+    stop_px = tp_px = None
+    blocked_dir = 0.0               # direction barred until raw leaves it
+    trades: list[dict[str, Any]] = []
+    open_trade: dict[str, Any] | None = None
+    ambiguous_bars = 0
+
+    def _close_trade(exit_px: float, reason: str, bar: int) -> None:
+        nonlocal open_trade
+        if open_trade is None:
+            return
+        d = open_trade["direction"]
+        gross = d * (exit_px / open_trade["entry_price"] - 1.0)
+        open_trade.update({
+            "exit_price": round(exit_px, 8),
+            "exit_bar": bar,
+            "bars_held": bar - open_trade["entry_bar"],
+            "reason": reason,
+            "gross_pnl_pct": round(gross * 100.0, 4),
+            "net_pnl_pct": round((gross - 2.0 * per_turn * abs(d)) * 100.0, 4),
+        })
+        trades.append(open_trade)
+        open_trade = None
+
+    start = min(max(warmup, atr_period + 1), n - 2)
+
+    def _enter(bar: int, want: float) -> None:
+        nonlocal pos, entry_px, stop_px, tp_px, open_trade
+        a = atr[bar]
+        entry_px = c[bar]
+        d = math.copysign(1.0, want)
+        stop_px = entry_px - d * sl_atr * a if (sl_atr and np.isfinite(a)) else None
+        tp_px = entry_px + d * tp_atr * a if (tp_atr and np.isfinite(a)) else None
+        open_trade = {
+            "direction": d, "entry_price": round(entry_px, 8),
+            "entry_bar": bar,
+            "stop": round(stop_px, 8) if stop_px is not None else None,
+            "target": round(tp_px, 8) if tp_px is not None else None,
+        }
+        pos = want
+
+    # The signal may already want a position at the window's first bar — the
+    # engine gives raw[start] its bar, so the simulator must too (a test pins
+    # the two engines to identical equity when SL/TP are disabled).
+    if raw[start] != 0.0:
+        rets[start] -= abs(raw[start]) * per_turn
+        _enter(start, raw[start])
+
+    for i in range(start, n - 1):
+        bar = i + 1                 # the bar whose range we live through
+
+        # 1. Intrabar exit check on the position carried into this bar.
+        if pos != 0.0 and stop_px is not None:
+            d = math.copysign(1.0, pos)
+            if d > 0:
+                stop_hit = low_arr[bar] <= stop_px or o[bar] <= stop_px
+                tp_hit = tp_px is not None and (h[bar] >= tp_px or o[bar] >= tp_px)
+            else:
+                stop_hit = h[bar] >= stop_px or o[bar] >= stop_px
+                tp_hit = tp_px is not None and (low_arr[bar] <= tp_px or o[bar] <= tp_px)
+            if stop_hit and tp_hit:
+                ambiguous_bars += 1
+                tp_hit = False      # pessimistic: the stop printed first
+            if stop_hit or tp_hit:
+                level = stop_px if stop_hit else tp_px
+                # A bar that opens beyond the level fills at the open, not at
+                # the level — gaps do not grant the stop price.
+                if d > 0:
+                    fill = o[bar] if (stop_hit and o[bar] <= level) or (tp_hit and o[bar] >= level) else level
+                else:
+                    fill = o[bar] if (stop_hit and o[bar] >= level) or (tp_hit and o[bar] <= level) else level
+                rets[i] += pos * (fill / c[i] - 1.0) - abs(pos) * per_turn
+                _close_trade(fill, "stop" if stop_hit else "target", bar)
+                blocked_dir = d
+                pos, stop_px, tp_px = 0.0, None, None
+                # Fall through: the signal at close[bar] is handled next loop.
+                continue
+
+        # 2. Earn the bar on the carried position. += because the previous
+        # iteration's re-target may already have charged its cost here.
+        rets[i] += pos * (c[bar] / c[i] - 1.0) - abs(pos) * carry
+
+        # 3. Re-target at the close of `bar` from raw[bar]. The last close is
+        # beyond the earning horizon — the engine never trades raw[n-1], so
+        # charging its cost here would break the disabled-SLTP identity.
+        if bar >= n - 1:
+            continue
+        want = raw[bar]
+        if blocked_dir != 0.0 and (want == 0.0 or math.copysign(1.0, want) != blocked_dir):
+            blocked_dir = 0.0       # the signal left the stopped direction
+        if blocked_dir != 0.0 and want != 0.0 and math.copysign(1.0, want) == blocked_dir:
+            want = 0.0              # still blocked: do not re-enter on the same leg
+
+        if want != pos:
+            # Charged on `bar`, the first bar the NEW position earns — the
+            # engine's convention (traded[k] pairs with held[k]'s return).
+            rets[bar] -= abs(want - pos) * per_turn
+            if pos != 0.0:
+                _close_trade(c[bar], "signal", bar)
+            if want != 0.0:
+                _enter(bar, want)
+            else:
+                stop_px = tp_px = None
+                pos = 0.0
+
+    if open_trade is not None:
+        _close_trade(c[-1], "end_of_data", n - 1)
+
+    equity = np.cumprod(1.0 + rets[start:])
+    peak = np.maximum.accumulate(equity)
+    wins = [t for t in trades if t["net_pnl_pct"] > 0]
+    losses = [t for t in trades if t["net_pnl_pct"] <= 0]
+    sum_w = sum(t["net_pnl_pct"] for t in wins)
+    sum_l = abs(sum(t["net_pnl_pct"] for t in losses))
+    reasons: dict[str, int] = {}
+    for t in trades:
+        reasons[t["reason"]] = reasons.get(t["reason"], 0) + 1
+
+    return {
+        "ok": True,
+        "net_return_pct": round(float(equity[-1] - 1.0) * 100.0, 4) if equity.size else 0.0,
+        "max_drawdown_pct": (
+            round(float((equity / peak - 1.0).min()) * 100.0, 4) if equity.size else 0.0
+        ),
+        "n_trades": len(trades),
+        "n_wins": len(wins),
+        "n_losses": len(losses),
+        "win_pct": round(100.0 * len(wins) / len(trades), 2) if trades else None,
+        "avg_win_pct": round(sum_w / len(wins), 4) if wins else None,
+        "avg_loss_pct": round(-sum_l / len(losses), 4) if losses else None,
+        "profit_factor": round(sum_w / sum_l, 4) if sum_l > 0 else None,
+        "expectancy_pct": (
+            round(sum(t["net_pnl_pct"] for t in trades) / len(trades), 4) if trades else None
+        ),
+        "exit_reasons": reasons,
+        "ambiguous_bars": ambiguous_bars,
+        "returns": rets[start:],
+        "trades": trades,
+    }
+
+
 #: Exchange maintenance margin. 0.5% is the usual tier-1 figure for majors on
 #: Binance/OKX perps; thin alts are worse, so this is the optimistic end.
 DEFAULT_MAINTENANCE_MARGIN = 0.005

@@ -33,6 +33,7 @@ from __future__ import annotations
 import itertools
 import logging
 import math
+import os
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -507,6 +508,10 @@ def run_tournament(
     fetch_errors: list[str] = []
     rejected: dict[str, Any] = {}
     total_trials = 0
+    archive_dir = os.environ.get("FINCOACH_OOS_ARCHIVE")
+    oos_archive: dict[str, tuple[np.ndarray, np.ndarray]] | None = (
+        {} if archive_dir else None
+    )
 
     def _say(msg: str) -> None:
         log.info(msg)
@@ -618,6 +623,12 @@ def run_tournament(
                     series_for_pbo.extend(trials)
                     if cell.oos_ok and oos.size > 20:
                         oos_by_key[f"{key}/{strategy}/{variant}"] = oos
+                        # The audit's condition 2: without the archived series,
+                        # any later basket/repricing analysis is forced back to
+                        # full-window deploy-parameter reconstruction — measured
+                        # at +0.27 to +1.01 Sharpe of contamination.
+                        if oos_archive is not None:
+                            oos_archive[f"{key}/{strategy}/{variant}"] = (oos, _bench)
 
             if series_for_pbo:
                 width = min(len(s) for s in series_for_pbo)
@@ -636,6 +647,20 @@ def run_tournament(
         {tf: BARS_PER_YEAR.get(tf, 365.25) for tf in timeframes},
     )
     verdict = _verdict(leaderboard, pbo_by_series, total_trials, len(rejected))
+
+    if oos_archive is not None and archive_dir:
+        os.makedirs(archive_dir, exist_ok=True)
+        np.savez_compressed(
+            os.path.join(archive_dir, "oos_series.npz"),
+            **{
+                f"{k}::oos": v[0] for k, v in oos_archive.items()
+            },
+            **{
+                f"{k}::bench": v[1] for k, v in oos_archive.items()
+            },
+        )
+        _say(f"  archived {len(oos_archive)} walk-forward OOS series → {archive_dir}")
+
     return {
         "ok": True,
         "generated_at": int(time.time()),
