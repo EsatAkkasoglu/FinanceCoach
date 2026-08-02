@@ -385,6 +385,64 @@ def _iso(ms: int) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.gmtime(ms / 1000))
 
 
+def _eval_start_for(
+    candles: Candles, oos_start_ms: int, n_folds: int, embargo: int
+) -> int | None:
+    """Fold start index that lands the FIRST test block on ``oos_start_ms``.
+
+    ``walk_forward`` lays its folds out as ``linspace(begin, n, n_folds + 2)``
+    and the first test block opens at ``bounds[1] + embargo``. Setting that
+    equal to the index of ``oos_start_ms`` and solving for ``begin`` gives
+
+        begin = ((F + 1)·(j − embargo) − n) / F
+
+    Choosing ``begin`` this way — rather than fixing the *window* and letting
+    the fold arithmetic decide where out-of-sample starts — is what makes the
+    evaluated period the same calendar range at every timeframe. Fixing the
+    window instead leaves the embargo to bite unequally: 24 bars is six hours
+    at 15m and four days at 4h, and across five folds that alone cost the 4h
+    arm 20 of its 115 days.
+    """
+    n = int(candles.ts.size) - 1          # walk_forward works on returns
+    j = int(np.searchsorted(candles.ts, oos_start_ms))
+    if n < 2 or j >= n:
+        return None
+    begin = ((n_folds + 1) * (j - embargo) - n) / max(1, n_folds)
+    return int(math.ceil(begin)) if begin > 0 else 0
+
+
+def _common_oos_start(
+    cut_by: dict[tuple[str, str], Candles],
+    prefix: dict[str, int],
+    n_folds: int,
+    embargo: int,
+    say: Callable[[str], None],
+) -> int:
+    """Earliest instant every timeframe can open out-of-sample at.
+
+    Each series needs enough lead-in for its warm-up, its first training block
+    and the embargo. Inverting the relation in :func:`_eval_start_for` gives the
+    minimum index, and the latest of those minima across all series is the one
+    instant they can all honour. In practice 4h binds, because its lead-in is
+    the same number of BARS but many more days.
+    """
+    best_ms, binding = 0, ""
+    for (symbol, timeframe), cut in cut_by.items():
+        n = int(cut.ts.size) - 1
+        if n < 2:
+            continue
+        need = prefix.get(timeframe, 0)
+        j_min = math.ceil((n_folds * need + n) / (n_folds + 1)) + embargo
+        if j_min >= cut.ts.size:
+            continue
+        ms = int(cut.ts[j_min])
+        if ms > best_ms:
+            best_ms, binding = ms, f"{symbol}/{timeframe}"
+    if binding:
+        say(f"  out-of-sample start bound by {binding}")
+    return best_ms
+
+
 def warmup_bars_for(timeframe: str, strategies: tuple[str, ...]) -> int:
     """Longest indicator warm-up any configuration at this timeframe needs.
 
@@ -502,37 +560,41 @@ def run_tournament(
         # Push the evaluated start far enough in that EVERY timeframe can serve
         # its whole warm-up out of bars that precede the window. 4h binds: its
         # ~200-bar warm-up is a month of calendar, against under two days at 15m.
-        eval_start_ms = max(
-            (raw_start + prefix.get(tf, 0) * steps[tf] for tf in timeframes if tf in steps),
-            default=raw_start,
-        )
-        window["eval_start_ms"] = eval_start_ms
-        window["eval_start"] = _iso(eval_start_ms)
-        window["eval_days"] = round((end_ms - eval_start_ms) / 86_400_000.0, 1)
-        window["warmup_prefix_bars"] = prefix
-        _say(
-            f"  evaluated window: {_iso(eval_start_ms)} → {_iso(end_ms)} "
-            f"({window['eval_days']:.0f} days); warm-up served from a prefix of "
-            + ", ".join(f"{tf}:{prefix.get(tf, 0)}" for tf in timeframes)
-        )
+        cut_by = {k: c.window(raw_start, end_ms) for k, c in series.items()}
+        oos_start_ms = _common_oos_start(cut_by, prefix, n_folds, embargo, _say)
 
         aligned: dict[tuple[str, str], Candles] = {}
-        for (symbol, timeframe), candles in series.items():
-            step = steps.get(timeframe)
-            if step is None:
+        for key, cut in cut_by.items():
+            symbol, timeframe = key
+            if timeframe not in steps or cut.ts.size < 2:
                 continue
-            cut = candles.window(eval_start_ms - prefix.get(timeframe, 0) * step, end_ms)
-            # Where the evaluated span actually begins in the cut series — found
-            # by timestamp, not by assuming the prefix has no gaps.
-            idx = int(np.searchsorted(cut.ts, eval_start_ms))
-            if len(cut) - idx < _MIN_BARS:
+            begin = _eval_start_for(cut, oos_start_ms, n_folds, embargo)
+            if begin is None or begin < prefix.get(timeframe, 0):
                 fetch_errors.append(
-                    f"{symbol}/{timeframe}: only {len(cut) - idx} bars inside the evaluated window"
+                    f"{symbol}/{timeframe}: not enough lead-in to start OOS at "
+                    f"{_iso(oos_start_ms)}"
                 )
                 continue
-            aligned[(symbol, timeframe)] = cut
-            eval_start_by[(symbol, timeframe)] = idx
+            if len(cut) - begin < _MIN_BARS:
+                fetch_errors.append(
+                    f"{symbol}/{timeframe}: only {len(cut) - begin} bars after the lead-in"
+                )
+                continue
+            aligned[key] = cut
+            eval_start_by[key] = begin
         series = aligned
+
+        window["oos_start_ms"] = oos_start_ms
+        window["oos_start"] = _iso(oos_start_ms)
+        window["oos_days"] = round((end_ms - oos_start_ms) / 86_400_000.0, 1)
+        window["warmup_prefix_bars"] = prefix
+        window["embargo_bars"] = embargo
+        _say(
+            f"  out-of-sample window: {_iso(oos_start_ms)} → {_iso(end_ms)} "
+            f"({window['oos_days']:.0f} days), identical at every timeframe; "
+            f"lead-in absorbs warm-up ({prefix}) + first training block + "
+            f"{embargo}-bar embargo"
+        )
 
     # ── pass 2: evaluate ─────────────────────────────────────────────────────
     for timeframe in timeframes:

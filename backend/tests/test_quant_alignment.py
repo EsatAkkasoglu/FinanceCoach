@@ -207,6 +207,82 @@ def test_training_windows_are_equal_length_across_configs_in_a_fold():
     assert all(t > 0 for t in train)
 
 
+# ── common out-of-sample window ──────────────────────────────────────────────
+
+
+BPD = {"15m": 96, "30m": 48, "1h": 24, "4h": 6}
+
+
+def _universe(days: int = 148) -> dict[tuple[str, str], Candles]:
+    return {
+        ("X", tf): _candles("X", tf, start_ms=0, n=days * BPD[tf])
+        for tf in ("15m", "30m", "1h", "4h")
+    }
+
+
+def _first_oos_bar(cut: Candles, begin: int, n_folds: int, embargo: int) -> int:
+    """Replays walk_forward's fold layout to find where OOS actually opens."""
+    n = int(cut.ts.size) - 1
+    bounds = np.linspace(begin, n, n_folds + 2).round().astype(int)
+    return int(cut.ts[int(bounds[1]) + embargo])
+
+
+def test_every_timeframe_opens_out_of_sample_at_the_same_instant():
+    """The point of the whole exercise: identical evaluated calendar range.
+
+    Fixing the *window* is not enough — the fold arithmetic then decides where
+    OOS starts, and a bar-denominated embargo lands it in a different place at
+    every timeframe. This solves for the fold start instead.
+    """
+    cuts = _universe()
+    prefix = dict.fromkeys(BPD, 200)
+    oos_ms = tn._common_oos_start(cuts, prefix, 5, 24, _noop)
+    opens = {
+        tf: _first_oos_bar(cut, tn._eval_start_for(cut, oos_ms, 5, 24), 5, 24)
+        for (_s, tf), cut in cuts.items()
+    }
+    spread_days = (max(opens.values()) - min(opens.values())) / DAY_MS
+    assert spread_days < 0.25, opens          # under one 4h bar
+
+
+def test_the_slowest_timeframe_binds_the_out_of_sample_start():
+    cuts = _universe()
+    oos_ms = tn._common_oos_start(cuts, dict.fromkeys(BPD, 200), 5, 24, _noop)
+    # 4h needs the same 200-bar lead-in as 15m, which is 33 days rather than 2.
+    per_tf = {
+        tf: tn._common_oos_start({(("X", tf)): cut}, dict.fromkeys(BPD, 200), 5, 24, _noop)
+        for (_s, tf), cut in cuts.items()
+    }
+    assert oos_ms == max(per_tf.values())
+    assert per_tf["4h"] > per_tf["15m"]
+
+
+def test_every_timeframe_keeps_its_full_warmup_prefix():
+    cuts = _universe()
+    prefix = dict.fromkeys(BPD, 200)
+    oos_ms = tn._common_oos_start(cuts, prefix, 5, 24, _noop)
+    for (_s, tf), cut in cuts.items():
+        assert tn._eval_start_for(cut, oos_ms, 5, 24) >= prefix[tf], tf
+
+
+def test_eval_start_solution_is_exact_for_the_engine_it_targets():
+    """Guards the algebra against a drift in walk_forward's fold layout."""
+    cut = _candles("X", "1h", start_ms=0, n=5000)
+    target = int(cut.ts[2600])
+    begin = tn._eval_start_for(cut, target, 5, 24)
+    assert _first_oos_bar(cut, begin, 5, 24) == target
+
+
+def test_eval_start_is_none_when_the_target_is_past_the_series():
+    cut = _candles("X", "1h", start_ms=0, n=500)
+    assert tn._eval_start_for(cut, int(cut.ts[-1]) + DAY_MS, 5, 24) is None
+
+
+def test_common_oos_start_skips_series_too_short_to_host_a_fold_layout():
+    cuts = {("X", "4h"): _candles("X", "4h", start_ms=0, n=120)}
+    assert tn._common_oos_start(cuts, {"4h": 200}, 5, 24, _noop) == 0
+
+
 def test_alignment_reports_which_series_binds_each_end():
     now = 1_700_000_000_000
     series = {
