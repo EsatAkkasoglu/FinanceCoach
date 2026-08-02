@@ -210,32 +210,69 @@ değişmişti**. Daha önce bir değişimi yanlış nedene bağlayıp geri almak
 kalmıştım; bu yüzden `scripts/ab_alignment.py` iki kolu arka arkaya koşturuyor:
 aynı evren, aynı cache'lenmiş mumlar, aynı kod, tek fark `align_calendar` bayrağı.
 
-| dilim | HİZALI: OOS gün / medSharpe / pozitif / al-tut'u geçen | HİZASIZ: OOS gün / medSharpe / pozitif / al-tut'u geçen |
+Düzenek üç turda olgunlaştı ve her turda A/B tekrar koşuldu:
+
+1. **Ortak takvim penceresi** — seriler aynı aralığa kesildi.
+2. **Isınma önekten** — gösterge ısınması pencerenin *öncesinden* besleniyor
+   (`walk_forward(eval_start=…)`, bütçe `warmup_bars_for()` ile ölçülüyor).
+3. **Ortak OOS penceresi** — fold düzeni tersten çözülüyor, böylece dört dilim de
+   örneklem-dışına **aynı anda** giriyor.
+
+Nihai kol (tur 3). OOS penceresi **2026-05-02 → 2026-08-01, 92 gün**, dört
+dilimde de birebir aynı:
+
+| dilim | HİZALI: OOS gün · medSharpe · pozitif · al-tut'u geçen | HİZASIZ |
 |---|---|---|
-| 15dk | 122g · **−0,37** · 4/22 · 14/22 | 136g · −1,17 · 2/24 · 15/24 |
-| 30dk | 119g · −0,91 · 9/54 · 27/54 | 220g · −1,31 · 3/57 · 42/57 |
-| 1sa | 116g · −1,01 · 9/75 · 40/75 | 306g · −1,21 · 3/75 · 67/75 |
-| 4sa | 96g · −0,63 · **40/112** · **86/112** | 806g · **−0,13** · 28/114 · 55/114 |
-| PBO medyanı | 0,587 | 0,496 |
-| hayatta kalan | 0 / 263 | 0 / 270 |
+| 15dk | 91g · −1,20 · 4/25 · 24/25 | 136g · −1,20 · 3/27 · 19/27 |
+| 30dk | 90g · −1,33 · 13/49 · 45/49 | 221g · −1,27 · 3/59 · 44/59 |
+| 1sa | 88g · −0,94 · 23/78 · **76/78** | 306g · −1,32 · 2/75 · 63/75 |
+| 4sa | 76g · −0,80 · 35/113 · 102/113 | 806g · **−0,08** · 27/114 · 60/114 |
+| PBO medyanı | 0,667 | 0,482 |
+| hayatta kalan | 0 | 0 |
 
-**Bulgu: hizalama zaman dilimi sıralamasını devirir.** Hizasız kolda medyan
-Sharpe'ta en iyi dilim 4 saatlik (−0,13); hizalanınca −0,63'e düşüyor ve en iyi
-dilim 15dk oluyor (−0,37). Yani daha önce raporlanan **"+0,15 medyan Sharpe ile
-4 saatlik tek pozitif dilim" bulgusu bir pencere yan etkisiydi** — dilimin değil,
-4 saatliğin kapsadığı 2,5 yıllık dönemin özelliği. Evren sabit tutulduğu için bu
-sefer nedenin hizalama olduğu kesin.
+**Bulgu: 4 saatliğin üstünlüğü hizalanınca yok oluyor.** Hizasız kolda 4 saatlik
+açık ara en iyi (−0,08); ortak pencerede −0,80. Daha önce raporlanan **"4 saatlik
+tek pozitif medyan Sharpe'a sahip dilim" sonucu bir pencere yan etkisiydi.**
 
-Ters yönde de bir devrilme var: PBO'da 4 saatlik hizasızken en iyi dilimdi,
-hizalanınca **en kötüsü** (0,754). Sebebi doğrudan: 6000 bardan 886 bara düşüyor,
-az veri = daha çok aşırı uydurma.
+PBO ters yöne gidiyor: hizasız 0,482 → hizalı 0,667. Beklenen — hizalama her
+hücrenin veri miktarını azaltıyor, az veri daha çok aşırı uydurma demek.
+
+### Hangi iddia sağlam, hangisi değil
+
+Üç turun kolları yan yana konunca ayrım net:
+
+| | tur 1 | tur 2 | tur 3 |
+|---|---|---|---|
+| **hizasız** 15dk / 30dk / 1sa / 4sa | −1,17 / −1,31 / −1,21 / **−0,13** | −1,16 / −1,27 / −1,32 / **−0,10** | −1,20 / −1,27 / −1,32 / **−0,08** |
+| **hizalı** 15dk / 30dk / 1sa / 4sa | −0,37 / −0,91 / −1,01 / −0,63 | −1,00 / −0,86 / −0,51 / −0,62 | −1,20 / −1,33 / −0,94 / −0,80 |
+
+Hizasız kol üç turda da neredeyse hiç oynamıyor (kod o yolda değişmedi) — yani
+motorun kendisi kararlı, gözlenen fark gerçekten hizalamadan geliyor. Hizalı kol
+ise turdan tura 0,2–0,5 Sharpe oynuyor, çünkü her turda fold düzenini değiştirdim.
+
+Buradan iki farklı güvenilirlik seviyesi çıkıyor:
+
+- **Sağlam:** hizasız koldaki 4 saatlik üstünlüğü her hizalı varyantta kayboluyor
+  (−0,08 → −0,62 … −0,80). Hiçbir turda hiçbir dilimin medyanı pozitif değil.
+- **Sağlam değil:** hizalı kolda dilimlerin *kendi aralarındaki* sıralaması. Tur 2
+  "1sa en iyi" derken tur 3 "4sa en iyi" diyor. Yani **zaman dilimleri arasındaki
+  fark, makul metodoloji tercihlerinin yarattığı oynamadan küçük.** Deneyin en
+  dürüst tek cümlelik sonucu budur: pencere yan etkisi giderildiğinde ortada
+  sıralanacak bir fark kalmıyor.
 
 ### Kalan kusur, dürüstçe
 
-Hizalama takvimi eşitliyor ama **OOS penceresini tam eşitlemiyor**: 122/119/116/96
-gün. Sebep ısınma penceresi — 886 barlık 4 saatlik seride ısınma, 14.173 barlık
-15dk serisine göre çok daha büyük bir oran yiyor. Yayılım 5,9 kattan 1,27 kata
-indi, ama sıfırlanmadı. Bu artık ikinci mertebe bir etki, yine de sıfır değil.
+OOS penceresinin **başlangıcı ve bitişi** artık dört dilimde de aynı; eşit olmayan
+şey o aralığın **içindeki kapsama**: 91 / 90 / 88 / **76** gün. Sebep embargo —
+24 bar sabit, yani 15dk'da 6 saat ama 4 saatlikte 4 gün, ve beş fold'da 4
+saatlikten 20 gün siliyor.
+
+Embargo'yu takvim cinsine çevirmek bunu kapatırdı ve **bilerek yapılmadı**: 4
+saatlikte purge'ü 24 bardan 2 bara düşürür, yani tam da ölçülen kolu iyi
+göstermeye yönelik bir sızıntı açardı. Raporlanan bir kapsama farkı, raporlanmayan
+bir sızıntıdan iyidir. Not: 24 bar zaten 200 barlık gösterge hafızasına karşı tam
+bir purge değil — bar-kapanışı motorunun ve 4 saatlikte bu kadar az barın bilinen
+sınırı.
 
 ## Bir "edge" çıktı — ve üç kontrol onu öldürdü
 
@@ -403,9 +440,11 @@ Sayılarla:
 - İleri kağıt defter 4.7 saatte 6 gözlemle **−%0,28** yaptı; bunun yarısından
   fazlası tek seferlik açılış maliyeti. Bu sayı hiçbir yöne kanıt değil.
 - **"Hangi periyot kâr ettiriyor" sorusu artık cevaplanabilir hâle geldi ve
-  cevap "hiçbiri".** Ortak pencerede dört dilimin de medyan Sharpe'ı negatif
-  (15dk −0,37 · 30dk −0,91 · 1sa −1,01 · 4sa −0,63). Hizasız koşudaki "4 saatlik
-  pozitif" bulgusu, kontrollü A/B'de pencere yan etkisi olarak çürütüldü.
+  cevap "hiçbiri".** Ortak 92 günlük OOS penceresinde dört dilimin de medyan
+  Sharpe'ı negatif (15dk −1,20 · 30dk −1,33 · 1sa −0,94 · 4sa −0,80). Hizasız
+  koşudaki "4 saatlik pozitif" bulgusu kontrollü A/B'de pencere yan etkisi olarak
+  çürütüldü. Dahası dilimler arasındaki kalan fark, metodoloji tercihlerinin
+  yarattığı oynamadan küçük — yani sıralanacak bir fark yok.
 - Kaldıraç bir çözüm değil: maliyet notional'ın bps'i olduğu için Sharpe kaldıraca
   **duyarsız**; değişen tek şey iflas hızı.
 
@@ -424,11 +463,13 @@ Kendi hipotezlerimden biri de bu süreçte çürütüldü: "liderlik tablosu ko�
 koşuya tamamen değişiyor, seçim gürültü" iddiası kontrollü testte 9/10 kesişimle
 yanlış çıktı; kaynağı benim aradaki kod değişikliklerimdi.
 
-Karşılaştırmayı düzeltmek — dört dilimi aynı takvim aralığına sabitlemek — bu
-turda yapıldı ve manşeti devirdi. Geriye kalan iki açık:
+Karşılaştırmayı düzeltmek — dört dilimi aynı takvim aralığına, sonra aynı OOS
+penceresine sabitlemek — üç turda yapıldı ve manşeti devirdi. Geriye kalan iki
+açık:
 
-1. **Isınma penceresinin artık etkisi.** Hizalamadan sonra bile OOS aralıkları
-   96–122 gün arasında; 886 barlık 4 saatlik seride ısınma orantısız yer kaplıyor.
+1. **Embargo kapsaması.** OOS penceresi aynı ama içindeki delikler değil: 4
+   saatlik 92 günün 76'sını ölçüyor. Kapatmanın yolu embargo'yu takvime çevirmek,
+   ve bu sızıntı riski yüzünden bilerek yapılmadı.
 2. **İleri test hâlâ çok kısa.** 6 gözlem hiçbir şey söylemiyor; sinyalin fiilen
    döndüğü kadar uzun bir pencere gerekiyor — ölçülen tutma sürelerine göre bu
    günler değil, haftalar demek.
