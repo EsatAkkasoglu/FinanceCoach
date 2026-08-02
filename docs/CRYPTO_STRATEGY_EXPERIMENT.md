@@ -502,6 +502,73 @@ mikroskop değil, elektir" çerçevesi (SE(Sharpe)≈2,0 @ 92 gün). Panelin
 geçiyor — yaklaşık bilgisiz) ve sepet toplulaştırma "+2,07 Sharpe" bulgusu
 (gerçek fold-seçimli serilerle dört sepetin dördü negatif).
 
+## Şartname uygulaması — dondurulmuş katman, OOS arşivi, SL/TP anatomisi
+
+Panel şartnamesinin üç maddesi uygulandı:
+
+### 1. Dondurulmuş veri katmanı (+ determinizm kanıtı)
+
+`FINCOACH_FROZEN_DATA` bir snapshot dizinini gösterir; `fetch_candles` o
+dizinden başka hiçbir şey okumaz — ağ yok, canlı cache yok, yazma yok, eksik
+seri yüksek sesle hata. `scripts/freeze_data.py` cache'i sha256 manifestiyle
+dondurur (44 seri, `data/frozen/20260802_020346`). Dürüst sınır manifestte:
+dondurma öncesi oluşmuş borsalar-arası dikişler geri alınmaz, olduğu gibi
+donar.
+
+**Kanıt:** aynı snapshot'a karşı iki bağımsız tam turnuva koşusu
+(`generated_at`/`elapsed_sec` hariç) **bit-bit aynı** çıktı — aynı sha256.
+Panelin "A/B kolları farklı veri gördü" kusuru bu katmanla yapısal olarak
+kapanıyor.
+
+Dondurulmuş koşunun sonucu (271 hücre, 92 günlük ortak OOS): **0 hayatta
+kalan**, PBO 0,649, max turnuva-DSR 0,220. 271 hücrenin 5'i tek başına p<0,05
+(bağımsızlık beklentisi ~13,5) ve hiçbirinin turnuva-DSR'si 0,15'i geçmiyor.
+Medyan Sharpe'lar: 15dk −1,20 · 30dk −1,33 · 1sa −0,94 · 4sa −0,80 — hepsi
+negatif, öncekiyle tutarlı.
+
+### 2. Walk-forward OOS serileri artık arşivleniyor
+
+`FINCOACH_OOS_ARCHIVE` verildiğinde turnuva her hücrenin OOS ve benchmark
+serisini `oos_series.npz` olarak kaydeder. Panelin ölçtüğü +0,27…+1,01
+Sharpe'lık deploy-parametre kontaminasyonunun kökü buydu — sepet/yeniden
+fiyatlama analizleri artık gerçek fold-seçimli serilerle yapılabilir.
+
+### 3. SL/TP — motorda yoktu, şimdi dürüst bir simülatör var
+
+`backtest.run_sltp_backtest`: bar-içi stop/hedef, işlem defteri, kazanç/kayıp
+istatistikleri. Dürüstlük kuralları: iki seviyeye birden değen bar **stop**
+sayılır ve `ambiguous_bars` olarak raporlanır (OHLC hangisinin önce
+yazıldığını söyleyemez); seviyenin ötesinde açılan bar **açılışta** dolar
+(gap stop fiyatını vermez); stop-out sonrası aynı yön, sinyal sıfırlanana
+kadar bloklu (yoksa stop bir yeniden-giriş vergisine döner); SL/TP kapalıyken
+simülatör ana motorun equity'sini 5e-5% hassasiyetle yeniden üretir (48
+kombinasyonda test edildi ve pinli).
+
+**Çalışma:** dondurulmuş veri, 256 hücre (8 coin × 4 dilim × 8 strateji),
+sabit ızgara-ortası parametreler (optimizasyon yok → deflasyon borcu yok),
+long/short, 30bps maliyet, ~42.000 işlem/varyant:
+
+| varyant | win% | ort. kazanç | ort. kayıp | beklenti/işlem | medyan hücre getirisi |
+|---|---|---|---|---|---|
+| stopsuz | %24,8 | +2,94% | −2,31% | −0,36% | −33,5% |
+| sadece SL 2×ATR | %19,9 | +2,68% | −1,25% | −0,38% | −30,9% |
+| SL1,5/TP3 | %27,0 | +1,33% | −1,09% | −0,32% | −22,7% |
+| SL2/TP4 | %25,8 | +1,75% | −1,28% | −0,34% | −24,7% |
+| SL2/TP2 | **%35,9** | +0,90% | −1,29% | −0,32% | −21,7% |
+| SL3/TP6 | %24,9 | +2,31% | −1,64% | −0,35% | −26,4% |
+
+**Ders: SL/TP win oranını değiştiriyor, beklentiyi değiştirmiyor.** SL2/TP2
+win'i %25→%36'ya çıkarıyor ama ortalama kazancı 2,94%→0,90%'a düşürerek —
+işlem başına beklenti altı varyantta da −0,32%…−0,38% bandında sabit. Stop,
+kaybeden bir dağılımın şeklini değiştirir, ortalamasını değil; işlem başına
+~30bps'lik maliyet çıpası her varyantın beklentisinin içinde aynen duruyor.
+Trend stratejilerinde (sma/ema/donchian) sıkı TP win'i ikiye katlıyor (%29→%51)
+çünkü kuyruk kazançlarını erken kilitliyor; mean-reversion'da (rsi/bollinger)
+tam tersi, win düşüyor (%60→%46) çünkü o kurallar zaten küçük-kazanç/nadir
+büyük-kayıp şekilli. Hiçbir varyant hiçbir hücreyi üç-testli anlamlılık
+kapısından geçirmedi ve bu çalışma bir edge araması değil, işlem dağılımı
+anatomisidir.
+
 ## Kabul edilen sınırlar
 
 - Bar-kapanışı icra. Bar içi dolum, kısmi dolum, emir defteri derinliği ve düz
